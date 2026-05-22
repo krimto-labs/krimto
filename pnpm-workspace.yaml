@@ -1,2 +1,4 @@
+# pnpm v11 reads build-script approvals here (no longer from package.json).
+# esbuild ships a prebuilt binary via its install script; vitest/tsx need it.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
