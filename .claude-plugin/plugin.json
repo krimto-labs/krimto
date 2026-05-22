@@ -1,0 +1,20 @@
+{
+  "name": "krimto",
+  "version": "0.2.0",
+  "description": "Open-source team memory layer for AI agents. Markdown files in git as storage; user/team/org hierarchy as primary primitive; cross-vendor MCP server.",
+  "author": {
+    "name": "Krimto contributors",
+    "url": "https://github.com/krimto-labs/krimto"
+  },
+  "repository": "https://github.com/krimto-labs/krimto",
+  "license": "Apache-2.0",
+  "keywords": [
+    "memory",
+    "team-memory",
+    "mcp",
+    "coding-agents",
+    "markdown",
+    "git"
+  ],
+  "homepage": "https://krimto.com"
+}

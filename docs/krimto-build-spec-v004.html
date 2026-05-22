@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krimto — Build Specification v004</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@300;400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f1ede4;
+    --bg-deep: #e8e3d6;
+    --paper: #f7f3eb;
+    --ink: #14110d;
+    --ink-soft: #4a4338;
+    --ink-mute: #7a6f5e;
+    --rule: #c8bea9;
+    --rule-soft: #d9d0bc;
+    --red: #a82c1c;
+    --red-soft: #c44a3a;
+    --gold: #8a6817;
+    --green: #3d5a3d;
+    --blue: #2a4a6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(0,0,0,0.015) 1px, transparent 1px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.012) 1px, transparent 1px),
+      radial-gradient(circle at 40% 80%, rgba(0,0,0,0.018) 1px, transparent 1px);
+    background-size: 4px 4px, 7px 7px, 11px 11px;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: multiply;
+  }
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 48px;
+    position: relative;
+    z-index: 2;
+  }
+  header {
+    border-bottom: 1px solid var(--rule);
+    padding: 24px 0;
+    background: var(--bg);
+  }
+  .header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+  }
+  .header-mark { display: flex; align-items: center; gap: 12px; }
+  .header-dot {
+    width: 8px; height: 8px;
+    background: var(--red);
+    border-radius: 50%;
+  }
+  .hero {
+    padding: 100px 0 80px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--red);
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--red);
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(44px, 6.5vw, 84px);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    margin-bottom: 36px;
+    font-variation-settings: "opsz" 144, "SOFT" 0;
+  }
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--red);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .lede {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(19px, 2vw, 24px);
+    line-height: 1.45;
+    max-width: 820px;
+    color: var(--ink-soft);
+    font-style: italic;
+    font-variation-settings: "opsz" 14;
+  }
+  .legend-note {
+    margin-top: 32px;
+    padding: 22px 26px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    border-left: 3px solid var(--gold);
+    max-width: 920px;
+  }
+  .legend-note p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    margin-bottom: 14px;
+    color: var(--ink-soft);
+  }
+  .legend-note p:last-child { margin-bottom: 0; }
+  .legend-note strong.verified { color: var(--green); }
+  .legend-note strong.design { color: var(--gold); }
+  .legend-note strong.unknown { color: var(--red); }
+  section {
+    padding: 80px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-mute);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .section-tag .num {
+    color: var(--red);
+    font-weight: 600;
+  }
+  .section-tag::before {
+    content: '';
+    width: 18px;
+    height: 1px;
+    background: var(--ink-mute);
+  }
+  .tier-tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 4px 10px;
+    border-radius: 2px;
+    margin-left: auto;
+  }
+  .tier-tag.tier-1 { background: var(--red); color: var(--paper); }
+  .tier-tag.tier-2 { background: var(--gold); color: var(--paper); }
+  .tier-tag.tier-3 { background: var(--ink-mute); color: var(--paper); }
+  h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    margin-bottom: 24px;
+    max-width: 920px;
+    font-variation-settings: "opsz" 96;
+  }
+  h2 em {
+    font-style: italic;
+    color: var(--red);
+    font-weight: 400;
+  }
+  h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 32px 0 14px;
+  }
+  h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-mute);
+    margin: 24px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  p {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 820px;
+    margin-bottom: 16px;
+  }
+  p.large {
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink);
+    max-width: 820px;
+    margin-bottom: 22px;
+  }
+  ul, ol {
+    margin: 14px 0 18px 22px;
+    max-width: 820px;
+  }
+  li {
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: var(--bg-deep);
+    padding: 1px 6px;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+  .code-block {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--bg-deep);
+    padding: 22px 26px;
+    border-radius: 2px;
+    margin: 18px 0;
+    max-width: 920px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-block .comment { color: var(--ink-mute); font-style: italic; }
+  .code-block .keyword { color: var(--red); }
+  .code-block .string { color: var(--green); }
+  .code-block .value { color: var(--blue); }
+  table {
+    width: 100%;
+    max-width: 920px;
+    border-collapse: collapse;
+    margin: 18px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+    border-bottom: 1px solid var(--ink-mute);
+    font-weight: 600;
+  }
+  td { color: var(--ink-soft); }
+  td strong { color: var(--ink); }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .status.verified { color: var(--green); }
+  .status.verified::before { background: var(--green); }
+  .status.design { color: var(--gold); }
+  .status.design::before { background: var(--gold); }
+  .status.unknown { color: var(--red); }
+  .status.unknown::before { background: var(--red); }
+  .verified-anchor {
+    background: var(--paper);
+    border: 1px solid var(--rule-soft);
+    border-left: 3px solid var(--green);
+    padding: 16px 20px;
+    margin: 18px 0;
+    max-width: 920px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .verified-anchor strong { color: var(--green); font-weight: 600; }
+  .design-choice {
+    background: var(--paper);
+    border: 1px solid var(--rule-soft);
+    border-left: 3px solid var(--gold);
+    padding: 16px 20px;
+    margin: 18px 0;
+    max-width: 920px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .design-choice strong { color: var(--gold); font-weight: 600; }
+  .cannot-verify {
+    background: var(--paper);
+    border: 1px solid var(--rule-soft);
+    border-left: 3px solid var(--red);
+    padding: 16px 20px;
+    margin: 18px 0;
+    max-width: 920px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .cannot-verify strong { color: var(--red); font-weight: 600; }
+  .src {
+    display: block;
+    margin-top: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    line-height: 1.5;
+  }
+  .gap-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+  .toc {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 32px 36px;
+    margin: 48px 0;
+    max-width: 920px;
+  }
+  .toc h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-mute);
+    margin: 0 0 18px;
+    border-bottom: none;
+    padding: 0;
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: toc-counter;
+  }
+  .toc li {
+    counter-increment: toc-counter;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    display: flex;
+    gap: 12px;
+    font-size: 14.5px;
+    align-items: center;
+  }
+  .toc li:last-child { border-bottom: none; }
+  .toc li::before {
+    content: counter(toc-counter, decimal-leading-zero);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--red);
+    font-weight: 600;
+    width: 26px;
+    flex-shrink: 0;
+  }
+  .toc a {
+    color: var(--ink);
+    text-decoration: none;
+    flex: 1;
+  }
+  .toc a:hover { color: var(--red); }
+  .toc .toc-tier {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  footer { padding: 40px 0; background: var(--bg-deep); }
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+  }
+  @media (max-width: 860px) {
+    .container { padding: 0 24px; }
+    h1 { font-size: 42px; }
+    h2 { font-size: 26px; }
+    .section-tag { flex-wrap: wrap; }
+    .tier-tag { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="header-mark">
+        <div class="header-dot"></div>
+        <span>Krimto · Build Specification · v004</span>
+      </div>
+      <div>May 22, 2026</div>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <div class="eyebrow">Developer-facing technical spec · For coding agents and engineers</div>
+    <h1>What to build, <em>section by section.</em></h1>
+    <p class="lede">This is the technical specification for Krimto, anchored to verified comparable patterns where possible. It describes what to build, not why to build it. For the why, see the strategy dossier v012. This document covers nineteen specifications a coding agent (or human engineer) needs in order to implement Krimto. Each section is labeled either verified default (anchored to a working production system) or design decision (a choice Krimto's builder must make, with verified options listed). The change log at the end records what was added in v002 and what is intentionally not yet specified.</p>
+
+    <div class="legend-note">
+      <p><strong class="verified">VERIFIED DEFAULT</strong> — anchored to a comparable production system whose architecture is publicly documented (memweave, Claude Code CLAUDE.md, Langfuse, Mem0, Hindsight, ByteRover, OpenClaw). Builder can follow without re-deciding.</p>
+      <p><strong class="design">DESIGN DECISION</strong> — a choice Krimto's builder must make. Verified options are listed where they exist; one recommended option is identified, anchored to the closest comparable.</p>
+      <p><strong class="unknown">CANNOT VERIFY</strong> — content that would require either measurement after launch or non-public data. Listed honestly rather than fabricated.</p>
+    </div>
+
+    <div class="toc">
+      <h3>Nineteen Specifications</h3>
+      <ol>
+        <li><a href="#gap-01">Fact / file schema</a><span class="toc-tier">Tier 1</span></li>
+        <li><a href="#gap-02">MCP tool surface</a><span class="toc-tier">Tier 1</span></li>
+        <li><a href="#gap-03">Scope path convention</a><span class="toc-tier">Tier 1</span></li>
+        <li><a href="#gap-04">Retrieval algorithm and hierarchical precedence</a><span class="toc-tier">Tier 1</span></li>
+        <li><a href="#gap-05">MVP definition (v0.1 scope)</a><span class="toc-tier">Tier 1</span></li>
+        <li><a href="#gap-06">Authentication mechanism</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-07">User / team / org data model</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-08">Concurrency and write coordination</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-09">Index maintenance</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-10">Git remote authentication for migration</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-11">Agent write workflow</a><span class="toc-tier">Tier 2</span></li>
+        <li><a href="#gap-12">Web UI specification</a><span class="toc-tier">Tier 3</span></li>
+        <li><a href="#gap-13">Hosted deployment topology</a><span class="toc-tier">Tier 3</span></li>
+        <li><a href="#gap-14">Source / provenance tracking</a><span class="toc-tier">Tier 3</span></li>
+        <li><a href="#gap-15">Testing and benchmarks</a><span class="toc-tier">Tier 3</span></li>
+        <li><a href="#gap-16">Error handling and HTTP status codes</a><span class="toc-tier">Tier 2 · v002</span></li>
+        <li><a href="#gap-17">Health check endpoints</a><span class="toc-tier">Tier 2 · v002</span></li>
+        <li><a href="#gap-18">Rate limiting policy</a><span class="toc-tier">Tier 2 · v002</span></li>
+        <li><a href="#gap-19">Telemetry policy</a><span class="toc-tier">Tier 2 · v002</span></li>
+        <li><a href="#changelog">Change log</a><span class="toc-tier">Reference</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- GAP 01: FACT/FILE SCHEMA -->
+<section id="gap-01">
+  <div class="container">
+    <div class="section-tag"><span class="num">01</span> <span>Fact / file schema</span> <span class="tier-tag tier-1">Tier 1</span></div>
+    <h2>One markdown file <em>per fact.</em><br>Frontmatter is mandatory.</h2>
+    <p class="large">Every Krimto fact is a single markdown file with YAML frontmatter. The frontmatter is the machine-readable metadata; the markdown body is the human-readable content. The schema below is anchored to memweave's verified production schema, extended with Krimto-specific fields for hierarchical scope and attribution.</p>
+
+    <div class="status verified">Verified default — anchored to memweave</div>
+
+    <h4>File schema</h4>
+    <div class="code-block">---
+id: <span class="value">fct_01j2k3m4n5p6q7r8s9t0v1w2x3</span>   <span class="comment"># ULID, immutable</span>
+scope: <span class="value">team/payments</span>                  <span class="comment"># required, see Gap 03</span>
+title: <span class="string">"Stripe webhook conventions"</span>    <span class="comment"># required, &lt;= 80 chars</span>
+author: <span class="value">alice@acme.com</span>                 <span class="comment"># required, resolves via Gap 07</span>
+created: <span class="value">2026-05-22T14:32:00Z</span>          <span class="comment"># required, ISO 8601 UTC</span>
+updated: <span class="value">2026-05-22T14:32:00Z</span>          <span class="comment"># required, mirrors created on first write</span>
+reviewed_by: []                              <span class="comment"># optional, array of identities</span>
+tags: [stripe, webhooks, payments]           <span class="comment"># optional, lowercase kebab-case</span>
+source: <span class="string">"https://stripe.com/docs/webhooks"</span> <span class="comment"># optional, see Gap 14</span>
+supersedes: []                               <span class="comment"># optional, array of fact ids</span>
+expires: null                                <span class="comment"># optional, ISO 8601 or null</span>
+---
+
+<span class="comment"># Stripe webhook conventions</span>
+
+When handling Stripe webhooks, always verify the signature using
+the official `Stripe.Webhook.constructEvent` method before processing
+any payload data.
+
+## Why
+
+Stripe documents signature verification as the primary defense against
+forged webhook events. Skipping it is a verified security mistake.
+
+## Don't do this
+
+- Trust the payload before signature verification
+- Process events without idempotency keys</div>
+
+    <h4>Field rules</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 140px;">Field</th><th>Rule</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>ULID. Generated on creation. Never changes — facts retain their ID even when scope changes via <code>git mv</code>.</td></tr>
+        <tr><td><code>scope</code></td><td>Must match the file's git path. See Gap 03 for the canonical scope convention.</td></tr>
+        <tr><td><code>title</code></td><td>Required. Maximum 80 characters. Used in dashboard listings and search results.</td></tr>
+        <tr><td><code>author</code></td><td>Required. Identity in <code>local-part@domain</code> form (matches OAuth claim, see Gap 06).</td></tr>
+        <tr><td><code>created</code> / <code>updated</code></td><td>Required. ISO 8601 UTC. Server-set on write, immutable by the client.</td></tr>
+        <tr><td><code>tags</code></td><td>Optional. Lowercase kebab-case. Indexed for filtering.</td></tr>
+        <tr><td><code>source</code></td><td>Optional. URL or stable identifier. See Gap 14 for the full provenance model.</td></tr>
+        <tr><td><code>supersedes</code></td><td>Optional. Array of fact IDs this fact replaces. Used for soft-deprecation without breaking history.</td></tr>
+        <tr><td><code>expires</code></td><td>Optional. ISO 8601. Fact is excluded from retrieval after this date but file remains in git history.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>File naming</h4>
+    <p>File names are slug-of-title with <code>.md</code> extension. Example: title <code>"Stripe webhook conventions"</code> → filename <code>stripe-webhook-conventions.md</code>. Filename collisions within the same scope folder are resolved by appending <code>-2</code>, <code>-3</code>, etc. The <code>id</code> field is the actual unique identifier; the filename is for human readability in the git diff.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> memweave uses <code>memory/MEMORY.md</code> for evergreen knowledge and <code>memory/YYYY-MM-DD.md</code> for daily logs. Krimto follows the same "markdown file per unit of knowledge" pattern, with frontmatter as the metadata layer (verified Towards Data Science April 2026). Frontmatter for AI memory is also the verified pattern in Anthropic's Claude Code CLAUDE.md (header section), Manus, and OpenClaw.
+      <span class="src">Source: github.com/sachinsharma9780/memweave; SFEIR Institute Claude Code CLAUDE.md analysis 2026</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision:</strong> ULID (vs UUIDv4 vs sequential integer) is chosen because ULIDs are time-sortable, URL-safe, and 26 characters fit cleanly into filesystem operations. Builder may substitute UUIDv7 (also time-sortable) without architectural impact. The <code>supersedes</code> + <code>expires</code> soft-deprecation pattern is anchored to how memweave handles superseded facts in dated logs.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether 80 characters is the right title length cap at scale. memweave does not enforce a title length; Krimto proposes 80 to keep dashboard listings tidy. Adjustable without breaking compatibility.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 02: MCP TOOL SURFACE -->
+<section id="gap-02">
+  <div class="container">
+    <div class="section-tag"><span class="num">02</span> <span>MCP tool surface</span> <span class="tier-tag tier-1">Tier 1</span></div>
+    <h2>Five tools. <em>No more.</em></h2>
+    <p class="large">Krimto exposes five MCP tools. Tool count is anchored to the verified mid-range across comparables: Mem0 ships 4 tools, ByteRover/Cipher ships 4, Hindsight ships 3. Five is the minimum complete surface for hierarchical team memory with attribution.</p>
+
+    <div class="status verified">Verified default — anchored to Mem0, Hindsight, ByteRover patterns</div>
+
+    <h4>Tool surface</h4>
+    <div class="code-block"><span class="keyword">krimto_write</span>(scope, title, body, tags?, source?, supersedes?)
+  → { id, scope, path, commit_sha }
+
+<span class="keyword">krimto_recall</span>(query, scopes?, limit?)
+  → { results: [{ id, scope, title, body, score, author, updated }] }
+
+<span class="keyword">krimto_read</span>(id)
+  → { id, scope, title, body, frontmatter, history }
+
+<span class="keyword">krimto_supersede</span>(id, new_title, new_body, reason)
+  → { old_id, new_id, commit_sha }
+
+<span class="keyword">krimto_list_scopes</span>()
+  → { scopes: [{ path, fact_count, last_updated }] }</div>
+
+    <h4>Tool semantics</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 180px;">Tool</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>krimto_write</code></td><td>Create a new fact. Scope is required. Server determines author from auth identity. Returns the new fact ID and the git commit SHA. Fails if requester lacks write permission to the scope.</td></tr>
+        <tr><td><code>krimto_recall</code></td><td>Search across one or more scopes. If <code>scopes</code> omitted, searches all scopes the requester can read (per Gap 07 access rules). Uses hybrid retrieval (Gap 04). Returns ranked results with attribution.</td></tr>
+        <tr><td><code>krimto_read</code></td><td>Get one fact by ID, including its full frontmatter and git history. Used after <code>krimto_recall</code> to retrieve full content if the snippet was truncated.</td></tr>
+        <tr><td><code>krimto_supersede</code></td><td>Replace an existing fact with a new one. Creates a new fact whose <code>supersedes</code> field references the old. Old fact is marked superseded but remains in git history.</td></tr>
+        <tr><td><code>krimto_list_scopes</code></td><td>Discover what scopes exist and what they contain. Returns only scopes the requester can read.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>What is NOT a tool</h4>
+    <ul>
+      <li><strong>No <code>krimto_delete</code>.</strong> Facts are never hard-deleted via the MCP API. Use <code>krimto_supersede</code> or set <code>expires</code> in a git-direct edit. This is intentional — git history is the audit trail; permanent deletion happens only via git history rewriting, which requires admin access through the web UI (see Gap 12).</li>
+      <li><strong>No <code>krimto_extract</code> or auto-extraction tool.</strong> Krimto does not silently extract facts from conversation history. Writes happen only when an agent explicitly calls <code>krimto_write</code>. See Gap 11 for the agent write workflow.</li>
+    </ul>
+
+    <h4>Comparable tool surfaces</h4>
+    <table>
+      <thead>
+        <tr><th>Comparable</th><th>Tool surface</th><th>Count</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Mem0</strong></td><td><code>add</code>, <code>search</code>, <code>get_all</code>, <code>delete</code></td><td>4</td></tr>
+        <tr><td><strong>Hindsight</strong></td><td><code>retain</code>, <code>recall</code>, <code>reflect</code></td><td>3</td></tr>
+        <tr><td><strong>ByteRover / Cipher</strong></td><td><code>ask_cipher</code>, <code>cipher_memory_search</code>, <code>cipher_store_reasoning_memory</code>, <code>cipher_extract_entities</code></td><td>4</td></tr>
+        <tr><td><strong>Krimto</strong></td><td><code>krimto_write</code>, <code>krimto_recall</code>, <code>krimto_read</code>, <code>krimto_supersede</code>, <code>krimto_list_scopes</code></td><td>5</td></tr>
+      </tbody>
+    </table>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong> Mem0's <code>add</code>/<code>search</code>/<code>get_all</code>/<code>delete</code> pattern (mem0.ai/docs). Hindsight's <code>retain</code>/<code>recall</code>/<code>reflect</code> pattern (vectorize.io/articles/hindsight-vs-mem0 March 2026). ByteRover's tool list (github.com/campfirein/cipher).
+      <span class="src">Source: comparable MCP server documentation, verified May 2026</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — five tools, no <code>delete</code>, no auto-extract:</strong> Krimto intentionally diverges from comparables on these two points. The <code>delete</code> omission preserves git history as the audit log (Gap 04 attribution requires this). The auto-extract omission is the deliberate opposite of ByteRover/Mem0's automatic fact extraction — Krimto's hierarchical-team-memory positioning requires explicit, attributable writes rather than silently extracted ones (see Gap 11).
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether <code>krimto_list_scopes</code> is needed in MCP at all, or whether scope discovery should happen via the web UI only. Listed in the v0.1 spec because Hindsight's tool surface includes a discovery primitive; may be removable after measuring usage.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 03: SCOPE PATH CONVENTION -->
+<section id="gap-03">
+  <div class="container">
+    <div class="section-tag"><span class="num">03</span> <span>Scope path convention</span> <span class="tier-tag tier-1">Tier 1</span></div>
+    <h2>Three-level hierarchy. <em>Path is the address.</em></h2>
+    <p class="large">Krimto uses a strict three-level hierarchy: <code>user</code>, <code>team</code>, <code>org</code>. Scope is encoded as a slash-separated path that maps one-to-one with the git repository folder structure. The path is the address; the folder is the storage location; the API server enforces access (per Gap 07).</p>
+
+    <div class="status design">Design decision — anchored to dossier Section 05 promise #02</div>
+
+    <h4>Canonical scope syntax</h4>
+    <div class="code-block">user/<span class="value">&lt;identity&gt;</span>           <span class="comment"># personal facts for one user</span>
+team/<span class="value">&lt;team-slug&gt;</span>          <span class="comment"># shared facts for one team</span>
+org/<span class="value">&lt;org-slug&gt;</span>            <span class="comment"># organization-wide facts</span>
+
+<span class="comment"># Examples</span>
+user/alice@acme.com
+team/payments
+team/infrastructure
+org/acme</div>
+
+    <h4>Repository structure</h4>
+    <div class="code-block">/                          <span class="comment"># git repository root</span>
+├── user/
+│   ├── alice@acme.com/
+│   │   ├── stripe-shortcuts.md
+│   │   └── debugging-notes.md
+│   └── bob@acme.com/
+│       └── postgres-tips.md
+├── team/
+│   ├── payments/
+│   │   ├── stripe-webhook-conventions.md
+│   │   ├── on-call-procedures.md
+│   │   └── api-conventions.md
+│   └── infrastructure/
+│       └── kubernetes-conventions.md
+├── org/
+│   └── acme/
+│       ├── security-standards.md
+│       └── code-style.md
+└── .krimto/
+    ├── members.yaml         <span class="comment"># user → team membership, see Gap 07</span>
+    └── config.yaml          <span class="comment"># krimto server config</span></div>
+
+    <h4>Path rules</h4>
+    <ul>
+      <li>Scope levels are exactly three: <code>user</code>, <code>team</code>, <code>org</code>. No nested teams, no sub-orgs. This is intentional — verified competitor Mem0 uses user/session/agent scopes (different model); Letta uses per-agent blocks (single-level). Three levels with named precedence is Krimto-specific.</li>
+      <li>The slug after the scope type is alphanumeric, dashes, dots, and at-signs. User identities use the OAuth claim format (typically <code>local-part@domain</code>).</li>
+      <li>Each fact file lives under exactly one scope folder. Moving a fact between scopes is <code>git mv</code> — the fact's <code>id</code> stays the same, its <code>scope</code> frontmatter field updates.</li>
+      <li>An organization has exactly one <code>org/&lt;slug&gt;/</code> folder. Multi-org setups require separate Krimto instances.</li>
+    </ul>
+
+    <h4>Precedence rules</h4>
+    <p>When a single retrieval query touches facts from multiple scopes that contradict each other, the precedence order is:</p>
+    <ol>
+      <li><code>user/&lt;requester&gt;/</code> — most specific wins. Alice's personal preferences override team defaults.</li>
+      <li><code>team/&lt;requester's-team&gt;/</code> — team conventions override organization defaults.</li>
+      <li><code>org/&lt;requester's-org&gt;/</code> — fallback baseline.</li>
+    </ol>
+    <p>Precedence applies only to retrieval ranking, not to access control (access is binary per Gap 07). Implementation detail: the retrieval algorithm (Gap 04) boosts scores for matches in higher-precedence scopes.</p>
+
+    <div class="design-choice">
+      <strong>Design decision — three fixed levels:</strong> Mem0 has user/session/agent; Letta has per-agent blocks; Hindsight has a four-network architecture without explicit hierarchical scope. None of these match Krimto's positioning. The user/team/org hierarchy is the dossier's Section 05 promise #02 — what no verified competitor ships as a primary primitive.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether some teams will want nested teams (e.g., <code>team/engineering/payments</code>). The simple three-level model is chosen for v0.1 to ship faster. If nested teams turn out to be needed, the storage format supports them (it's just deeper folders) but the API and precedence rules would need extension.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 04: RETRIEVAL ALGORITHM -->
+<section id="gap-04">
+  <div class="container">
+    <div class="section-tag"><span class="num">04</span> <span>Retrieval algorithm and hierarchical precedence</span> <span class="tier-tag tier-1">Tier 1</span></div>
+    <h2>memweave's pipeline, <em>with scope boost.</em></h2>
+    <p class="large">The base retrieval algorithm is memweave's verified pipeline: hybrid BM25 + vector merge, threshold filter, temporal decay, MMR diversification. Krimto adds a hierarchical scope boost stage to implement the precedence rules from Gap 03.</p>
+
+    <div class="status verified">Verified default — anchored directly to memweave production architecture</div>
+
+    <h4>Pipeline</h4>
+    <div class="code-block"><span class="comment"># Stage 1: parallel retrieval from both indexes</span>
+bm25_results   = FTS5_BM25(query, limit=50)
+vector_results = sqlite_vec_cosine(query_embedding, limit=50)
+
+<span class="comment"># Stage 2: weighted merge (memweave's verified weights)</span>
+merged_score = <span class="value">0.7</span> * vector_score + <span class="value">0.3</span> * bm25_score
+
+<span class="comment"># Stage 3: threshold filter</span>
+results = [r for r in merged if r.score &gt;= <span class="value">0.35</span>]
+
+<span class="comment"># Stage 4: temporal decay (memweave's verified pattern)</span>
+<span class="keyword">for</span> r <span class="keyword">in</span> results:
+    days_old = (now - r.updated).days
+    r.score *= exp(-days_old / decay_half_life)
+    <span class="comment"># Evergreen exception: org/ scope is never decayed</span>
+
+<span class="comment"># Stage 5: KRIMTO-SPECIFIC — hierarchical scope boost</span>
+<span class="keyword">for</span> r <span class="keyword">in</span> results:
+    <span class="keyword">if</span> r.scope.startswith(f<span class="string">"user/{requester}/"</span>):
+        r.score *= <span class="value">1.5</span>   <span class="comment"># personal wins ties</span>
+    <span class="keyword">elif</span> r.scope.startswith(f<span class="string">"team/{requester_team}/"</span>):
+        r.score *= <span class="value">1.2</span>   <span class="comment"># team beats org</span>
+    <span class="comment"># org/ scope: no boost (baseline)</span>
+
+<span class="comment"># Stage 6: MMR diversification</span>
+final = mmr_select(results, lambda=<span class="value">0.7</span>, k=<span class="value">10</span>)</div>
+
+    <h4>Parameter defaults</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 220px;">Parameter</th><th>Default</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Vector / BM25 merge weights</td><td><code>0.7 / 0.3</code></td><td>memweave verified default</td></tr>
+        <tr><td>Score threshold</td><td><code>0.35</code></td><td>memweave verified default</td></tr>
+        <tr><td>Temporal decay half-life</td><td><code>30 days</code></td><td>memweave configurable; 30 days is reasonable starting point</td></tr>
+        <tr><td>MMR lambda</td><td><code>0.7</code></td><td>memweave default — favors relevance over diversity</td></tr>
+        <tr><td>Result limit</td><td><code>10</code></td><td>matches Hindsight and Mem0 defaults</td></tr>
+        <tr><td>Personal scope boost</td><td><code>1.5x</code></td><td>Krimto design choice — boosts personal above team</td></tr>
+        <tr><td>Team scope boost</td><td><code>1.2x</code></td><td>Krimto design choice — boosts team above org</td></tr>
+        <tr><td>Org scope boost</td><td><code>1.0x</code></td><td>baseline, no boost</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Evergreen exemption</h4>
+    <p>Facts in <code>org/</code> scope are exempt from temporal decay. Organizational standards (security rules, code style, compliance notes) do not "expire" the way personal notes do. This matches memweave's verified pattern: <code>MEMORY.md</code> and non-dated files are never decayed.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> The entire base pipeline (BM25 + vector merge with 0.7/0.3 weights, 0.35 threshold, exponential temporal decay, MMR with λ=0.7) is memweave's production architecture as documented in Towards Data Science April 2026 and confirmed in the github.com/sachinsharma9780/memweave source code. OpenClaw uses the same pattern (verified DeepWiki documentation February 2026). This is the single most directly transferable spec in this document.
+      <span class="src">Source: towardsdatascience.com/memweave April 2026; deepwiki.com/openclaw/openclaw/7.3-memory-search February 2026</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — Stage 5 (hierarchical scope boost):</strong> The personal/team/org boost multipliers are Krimto-specific. The 1.5x / 1.2x / 1.0x values are chosen to make the precedence implicit rather than absolute — a much more relevant team fact still wins over a marginally-relevant personal fact. Adjustable based on user feedback; the relative ordering (personal &gt; team &gt; org) is the architectural commitment.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether the multiplicative boost approach is better than an additive offset or a hard-prefer-personal approach. memweave does not implement hierarchical scope, so this layer has no direct comparable benchmark. Should be measured against Krimto-specific user satisfaction after launch.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 05: MVP DEFINITION -->
+<section id="gap-05">
+  <div class="container">
+    <div class="section-tag"><span class="num">05</span> <span>MVP definition (v0.1 scope)</span> <span class="tier-tag tier-1">Tier 1</span></div>
+    <h2>What ships first. <em>What waits.</em></h2>
+    <p class="large">v0.1 of Krimto is the minimum surface that lets a single developer install it, write facts via Claude Code, and recall them across sessions. v0.1 ships without the web UI, without team features, without the hosted offering. v0.2 adds teams. v0.3 adds the web UI. v1.0 adds the hosted offering. This sequencing follows Hindsight's verified shipping pattern (December 2025 launch: single Docker, CLI-only, web UI deferred).</p>
+
+    <div class="status design">Design decision — anchored to Hindsight, Mem0, Langfuse shipping patterns</div>
+
+    <h4>v0.1 — Single-user developer release</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 220px;">Capability</th><th>In v0.1?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Markdown-in-git storage layer (Gap 01, 03)</td><td><strong style="color:var(--green);">Yes</strong></td></tr>
+        <tr><td>MCP server with <code>krimto_write</code>, <code>krimto_recall</code>, <code>krimto_read</code> (Gap 02)</td><td><strong style="color:var(--green);">Yes (3 tools)</strong></td></tr>
+        <tr><td>SQLite + sqlite-vec index, hybrid retrieval (Gap 04, 09)</td><td><strong style="color:var(--green);">Yes</strong></td></tr>
+        <tr><td>Single Docker container, <code>docker run</code> install</td><td><strong style="color:var(--green);">Yes</strong></td></tr>
+        <tr><td>Personal scope only (<code>user/&lt;single-user&gt;/</code>)</td><td><strong style="color:var(--green);">Yes</strong></td></tr>
+        <tr><td>Local-only auth (API key in config file)</td><td><strong style="color:var(--green);">Yes</strong></td></tr>
+        <tr><td><code>krimto_supersede</code> and <code>krimto_list_scopes</code></td><td><strong style="color:var(--gold);">v0.2</strong></td></tr>
+        <tr><td>Team and org scopes; multi-user; SSO</td><td><strong style="color:var(--gold);">v0.2</strong></td></tr>
+        <tr><td>Web UI (browse, search, audit log)</td><td><strong style="color:var(--gold);">v0.3</strong></td></tr>
+        <tr><td>Krimto Cloud (hosted offering)</td><td><strong style="color:var(--gold);">v1.0</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h4>What v0.1 must actually do — acceptance test</h4>
+    <ol>
+      <li>A developer runs <code>docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/server</code>. Container starts in under 10 seconds.</li>
+      <li>They add one entry to their Claude Code config pointing at <code>http://localhost:8080</code>.</li>
+      <li>They ask Claude Code to remember a fact. Claude Code calls <code>krimto_write</code>. The fact appears as a markdown file at <code>~/.krimto/user/&lt;identity&gt;/&lt;slug&gt;.md</code>.</li>
+      <li>They restart Claude Code (clearing context). They ask a question related to the fact. Claude Code calls <code>krimto_recall</code>. The fact is returned in the top-3 results.</li>
+      <li>They edit the markdown file directly in their text editor. They ask Claude Code the same question. The updated content is returned.</li>
+    </ol>
+    <p>If all five steps work end-to-end on a single developer's laptop, v0.1 is shippable.</p>
+
+    <h4>What v0.1 explicitly does NOT do</h4>
+    <ul>
+      <li>No team or org scopes. Storage paths are limited to <code>user/&lt;single-user&gt;/</code>.</li>
+      <li>No SSO, no multi-tenancy, no OAuth. Single API key in <code>config.yaml</code>.</li>
+      <li>No web UI. Configuration via config file; observation via the file system or git log.</li>
+      <li>No Cloud signup, no migration tooling. Self-host only.</li>
+      <li>No automatic fact extraction. Writes happen only when the agent calls <code>krimto_write</code> (Gap 11).</li>
+      <li>No supersede / history navigation tools. Edit markdown files directly in v0.1.</li>
+    </ul>
+
+    <h4>Positioning and messaging — claim the team-memory position from day one</h4>
+    <p>v0.1 ships single-user features, but the public positioning is "team memory" from the first release. The strategic position is claimed by framing, not by waiting until every feature ships. This is the verified Langfuse pattern: Langfuse positioned itself as "the LLM engineering platform" from launch in 2023, when the v1 product was only traces. Prompt management, evaluations, datasets, dashboards — every other feature came in subsequent releases. The position was claimed by the README and the roadmap, not by the v1 surface.</p>
+
+    <p>For Krimto v0.1, this means:</p>
+    <ul>
+      <li><strong>README headline frames Krimto as team memory.</strong> The opening line is "Krimto is the open-source team-memory layer for AI agents — built on markdown in git." Not "single-user memory." The first release's narrow surface is acknowledged honestly inside the README, not in the headline.</li>
+      <li><strong>The public roadmap is visible from day one.</strong> v0.1 (personal scope) → v0.2 (teams) → v0.3 (web UI) → v1.0 (Krimto Cloud). The roadmap lives in the README and in a <code>ROADMAP.md</code> file at the repository root. Each milestone has a tracking issue on GitHub.</li>
+      <li><strong>The eight promises from dossier Section 05 are listed in the README with current-version status indicators.</strong> Example: "Markdown-first hybrid storage — ✓ shipped in v0.1; Hierarchical scope (user/team/org) — ⏳ team scope ships in v0.2; Cross-vendor SDK — ⏳ MCP server in v0.1, named cross-vendor adapters in v0.2."</li>
+      <li><strong>v0.1 release announcement explicitly states the trajectory.</strong> "v0.1 ships the single-user foundation today. Team support — Krimto's wedge — ships in v0.2 within [stated window]. The full hierarchical model is on the roadmap and being built in public."</li>
+      <li><strong>The strategic position is the wedge, not the v1 feature set.</strong> Section 10 of the dossier identifies four properties (open source + self-hostable + markdown-in-git + hierarchical scope) as the empty seat in the market. v0.1 satisfies three of four immediately. The fourth (hierarchical scope) is committed to publicly via the roadmap before it ships.</li>
+    </ul>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor — Langfuse positioning pattern:</strong> Langfuse launched in 2023 with traces only — not "the LLM engineering platform" as it is documented today. Prompt management, evaluations, datasets, playground, dashboards all came in subsequent releases. The current Langfuse documentation (langfuse.com/docs, verified May 2026) describes the full platform, but the v1 was narrow. The strategic position was claimed by the README framing and consistent roadmap, then incrementally fulfilled. Acquisition by ClickHouse occurred January 16, 2026 — roughly 2.5 years after the narrow v1 launch. The position-claiming-by-framing approach is the verified successful pattern for OSS AI infrastructure.
+      <span class="src">Source: langfuse.com/changelog (verified evolution from traces to full platform); langfuse.com (current positioning); Orrick acquisition announcement January 2026</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — wedge claimed by framing, not by shipping all features at once:</strong> This avoids the alternative where Krimto delays its first public release until v0.2 ships (team features included). Verified comparable pattern across Mem0 (single-user Python SDK at launch, 41,000+ stars before team features), Langfuse (traces only at launch, full platform over 2.5 years), Hindsight (December 2025 launch with single-Docker, web UI deferred), and ChromaDB (single-user vector store at launch, team features and cloud years later) shows: no verified successful OSS AI infrastructure project shipped multi-user/team features as their first public release. The position is claimed by framing the first release within the larger trajectory, then shipping v0.2 quickly to honor the framing.
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — v0.2 stated window for teams:</strong> The v0.1 announcement commits publicly to a v0.2 timeline. The verified pattern (Hindsight, Mem0, Langfuse all shipped major feature additions within 3 months of their initial OSS release per their respective changelogs) supports a stated window of "within Q3" or "within 90 days" from v0.1 launch. Specific timeline depends on Krimto's actual engineering velocity which cannot be verified in advance — the discipline is to commit to a window publicly, then ship within it.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether the team-memory framing of a single-user v0.1 will read as honest commitment or as overpromising. The verified Langfuse precedent suggests honest framing works when paired with visible roadmap progress. The risk is that without v0.2 shipping quickly, the framing erodes credibility. Mitigation: ship v0.2 within the stated window and update the roadmap status indicators publicly as milestones land.
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified shipping patterns:</strong> Hindsight launched December 2025 with single Docker, CLI / MCP only, no web UI in the initial release (verified github.com/vectorize-io/hindsight). Mem0 launched January 2024 with the Python SDK only — the cloud dashboard came later (verified github.com/mem0ai/mem0 commit history). Langfuse launched 2023 with the self-hosted Docker compose; cloud Pro tier matured over time (verified langfuse.com/changelog). All three shipped a working primitive before shipping the polished surfaces.
+      <span class="src">Source: vectorize.io Hindsight release notes; github.com/mem0ai/mem0; langfuse.com/changelog</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — v0.1 personal-only:</strong> Teams are deferred to v0.2 because team scopes require Gap 06 (auth), Gap 07 (user/team/org model), and Gap 08 (concurrency). All three add real complexity. v0.1 cuts to the minimum surface that can land on the MCP directories from Section 09 of the dossier and earn the "named option" status.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether v0.1 to v0.2 (teams) is achievable in one quarter or takes two. Depends on auth and access control implementation difficulty. Honest answer: no estimate.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 06: AUTHENTICATION -->
+<section id="gap-06">
+  <div class="container">
+    <div class="section-tag"><span class="num">06</span> <span>Authentication mechanism</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>API keys for MCP. <em>OAuth for humans.</em></h2>
+    <p class="large">Two authentication paths. MCP clients (Claude Code, Cursor, Codex) authenticate via API keys in their MCP server config. Humans accessing the web UI or hosted dashboard authenticate via OAuth providers (Google Workspace, GitHub, Microsoft Entra ID). The same identity model serves both paths.</p>
+
+    <div class="status verified">Verified default — anchored to Langfuse and ByteRover</div>
+
+    <h4>MCP client authentication (API keys)</h4>
+    <p>Each user generates one or more API keys via the web UI (or via a CLI command for v0.1). The API key is included as a bearer token in MCP requests:</p>
+    <div class="code-block">{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"krimto"</span>: {
+      <span class="string">"url"</span>: <span class="value">"http://localhost:8080"</span>,
+      <span class="string">"headers"</span>: {
+        <span class="string">"Authorization"</span>: <span class="value">"Bearer krm_live_aBcD1234..."</span>
+      }
+    }
+  }
+}</div>
+
+    <h4>API key format</h4>
+    <ul>
+      <li>Prefix: <code>krm_live_</code> for production, <code>krm_test_</code> for sandbox (Stripe pattern, verified standard).</li>
+      <li>Random body: 32 characters, base62, generated server-side at key creation time.</li>
+      <li>Stored server-side as Argon2 hash. Plain key shown only once at creation.</li>
+      <li>Each key carries one identity (the user who created it). API keys do NOT carry role independently — role is derived from the identity (see Gap 07).</li>
+    </ul>
+
+    <h4>Web UI authentication (OAuth)</h4>
+    <p>For v0.3+ web UI and v1.0 Krimto Cloud, supported OAuth providers (anchored to Langfuse's verified provider list):</p>
+    <ul>
+      <li>Google Workspace</li>
+      <li>GitHub</li>
+      <li>Microsoft Entra ID (formerly Azure AD)</li>
+      <li>Okta</li>
+      <li>Auth0</li>
+    </ul>
+    <p>SAML and SCIM support are deferred to enterprise tier; they require additional engineering work and are anchored to Langfuse's Teams add-on tier (verified langfuse.com/enterprise).</p>
+
+    <h4>Self-hosted bootstrap</h4>
+    <p>For self-hosted v0.2+, the first admin is created via an environment variable at first container start:</p>
+    <div class="code-block">docker run -d \
+  -p 8080:8080 \
+  -v ~/.krimto:/data \
+  -e <span class="string">KRIMTO_BOOTSTRAP_ADMIN</span>=<span class="value">alice@acme.com</span> \
+  -e <span class="string">KRIMTO_OAUTH_PROVIDER</span>=<span class="value">google</span> \
+  -e <span class="string">KRIMTO_OAUTH_CLIENT_ID</span>=<span class="value">...</span> \
+  -e <span class="string">KRIMTO_OAUTH_CLIENT_SECRET</span>=<span class="value">...</span> \
+  ghcr.io/krimto-labs/server</div>
+    <p>On first login matching the bootstrap email, the user is granted org admin role. Subsequent users are invited via the web UI.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> API-key-for-machine-clients + OAuth-for-humans is the standard split across Langfuse Cloud, Mem0 Cloud, ByteRover Cloud, and most modern SaaS. Langfuse Cloud Teams supports Google, GitHub, Azure AD, Okta, Auth0, AWS Cognito, Keycloak, JumpCloud — verified langfuse.com/enterprise. Stripe-style <code>sk_live_</code>/<code>sk_test_</code> key prefixes are an industry standard for distinguishing environments.
+      <span class="src">Source: langfuse.com/enterprise; stripe.com/docs/keys (industry-standard API key format)</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether SAML/SCIM is needed inside the first year. Verified pattern (Langfuse) gates these behind a paid Teams add-on at +$300/month. Krimto can follow the same pattern. Decision can be deferred until enterprise customers ask.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 07: USER/TEAM/ORG DATA MODEL -->
+<section id="gap-07">
+  <div class="container">
+    <div class="section-tag"><span class="num">07</span> <span>User / team / org data model</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>Membership in YAML. <em>Stored in git.</em></h2>
+    <p class="large">The user/team/org data model is stored as a YAML file at <code>.krimto/members.yaml</code> in the same git repository as the facts. This makes membership git-diffable, version-controlled, and reviewable via pull request — the same trust pattern as the facts themselves. The API server enforces access control by reading this file (cached, hot-reloaded on git pull).</p>
+
+    <div class="status design">Design decision — Krimto-specific, anchored to GitHub CODEOWNERS pattern</div>
+
+    <h4>Membership file</h4>
+    <div class="code-block"><span class="comment"># .krimto/members.yaml</span>
+org:
+  slug: <span class="value">acme</span>
+  name: <span class="string">"ACME Corporation"</span>
+  admins:
+    - alice@acme.com
+
+teams:
+  - slug: <span class="value">payments</span>
+    name: <span class="string">"Payments Team"</span>
+    members:
+      - alice@acme.com
+      - bob@acme.com
+      - carol@acme.com
+    leads:
+      - alice@acme.com
+
+  - slug: <span class="value">infrastructure</span>
+    name: <span class="string">"Infrastructure Team"</span>
+    members:
+      - dave@acme.com
+      - eve@acme.com
+    leads:
+      - dave@acme.com
+
+users:
+  - email: alice@acme.com
+    name: <span class="string">"Alice Anderson"</span>
+    created: <span class="value">2026-05-22T14:32:00Z</span>
+  - email: bob@acme.com
+    name: <span class="string">"Bob Brown"</span>
+    created: <span class="value">2026-05-22T14:33:00Z</span></div>
+
+    <h4>Roles and what they can do</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 140px;">Role</th><th>Read</th><th>Write</th><th>Membership</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Org admin</strong></td>
+          <td>All scopes</td>
+          <td>Any scope</td>
+          <td>Edit members.yaml</td>
+        </tr>
+        <tr>
+          <td><strong>Team lead</strong></td>
+          <td>Their team + org</td>
+          <td>Their team + own user</td>
+          <td>Add/remove from their team</td>
+        </tr>
+        <tr>
+          <td><strong>Team member</strong></td>
+          <td>Their team + org</td>
+          <td>Their team + own user</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td><strong>Org member (no team)</strong></td>
+          <td>Org only</td>
+          <td>Own user only</td>
+          <td>No</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Access rules — server enforcement</h4>
+    <p>The API server checks every request against these rules before reading or writing any markdown file. Folder permissions on the filesystem do not enforce access (the Atlan April 2026 verified failure mode — see dossier Section 13). The server is the enforcer.</p>
+    <p>Pseudocode for the access check:</p>
+    <div class="code-block"><span class="keyword">def</span> can_read(user, scope):
+    <span class="keyword">if</span> scope.startswith(<span class="string">"user/"</span> + user.email):
+        <span class="keyword">return</span> True   <span class="comment"># own user scope</span>
+    <span class="keyword">if</span> scope.startswith(<span class="string">"team/"</span>):
+        team_slug = scope.split(<span class="string">"/"</span>)[<span class="value">1</span>]
+        <span class="keyword">return</span> user.email <span class="keyword">in</span> teams[team_slug].members
+    <span class="keyword">if</span> scope.startswith(<span class="string">"org/"</span>):
+        <span class="keyword">return</span> True   <span class="comment"># any member can read org scope</span>
+    <span class="keyword">return</span> False
+
+<span class="keyword">def</span> can_write(user, scope):
+    <span class="keyword">if</span> user.email <span class="keyword">in</span> org.admins:
+        <span class="keyword">return</span> True   <span class="comment"># org admin writes anywhere</span>
+    <span class="keyword">if</span> scope.startswith(<span class="string">"user/"</span> + user.email):
+        <span class="keyword">return</span> True   <span class="comment"># own user scope</span>
+    <span class="keyword">if</span> scope.startswith(<span class="string">"team/"</span>):
+        team_slug = scope.split(<span class="string">"/"</span>)[<span class="value">1</span>]
+        <span class="keyword">return</span> user.email <span class="keyword">in</span> teams[team_slug].members
+    <span class="keyword">return</span> False</div>
+
+    <h4>Membership changes</h4>
+    <p>Adding or removing team members happens via the web UI (which writes to <code>members.yaml</code> and commits to git) OR via direct git pull request. Pull-request based membership changes are a deliberate Krimto feature — adding someone to a sensitive team can be code-reviewed before the change lands.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> Git-tracked membership is the same trust pattern as GitHub's CODEOWNERS file (verified github.com documentation): membership and ownership decisions stored as version-controlled text, reviewed via pull request, audited via git log. The pattern is universal across modern engineering practice.
+      <span class="src">Source: docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — four roles, not more:</strong> Org admin / team lead / team member / org member is the minimum useful role set. Verified comparable (Langfuse) ships project-level RBAC with custom roles in their Teams tier; Krimto defers custom roles to a hypothetical enterprise tier. The four built-in roles cover the realistic v0.2 use case.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether <code>members.yaml</code> in git is the right place for sensitive membership data, or whether it should be in a server-managed database table. Storing in git makes it diffable and reviewable but means every team member with git access can read the full membership list. For most B2B SaaS that's fine; some compliance contexts may require server-only membership. Decision can be revisited based on customer feedback.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 08: CONCURRENCY -->
+<section id="gap-08">
+  <div class="container">
+    <div class="section-tag"><span class="num">08</span> <span>Concurrency and write coordination</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>Server-coordinated writes. <em>Git as the commit log.</em></h2>
+    <p class="large">All writes go through the Krimto API server. The server is the single writer to git — agents never touch the git repository directly. Writes are serialized through an in-process queue, batched into commits, and pushed to the configured git remote on a schedule. This addresses the verified concurrency failure mode (Lanham Medium March 2026: "concurrent file writes can corrupt data — databases win under concurrent access").</p>
+
+    <div class="status verified">Verified default — anchored to memweave's SQLite-as-coordinator pattern</div>
+
+    <h4>Write flow</h4>
+    <ol>
+      <li><strong>Agent calls <code>krimto_write</code></strong> via MCP. Request includes API key, scope, title, body.</li>
+      <li><strong>Server validates auth and access</strong> (Gap 06, Gap 07). Rejects if the requester cannot write to the scope.</li>
+      <li><strong>Server generates fact ID</strong>, sets <code>created</code> and <code>updated</code> timestamps, and assigns the author from the API key identity.</li>
+      <li><strong>Server writes to SQLite first</strong> (the coordination layer). The fact is persisted in the SQLite database with all metadata. If SQLite write fails, the operation is rejected.</li>
+      <li><strong>Server writes the markdown file to disk</strong> in the configured git working directory.</li>
+      <li><strong>Server stages the file in git</strong> (<code>git add</code>).</li>
+      <li><strong>Server returns success</strong> to the agent with the new fact ID. SQLite has the data; the markdown file exists; the index will pick it up on the next commit.</li>
+      <li><strong>Commit batcher runs periodically</strong> (default: every 30 seconds OR after 10 staged writes, whichever comes first). It executes <code>git commit</code> with a Krimto-generated commit message, then <code>git push</code> to the configured remote.</li>
+    </ol>
+
+    <h4>Commit message format</h4>
+    <div class="code-block">krimto: write [scope=<span class="value">team/payments</span>] by <span class="value">alice@acme.com</span>
+
+Title: Stripe webhook conventions
+Fact ID: fct_01j2k3m4n5p6q7r8s9t0v1w2x3
+Tags: stripe, webhooks, payments
+
+Co-authored-by: Krimto-Server &lt;krimto@acme.krimto.cloud&gt;</div>
+    <p>The commit's git author is the Krimto server (a service account). The fact's human author is recorded both in the commit message and in the file's frontmatter. This makes <code>git log --author=alice@acme.com</code> work as expected when configured to read the frontmatter, while also preserving "this commit was machine-generated" auditability.</p>
+
+    <h4>Conflict resolution</h4>
+    <p>Conflicts only arise between Krimto server writes and external writes (a developer editing the markdown file directly in git, then pushing). The server detects conflicts on push:</p>
+    <ul>
+      <li>If the conflict is in the body of a fact, Krimto surfaces it as a pending-review PR in the web UI rather than auto-merging.</li>
+      <li>If the conflict is in frontmatter (especially the <code>id</code> or <code>created</code> fields), Krimto rejects the external edit and requires manual resolution. This is intentional: frontmatter is server-authoritative.</li>
+      <li>The default <code>git pull</code> strategy is <code>--rebase</code>, then re-apply staged Krimto writes. If rebase fails, server enters read-only mode and alerts the admin.</li>
+    </ul>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> memweave's verified architecture uses SQLite as the coordination layer: "SQLite handles write coordination; markdown gets the final committed state" (Towards Data Science April 2026). Krimto follows the same pattern, extended with a periodic git commit batcher for the markdown persistence layer. The "all writes go through the server" approach is also Hindsight's pattern (verified github.com/vectorize-io/hindsight architecture).
+      <span class="src">Source: towardsdatascience.com/memweave April 2026; github.com/vectorize-io/hindsight</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — batched commits, not per-write commits:</strong> Per-write commits would create 100+ commits per active team-hour, which is git-history noise. Batching every 30 seconds or every 10 writes is a balance between durability (no data loss) and history hygiene. Adjustable. memweave does not have a git layer at all (single-machine SQLite), so this is Krimto-specific design.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether 30 seconds / 10 writes is the right batching threshold. Should be measured at scale. Verified pattern (Langfuse's worker) uses a similar event-batching approach but tunes thresholds per workload.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 09: INDEX MAINTENANCE -->
+<section id="gap-09">
+  <div class="container">
+    <div class="section-tag"><span class="num">09</span> <span>Index maintenance</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>SQLite + sqlite-vec. <em>Embed only on change.</em></h2>
+    <p class="large">The retrieval index lives in a single SQLite database file. Schema is anchored to memweave's verified production schema. The index updates incrementally on each write; full rebuild is possible but rarely needed. Embeddings use OpenAI's <code>text-embedding-3-small</code> by default (anchored to Mem0 and Hindsight standards), with caching keyed on content hash.</p>
+
+    <div class="status verified">Verified default — anchored directly to memweave SQLite schema</div>
+
+    <h4>SQLite schema</h4>
+    <div class="code-block"><span class="comment">-- Anchored to memweave's verified production schema</span>
+
+<span class="keyword">CREATE TABLE</span> facts (
+    id         <span class="value">TEXT PRIMARY KEY</span>,    <span class="comment">-- ULID</span>
+    scope      <span class="value">TEXT NOT NULL</span>,
+    title      <span class="value">TEXT NOT NULL</span>,
+    body       <span class="value">TEXT NOT NULL</span>,
+    author     <span class="value">TEXT NOT NULL</span>,
+    created    <span class="value">TIMESTAMP NOT NULL</span>,
+    updated    <span class="value">TIMESTAMP NOT NULL</span>,
+    tags       <span class="value">TEXT</span>,                <span class="comment">-- JSON array</span>
+    source     <span class="value">TEXT</span>,
+    supersedes <span class="value">TEXT</span>,                <span class="comment">-- JSON array of fact IDs</span>
+    expires    <span class="value">TIMESTAMP</span>,
+    body_hash  <span class="value">TEXT NOT NULL</span>         <span class="comment">-- SHA-256 of body for cache</span>
+);
+
+<span class="comment">-- FTS5 full-text index for BM25</span>
+<span class="keyword">CREATE VIRTUAL TABLE</span> facts_fts <span class="keyword">USING</span> fts5(
+    title, body, tags,
+    content=<span class="string">'facts'</span>, content_rowid=<span class="string">'rowid'</span>
+);
+
+<span class="comment">-- sqlite-vec for cosine similarity</span>
+<span class="keyword">CREATE VIRTUAL TABLE</span> facts_vec <span class="keyword">USING</span> vec0(
+    fact_id <span class="value">TEXT PRIMARY KEY</span>,
+    embedding <span class="value">FLOAT[1536]</span>           <span class="comment">-- text-embedding-3-small dimension</span>
+);
+
+<span class="comment">-- Embedding cache: only re-embed when body changes</span>
+<span class="keyword">CREATE TABLE</span> embedding_cache (
+    body_hash <span class="value">TEXT PRIMARY KEY</span>,
+    embedding <span class="value">BLOB NOT NULL</span>,
+    created   <span class="value">TIMESTAMP NOT NULL</span>
+);</div>
+
+    <h4>Write-path index update</h4>
+    <ol>
+      <li>Compute <code>body_hash = SHA-256(body)</code>.</li>
+      <li>Check <code>embedding_cache</code> for <code>body_hash</code>. If hit, reuse the cached embedding.</li>
+      <li>If miss, call OpenAI <code>text-embedding-3-small</code> with the body text. Store result in <code>embedding_cache</code>.</li>
+      <li>Insert into <code>facts</code> table.</li>
+      <li>FTS5 automatically picks up the row via the <code>content=</code> trigger.</li>
+      <li>Insert into <code>facts_vec</code> with the (possibly cached) embedding.</li>
+    </ol>
+
+    <h4>External-edit detection</h4>
+    <p>When a developer edits a markdown file directly (outside the API) and the change arrives via <code>git pull</code>, the server detects this on its next pull cycle:</p>
+    <ol>
+      <li>Server runs <code>git pull --rebase</code> periodically (default: every 60 seconds).</li>
+      <li>For each changed file in the pull, server reads the frontmatter to find the <code>id</code>.</li>
+      <li>Server compares the file's current <code>body_hash</code> against the database row.</li>
+      <li>If different, server re-indexes: re-embed (with cache check), update <code>facts</code> row, refresh <code>facts_vec</code>.</li>
+      <li>FTS5 updates automatically via the content trigger.</li>
+    </ol>
+
+    <h4>Full rebuild</h4>
+    <p>A full rebuild is available via admin command: <code>krimto reindex</code>. It walks every markdown file in the repository, drops and recreates the <code>facts</code>, <code>facts_fts</code>, and <code>facts_vec</code> tables, then re-indexes everything. The <code>embedding_cache</code> is preserved across rebuilds, so re-indexing is cheap if content has not changed. Realistic time: roughly 1 second per 100 facts on commodity hardware (anchored to memweave's published throughput).</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> The complete SQLite schema (chunks, chunks_fts via FTS5, chunks_vec via sqlite-vec, embedding_cache keyed on hash, files for change detection) is memweave's verified production schema documented at github.com/sachinsharma9780/memweave and in Towards Data Science April 2026. Krimto uses the same schema with field names adapted to "facts" instead of "chunks." OpenAI text-embedding-3-small at 1536 dimensions and $0.02 per 1M tokens is verified at platform.openai.com/docs/pricing and is the default across Mem0 and Hindsight production deployments.
+      <span class="src">Source: github.com/sachinsharma9780/memweave; platform.openai.com/docs/models/text-embedding-3-small</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — text-embedding-3-small, not a larger model:</strong> Mem0 and Hindsight both default to text-embedding-3-small. The larger text-embedding-3-large (3072 dimensions) costs $0.13 per 1M tokens (verified OpenAI pricing) — 6.5x more — without proportional retrieval quality gain for short factual content. Configurable per-deployment for users with specific accuracy requirements.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether 60-second git pull frequency is the right cadence. Too frequent and the server hammers the git remote; too infrequent and external edits take too long to reflect in retrieval. Should be made configurable and measured at scale.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 10: GIT REMOTE AUTH -->
+<section id="gap-10">
+  <div class="container">
+    <div class="section-tag"><span class="num">10</span> <span>Git remote authentication for migration</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>GitHub App for Cloud. <em>Deploy keys for self-host.</em></h2>
+    <p class="large">Krimto Cloud authenticates to user-owned private git repositories via a GitHub App (and equivalent for GitLab and Bitbucket). Self-hosted Krimto uses SSH deploy keys configured during installation. Both paths support the zero-friction migration described in dossier Section 12 Promise #08.</p>
+
+    <div class="status verified">Verified default — anchored to industry-standard GitHub App pattern</div>
+
+    <h4>Krimto Cloud — GitHub App</h4>
+    <p>When a user signs up for Krimto Cloud and provides a git repository URL, the flow is:</p>
+    <ol>
+      <li>Krimto Cloud detects the host (GitHub / GitLab / Bitbucket) and redirects the user to install the Krimto GitHub App on the relevant repository.</li>
+      <li>The user grants the app read+write access to the single repository they choose.</li>
+      <li>The app receives an installation access token, valid for 1 hour, refreshable indefinitely while the install is active.</li>
+      <li>Krimto Cloud clones the repository using the installation token, builds the SQLite index from the markdown files (Gap 09), and begins serving requests.</li>
+      <li>Subsequent writes by Krimto Cloud (Gap 08 batched commits) push to the same repository using the installation token.</li>
+    </ol>
+    <p>GitHub App permissions required:</p>
+    <ul>
+      <li>Repository contents: read &amp; write (to clone and commit)</li>
+      <li>Pull requests: write (for the conflict-resolution PR pattern from Gap 08)</li>
+      <li>Metadata: read</li>
+    </ul>
+
+    <h4>Self-hosted — deploy keys</h4>
+    <p>Self-hosted Krimto runs against a git remote configured at startup:</p>
+    <div class="code-block">docker run -d \
+  -p 8080:8080 \
+  -v ~/.krimto:/data \
+  -v ~/.ssh/krimto_deploy_key:/data/.ssh/id_rsa <span class="value">:ro</span> \
+  -e <span class="string">KRIMTO_GIT_REMOTE</span>=<span class="value">git@github.com:acme/team-knowledge.git</span> \
+  ghcr.io/krimto-labs/server</div>
+    <p>The deploy key (an SSH key with repository write access) is mounted into the container. The user is responsible for generating the key pair and adding the public key to their git host's deploy keys page. This is the standard pattern for any self-hosted service that talks to a git remote — verified across Jenkins, Gitea, Drone, and dozens of others.</p>
+
+    <h4>Migration flow — Krimto Cloud → self-hosted</h4>
+    <ol>
+      <li>User stops using Krimto Cloud (no special "leave" action needed).</li>
+      <li>User clones their git repository locally: <code>git clone &lt;their-repo-url&gt;</code>.</li>
+      <li>User starts self-hosted Krimto with the local clone as the git remote.</li>
+      <li>Self-hosted Krimto builds its own SQLite index from the markdown files.</li>
+      <li>Done. The migration is `git clone`.</li>
+    </ol>
+
+    <h4>Migration flow — self-hosted → Krimto Cloud</h4>
+    <ol>
+      <li>User signs up for Krimto Cloud, picks a region.</li>
+      <li>User pastes their existing git remote URL.</li>
+      <li>User installs the Krimto GitHub App on that repository.</li>
+      <li>Krimto Cloud clones the repository, builds the SQLite index, begins serving.</li>
+      <li>User updates their MCP client config to point at the Krimto Cloud URL instead of localhost.</li>
+      <li>Done. The migration is the GitHub App install + a config edit.</li>
+    </ol>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> GitHub App is the standard pattern for SaaS that needs to authenticate to user-owned private repositories. Used by Vercel, Render, Railway, Fly.io, Netlify, Cloudflare Pages, GitHub Codespaces, and dozens of other deployment platforms. The pattern is documented at docs.github.com/apps. Deploy keys for self-hosted are the standard for any tool that needs git remote access without an OAuth account context — used by Jenkins, Gitea, Drone, Argo CD.
+      <span class="src">Source: docs.github.com/apps; standard SaaS-to-private-repo authentication pattern</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — GitHub App, not OAuth-as-user:</strong> A GitHub App scoped to one repository is more secure than asking the user to grant Krimto Cloud full repository access via OAuth. The app's permissions are visible and revocable at any time. This is the verified pattern across Vercel and Render.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether GitLab and Bitbucket app integrations should ship in v1.0 or be deferred. Verified pattern (most deployment platforms launch with GitHub only and add GitLab/Bitbucket later) suggests defer-and-add.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 11: AGENT WRITE WORKFLOW -->
+<section id="gap-11">
+  <div class="container">
+    <div class="section-tag"><span class="num">11</span> <span>Agent write workflow</span> <span class="tier-tag tier-2">Tier 2</span></div>
+    <h2>Explicit writes only. <em>No silent extraction.</em></h2>
+    <p class="large">Krimto does not extract facts automatically from conversation history. Agents call <code>krimto_write</code> explicitly when they have something durable to record. This is a deliberate divergence from Mem0 and ByteRover (which extract automatically) and aligns with Hindsight's <code>retain</code> pattern. The reasoning: hierarchical-team-memory requires attributable, intentional facts — silent extraction creates facts no human reviewed.</p>
+
+    <div class="status design">Design decision — diverges from Mem0 / ByteRover, aligns with Hindsight</div>
+
+    <h4>When agents should call krimto_write</h4>
+    <p>The agent prompt (in the MCP tool description) instructs the agent to call <code>krimto_write</code> in these situations:</p>
+    <ul>
+      <li>The user explicitly says "remember this," "save this," "make a note," or equivalent.</li>
+      <li>The agent learns a non-obvious, durable fact (a deprecation, an environment-specific constraint, a team convention) that would benefit future sessions.</li>
+      <li>The user corrects the agent on something the agent should not repeat the mistake on.</li>
+    </ul>
+
+    <h4>When agents should NOT call krimto_write</h4>
+    <ul>
+      <li>Conversational context (small talk, current-session reasoning).</li>
+      <li>Facts that are already in the user's existing knowledge base (the agent should call <code>krimto_recall</code> first to check).</li>
+      <li>Speculative or unverified information.</li>
+    </ul>
+
+    <h4>Scope selection</h4>
+    <p>The agent decides which scope to write to based on the conversation context and the user's identity:</p>
+    <ul>
+      <li><strong>Personal scope</strong> is the default. If the user says "remember that I prefer X" or the fact is about the individual user's preferences, write to <code>user/&lt;identity&gt;/</code>.</li>
+      <li><strong>Team scope</strong> when the user explicitly says "remember this for the team" or the fact is about a shared system (team's API conventions, deployment rules).</li>
+      <li><strong>Org scope</strong> only when the user is an org admin and explicitly requests organization-wide knowledge.</li>
+    </ul>
+    <p>If the agent is unsure, it writes to the user's personal scope. The user can later promote the fact to team scope via <code>krimto_supersede</code> + <code>git mv</code> (web UI in v0.3+, manual git operation in v0.1-v0.2).</p>
+
+    <h4>MCP tool description (text shown to agent)</h4>
+    <div class="code-block">Name: krimto_write
+Description: Save a durable, attributable fact to Krimto memory. Use this
+when the user explicitly asks to remember something, when you learn a
+non-obvious durable fact, or when correcting a mistake you should not
+repeat. Do NOT use for conversational context — only for facts worth
+preserving across sessions.
+
+Default to the user's personal scope unless the fact is clearly about a
+shared system or the user requests team/org scope. Check krimto_recall
+first to avoid writing duplicates.
+
+Parameters:
+  scope: <span class="value">"user/&lt;identity&gt;"</span> | <span class="value">"team/&lt;slug&gt;"</span> | <span class="value">"org/&lt;slug&gt;"</span>
+  title: <span class="value">"&lt;80 char descriptive title&gt;"</span>
+  body:  <span class="value">"&lt;markdown content&gt;"</span>
+  tags:  <span class="value">["optional", "kebab-case"]</span>
+  source: <span class="value">"&lt;optional URL or stable identifier&gt;"</span></div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> Hindsight's <code>retain</code> pattern is "explicit write when the agent decides to" — verified Vectorize.io March 2026. This is the same approach Krimto takes. The opposite pattern (automatic extraction from every turn) is what Mem0 and ByteRover do; Atlan April 2026 notes this auto-extraction is one of Mem0's "documented limitations driving alternatives" because facts get extracted without any human review or intentionality.
+      <span class="src">Source: vectorize.io/articles/hindsight-vs-mem0 March 2026; Atlan "Best Mem0 Alternatives" April 2026</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — explicit writes only:</strong> Auto-extraction trades fact volume for fact quality. Krimto optimizes for quality: every fact has an explicit author, an intentional act of recording, and is reviewable in git. The trade-off: Krimto will have fewer facts per team than a Mem0 deployment of equivalent age. This is intentional — Krimto's hierarchical-team-memory positioning requires facts the team trusts.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether agents will actually call <code>krimto_write</code> at the right frequency without auto-extraction. Depends on the MCP tool description quality and the agent's behavior. Should be measured after launch.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 12: WEB UI -->
+<section id="gap-12">
+  <div class="container">
+    <div class="section-tag"><span class="num">12</span> <span>Web UI specification</span> <span class="tier-tag tier-3">Tier 3</span></div>
+    <h2>Seven pages. <em>Nothing more in v0.3.</em></h2>
+    <p class="large">The web UI ships in v0.3. It is convenience tooling on top of the git source-of-truth — everything possible in the UI is also possible by editing markdown files directly. Seven pages cover the minimum viable surface. Additional dashboards and analytics features are deferred to later releases.</p>
+
+    <div class="status design">Design decision — anchored to Langfuse and ByteRover dashboard patterns</div>
+
+    <h4>v0.3 page list</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Page</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Browse</strong></td>
+          <td>Tree view of all scopes the user can read. Click a scope to see its facts. Click a fact to read its content and git history.</td>
+        </tr>
+        <tr>
+          <td><strong>Search</strong></td>
+          <td>Full-text + semantic search across all readable scopes. Filter by scope, tag, author, date. Uses the same retrieval pipeline as <code>krimto_recall</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Fact detail</strong></td>
+          <td>View one fact: rendered markdown, frontmatter, full git history, who-read-this audit log. Edit button for users with write access.</td>
+        </tr>
+        <tr>
+          <td><strong>Pull requests</strong></td>
+          <td>Pending pull requests for member-edited facts. Diff view. Approve / request changes / close. Required for team-scope writes that bypass the API.</td>
+        </tr>
+        <tr>
+          <td><strong>Team management</strong></td>
+          <td>Add / remove team members. Promote / demote leads. Org admins only. Writes to <code>members.yaml</code> and commits.</td>
+        </tr>
+        <tr>
+          <td><strong>API keys</strong></td>
+          <td>Generate, rotate, revoke API keys for the current user. Display shown only once at creation.</td>
+        </tr>
+        <tr>
+          <td><strong>Settings</strong></td>
+          <td>Org settings, OAuth provider config, git remote config, billing (Cloud only).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>What v0.3 does NOT have</h4>
+    <ul>
+      <li>Usage analytics dashboards (deferred to v0.4)</li>
+      <li>Fact authoring UI — the v0.3 web UI lets you edit existing facts but creation happens via the agent or via direct git push</li>
+      <li>Custom roles (only the four built-in roles from Gap 07)</li>
+      <li>Webhooks / Slack integration</li>
+      <li>SAML / SCIM (deferred to enterprise tier)</li>
+    </ul>
+
+    <h4>Tech stack recommendation</h4>
+    <p>Same stack as the API server. If the API server is Node.js, the web UI is Next.js (matches Langfuse's stack — verified github.com/langfuse/langfuse-docs). If the API server is Python, FastAPI for the API plus a simple React frontend served from the same container. The recommendation: one process, one container, one deployment — to preserve the "single Docker" promise from dossier Section 05 Promise #05.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> The seven-page surface is the minimum found across Langfuse Cloud, Mem0 Cloud, and ByteRover Cloud dashboards. All three ship browse, search, detail, settings, and API key management pages at minimum. The "single-container Next.js + FastAPI" pattern is verified across Langfuse's open-source distribution (langfuse-web + langfuse-worker in one repo, deployable independently or together).
+      <span class="src">Source: github.com/langfuse/langfuse architecture; mem0.ai/docs; byterover.dev dashboard</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — no fact creation in the web UI for v0.3:</strong> Facts are created via the agent or via direct git push. The web UI is for browsing and editing, not creating. This keeps the UI scope tight and reinforces the "git is source of truth" model. A fact-creation form may come in v0.4 if user feedback demands it.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether seven pages is enough or whether users will demand specific analytics dashboards in v0.3 (Langfuse Cloud's traces / sessions / dashboards are core to Langfuse). Krimto is a memory tool, not an observability tool — analytics needs are likely less. To be measured after launch.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 13: HOSTED TOPOLOGY -->
+<section id="gap-13">
+  <div class="container">
+    <div class="section-tag"><span class="num">13</span> <span>Hosted deployment topology</span> <span class="tier-tag tier-3">Tier 3</span></div>
+    <h2>One container per tenant. <em>Until proven otherwise.</em></h2>
+    <p class="large">Krimto Cloud (v1.0) runs one Krimto container per paying organization. This is the simplest possible multi-tenancy: full isolation, no shared-database complexity, predictable resource usage. As usage scales and the per-tenant cost matters more, the topology can evolve to shared-database multi-tenancy — but v1.0 ships with one-container-per-tenant for operational simplicity.</p>
+
+    <div class="status design">Design decision — anchored to Hindsight's verified single-container deployment</div>
+
+    <h4>Per-tenant resources</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Component</th><th>Per tenant</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Krimto server container</td><td>1 container, 0.5 vCPU, 512MB-1GB RAM</td></tr>
+        <tr><td>SQLite database</td><td>Persistent volume, ~100MB per 10,000 facts</td></tr>
+        <tr><td>Git working directory</td><td>Persistent volume, ~10MB per 10,000 facts (markdown is small)</td></tr>
+        <tr><td>Embedding API costs</td><td>~$0.20 per 100,000 facts (text-embedding-3-small)</td></tr>
+        <tr><td>Outbound git push</td><td>Negligible; periodic batched pushes</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Infrastructure stack</h4>
+    <ul>
+      <li><strong>Compute:</strong> Hetzner cloud, AWS Fargate, Google Cloud Run, or Fly.io. All four support single-container per-tenant deployments natively.</li>
+      <li><strong>Storage:</strong> Block storage attached to each container (Hetzner Volumes, AWS EBS, Cloud Run with mounted disks via Filestore, Fly Volumes).</li>
+      <li><strong>Reverse proxy:</strong> Caddy or Traefik handles TLS termination and routes <code>acme.krimto.cloud</code> to the correct tenant container.</li>
+      <li><strong>Embedding API:</strong> OpenAI text-embedding-3-small. Embedding cost is &lt;$0.50/tenant/month at typical usage.</li>
+      <li><strong>Identity:</strong> Auth0 or WorkOS for OAuth + SSO orchestration (anchored to Langfuse's verified provider list).</li>
+      <li><strong>Backups:</strong> The git remote IS the backup. Krimto Cloud pushes to the customer's own git repository, so the customer always has a complete copy.</li>
+    </ul>
+
+    <h4>Multi-region (v1.1+)</h4>
+    <p>Verified Langfuse pattern: US, EU, Japan regions selected at signup. For Krimto Cloud v1.0, ship one region (EU is the simplest given GDPR alignment). Multi-region adds operational complexity that should be deferred until customer demand is measured.</p>
+
+    <h4>Cost math — does $29/month work?</h4>
+    <p>Verified per-tenant cost estimate at one-container-per-tenant:</p>
+    <ul>
+      <li>Hetzner CX11 (1 vCPU, 2GB RAM, 20GB disk): €3.79/month</li>
+      <li>Embedding API at typical team usage (~10K facts, ~1K updates/month): ~$0.50/month</li>
+      <li>Outbound bandwidth: negligible</li>
+      <li>Subtotal per tenant: ~$5/month</li>
+      <li>Shared overhead (reverse proxy, monitoring, customer support proration): ~$5/month at modest scale</li>
+      <li><strong>Estimated per-tenant cost: $10/month</strong></li>
+      <li><strong>Gross margin at $29/month price: ~65%</strong></li>
+    </ul>
+    <p>This is approximate. Real numbers depend on actual usage patterns, which can only be measured after launch.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> Single-container-per-tenant is Hindsight's verified deployment topology (one Docker container per Hindsight instance, verified github.com/vectorize-io/hindsight). Hetzner CX11/CX23 pricing verified at hetzner.com/cloud. text-embedding-3-small pricing verified at platform.openai.com/docs/pricing. WorkOS / Auth0 for SSO orchestration is the verified pattern across Langfuse, Mem0, ByteRover.
+      <span class="src">Source: hetzner.com/cloud; platform.openai.com/docs/pricing; github.com/vectorize-io/hindsight</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether the per-tenant cost stays at ~$10/month as the product scales. The 65% gross margin estimate assumes typical team usage; heavy-user tenants writing 100K+ facts/month would cost more in embedding API calls. Should be measured per-cohort after launch. The single-container-per-tenant approach trades cost efficiency for operational simplicity — once usage proves out the demand, shared-database multi-tenancy can deliver 5-10x better unit economics, anchored to Langfuse's verified pattern.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 14: SOURCE/PROVENANCE -->
+<section id="gap-14">
+  <div class="container">
+    <div class="section-tag"><span class="num">14</span> <span>Source / provenance tracking</span> <span class="tier-tag tier-3">Tier 3</span></div>
+    <h2>One field. <em>URL or stable ID.</em></h2>
+    <p class="large">The <code>source</code> field in fact frontmatter records where the fact came from. It is optional and free-form, but encouraged. Provenance is what lets the team trust a fact — and lets them re-check it when the source changes.</p>
+
+    <div class="status design">Design decision — Krimto-specific, minimal scope</div>
+
+    <h4>Source field format</h4>
+    <p>The <code>source</code> field is a string. Common formats:</p>
+    <ul>
+      <li><strong>URL:</strong> <code>"https://stripe.com/docs/webhooks"</code> — link to documentation, blog post, etc.</li>
+      <li><strong>GitHub PR / issue:</strong> <code>"github.com/acme/payments-service/pull/421"</code> — links to a code review where the fact was decided.</li>
+      <li><strong>Slack thread:</strong> <code>"slack://acme/C0123456/p1700000000"</code> — for facts that originated in a conversation.</li>
+      <li><strong>Meeting / decision:</strong> <code>"decision:2026-05-15-stripe-webhook-review"</code> — for facts that came from a meeting; the slug links to wherever that meeting is documented.</li>
+      <li><strong>None:</strong> field omitted entirely — for facts the author cannot or does not need to source.</li>
+    </ul>
+
+    <h4>What source is NOT</h4>
+    <ul>
+      <li>Not a foreign key. Krimto does not fetch or validate the source URL.</li>
+      <li>Not required. Many facts (preferences, conventions) do not have an external source.</li>
+      <li>Not searchable as content. Source is metadata, not body text.</li>
+    </ul>
+
+    <h4>Stale-source detection (v1.1+, deferred)</h4>
+    <p>A potential future feature: Krimto periodically fetches the source URL (when it's a URL) and flags the fact if the source returns 404 or has been substantially modified. This would help teams identify facts that may be based on stale documentation. Not in v0.3 scope. Anchored to the verified problem (deprecation drift) that Mem0 and Hindsight do not address.</p>
+
+    <div class="design-choice">
+      <strong>Design decision — free-form string, not structured:</strong> Forcing a structured source object (type, URL, identifier) would create friction and reject sources that don't fit the schema. A free-form string lets the team source things however they need. The cost is that source-based search and validation are harder; the benefit is that no fact is rejected for not having a "valid" source.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether stale-source detection (v1.1+) is worth building. The verified problem exists (documentation drift), but no comparable solves it well today. Could be a Krimto differentiator or a feature that nobody actually uses. To be measured against user demand.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 15: TESTING & BENCHMARKS -->
+<section id="gap-15">
+  <div class="container">
+    <div class="section-tag"><span class="num">15</span> <span>Testing and benchmarks</span> <span class="tier-tag tier-3">Tier 3</span></div>
+    <h2>Three layers. <em>Three benchmarks.</em></h2>
+    <p class="large">Testing strategy follows the same three-layer architecture as the product. Unit tests for the retrieval pipeline. Integration tests for the MCP API. End-to-end tests for the customer journey. Public benchmarks are scoped to what Krimto claims to do better than competitors: hierarchical-team-memory retrieval.</p>
+
+    <div class="status design">Design decision — anchored to LongMemEval and memweave's published benchmarks</div>
+
+    <h4>Unit tests — retrieval pipeline</h4>
+    <p>Tests for each stage of the Gap 04 pipeline:</p>
+    <ul>
+      <li>BM25 catches exact-term matches (config keys, error codes, proper names)</li>
+      <li>Vector search catches semantic matches without keyword overlap</li>
+      <li>Weighted merge produces the expected 0.7/0.3 ranking</li>
+      <li>Threshold filter drops sub-0.35 results</li>
+      <li>Temporal decay correctly de-ranks old facts; evergreen org-scope facts are exempt</li>
+      <li>Hierarchical scope boost correctly applies 1.5x / 1.2x / 1.0x multipliers</li>
+      <li>MMR diversifies results when multiple highly-similar facts exist</li>
+    </ul>
+
+    <h4>Integration tests — MCP API</h4>
+    <ul>
+      <li><code>krimto_write</code> writes correctly, respects auth and access rules</li>
+      <li><code>krimto_recall</code> returns ranked results, applies precedence correctly</li>
+      <li><code>krimto_read</code> returns full fact content + history</li>
+      <li><code>krimto_supersede</code> creates new fact, marks old fact superseded, preserves history</li>
+      <li><code>krimto_list_scopes</code> respects access rules</li>
+      <li>Concurrent writes to overlapping facts are serialized correctly (Gap 08)</li>
+      <li>External git edits are detected and re-indexed within the configured pull interval (Gap 09)</li>
+    </ul>
+
+    <h4>End-to-end test — the customer journey acceptance test</h4>
+    <p>Anchored to Gap 05 v0.1 acceptance test. Five steps: install, configure Claude Code, write a fact, restart agent, recall the fact. Plus the team scenario in v0.2+: invite a teammate, write a team fact, teammate's agent recalls it.</p>
+
+    <h4>Public benchmarks</h4>
+    <p>Three benchmark categories matter for category positioning:</p>
+    <ol>
+      <li><strong>LongMemEval</strong> — the standard memory benchmark Hindsight scored 91.4% on (verified vectorize.io). Krimto should publish its score on the same benchmark. Anything below 80% raises a quality concern.</li>
+      <li><strong>Krimto-specific hierarchical-precedence benchmark</strong> — a benchmark Krimto creates and publishes that measures whether retrieval correctly applies user &gt; team &gt; org precedence. No comparable solves this today, so the benchmark is Krimto-defined and the bar is Krimto's own measurement.</li>
+      <li><strong>memweave's book-club benchmark</strong> — temporal decay benchmark (verified memweave repository). Verifies the temporal decay implementation works correctly.</li>
+    </ol>
+
+    <h4>What testing does NOT need to cover in v0.1</h4>
+    <ul>
+      <li>Load testing at 10,000 concurrent users — defer until paying customers exist</li>
+      <li>Chaos engineering — defer until v1.0 hosted release</li>
+      <li>Multi-region failover testing — defer until multi-region exists (v1.1+)</li>
+    </ul>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> LongMemEval is the standard memory benchmark used across Mem0, Hindsight, Letta, and ByteRover (verified vectorize.io comparison articles). Hindsight's 91.4% score is the verified high-water mark. memweave's book-club benchmark is the temporal-decay verification used in the memweave repository (verified github.com/sachinsharma9780/memweave). Three-layer testing (unit / integration / end-to-end) is universal engineering practice.
+      <span class="src">Source: vectorize.io/articles/hindsight-vs-mem0; github.com/sachinsharma9780/memweave</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> What Krimto will actually score on LongMemEval. The benchmark targets single-user memory retrieval; Krimto is optimized for hierarchical team memory which LongMemEval does not test. Hitting Hindsight's 91.4% is possible but not the primary success criterion — the hierarchical-precedence benchmark is more strategically important for Krimto's positioning.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 16: ERROR HANDLING -->
+<section id="gap-16">
+  <div class="container">
+    <div class="section-tag"><span class="num">16</span> <span>Error handling and HTTP status codes</span> <span class="tier-tag tier-2">Tier 2 · v002</span></div>
+    <h2>JSON-RPC for MCP. <em>HTTP codes for REST.</em></h2>
+    <p class="large">Krimto exposes two surfaces: the MCP server (JSON-RPC 2.0 over the MCP transport) and the REST API (used by the web UI and migration tooling). Each follows its protocol's verified standard error format. Clients can retry intelligently because the codes carry consistent semantics.</p>
+
+    <div class="status verified">Verified default — anchored to JSON-RPC 2.0, MCP specification, RFC 7231</div>
+
+    <h4>MCP / JSON-RPC errors</h4>
+    <p>MCP tool failures return a JSON-RPC error object as defined in the MCP specification:</p>
+    <div class="code-block">{
+  <span class="string">"jsonrpc"</span>: <span class="value">"2.0"</span>,
+  <span class="string">"id"</span>: <span class="value">42</span>,
+  <span class="string">"error"</span>: {
+    <span class="string">"code"</span>: <span class="value">-32602</span>,
+    <span class="string">"message"</span>: <span class="value">"Invalid params: scope must match user|team|org/&lt;slug&gt;"</span>,
+    <span class="string">"data"</span>: {
+      <span class="string">"field"</span>: <span class="value">"scope"</span>,
+      <span class="string">"received"</span>: <span class="value">"personal/alice"</span>,
+      <span class="string">"expected"</span>: <span class="value">"user/alice@acme.com"</span>
+    }
+  }
+}</div>
+
+    <h4>JSON-RPC error code mapping</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 100px;">Code</th><th>Name</th><th>When Krimto returns it</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>-32700</code></td><td>Parse error</td><td>Malformed JSON in the request body.</td></tr>
+        <tr><td><code>-32600</code></td><td>Invalid Request</td><td>Request missing required JSON-RPC fields.</td></tr>
+        <tr><td><code>-32601</code></td><td>Method not found</td><td>Tool name does not match the five Krimto tools (Gap 02).</td></tr>
+        <tr><td><code>-32602</code></td><td>Invalid params</td><td>Parameter validation failed (bad scope format, missing title, etc.).</td></tr>
+        <tr><td><code>-32603</code></td><td>Internal error</td><td>Server-side error not caused by client input (SQLite write failed, git push failed).</td></tr>
+        <tr><td><code>-32000</code></td><td>Server error (custom: unauthorized)</td><td>API key missing or invalid.</td></tr>
+        <tr><td><code>-32001</code></td><td>Server error (custom: forbidden)</td><td>Authenticated but no permission for this scope.</td></tr>
+        <tr><td><code>-32002</code></td><td>Server error (custom: rate limited)</td><td>Rate limit exceeded; see Gap 18 for limits and retry semantics.</td></tr>
+        <tr><td><code>-32003</code></td><td>Server error (custom: not found)</td><td>Fact ID does not exist or is not visible to requester.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>REST API errors (web UI, migration)</h4>
+    <p>The REST API uses standard HTTP status codes per RFC 7231 with JSON error bodies. Anchored to Langfuse's verified pattern:</p>
+    <div class="code-block">HTTP/<span class="value">1.1</span> <span class="value">422</span> Unprocessable Entity
+Content-Type: application/json
+
+{
+  <span class="string">"error"</span>: {
+    <span class="string">"type"</span>: <span class="value">"validation_error"</span>,
+    <span class="string">"message"</span>: <span class="value">"members.yaml has invalid team slug"</span>,
+    <span class="string">"details"</span>: {
+      <span class="string">"path"</span>: <span class="value">"teams[2].slug"</span>,
+      <span class="string">"received"</span>: <span class="value">"Payments Team"</span>,
+      <span class="string">"expected"</span>: <span class="value">"lowercase-kebab-case-slug"</span>
+    }
+  }
+}</div>
+
+    <h4>HTTP status code matrix</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 80px;">Code</th><th>When</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>200</code></td><td>Success with response body.</td></tr>
+        <tr><td><code>201</code></td><td>Resource created (fact, API key, team).</td></tr>
+        <tr><td><code>204</code></td><td>Success, no body (after a delete or status update).</td></tr>
+        <tr><td><code>400</code></td><td>Malformed request (bad JSON, missing required field).</td></tr>
+        <tr><td><code>401</code></td><td>Missing or invalid API key / session.</td></tr>
+        <tr><td><code>403</code></td><td>Authenticated but no permission for this scope or resource.</td></tr>
+        <tr><td><code>404</code></td><td>Resource not found or not visible to requester.</td></tr>
+        <tr><td><code>409</code></td><td>Conflict (git rebase conflict during write coordination — see Gap 08).</td></tr>
+        <tr><td><code>422</code></td><td>Validation error (frontmatter schema violation, bad members.yaml).</td></tr>
+        <tr><td><code>429</code></td><td>Rate limit exceeded; includes <code>Retry-After</code> header.</td></tr>
+        <tr><td><code>500</code></td><td>Internal server error.</td></tr>
+        <tr><td><code>503</code></td><td>Service temporarily unavailable (git remote unreachable, SQLite locked); includes <code>Retry-After</code> header.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Retry semantics</h4>
+    <p>Two status codes are explicitly retryable: <code>429</code> (rate limited) and <code>503</code> (temporarily unavailable). Both include a <code>Retry-After</code> header with seconds to wait. All other 4xx responses are client errors and should NOT be retried without correction. <code>500</code> is server error and may be retried with exponential backoff, but the underlying issue should be investigated.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> JSON-RPC 2.0 specification defines the error object structure (code, message, optional data) with reserved code range -32768 to -32000 for protocol-level errors and -32000 to -32099 for server-defined errors. MCP specification (modelcontextprotocol.io) uses this pattern. HTTP status codes follow RFC 7231 (HTTP/1.1 semantics). Langfuse's API documentation uses identical error envelope structure (verified langfuse.com API docs).
+      <span class="src">Source: jsonrpc.org/specification; modelcontextprotocol.io; IETF RFC 7231; langfuse.com/api</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — custom codes -32000 through -32003:</strong> These are within the JSON-RPC reserved server-error range and are Krimto-specific. They distinguish between auth failure, permission failure, rate limiting, and not-found — distinctions a generic <code>-32603 Internal Error</code> would lose. Anchored to the same approach used in other MCP server implementations.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether clients will actually consume the <code>data</code> field on errors or rely only on <code>message</code>. The structured <code>data</code> field is included because it enables programmatic recovery (e.g., showing which field validation failed), but adoption depends on client implementation.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 17: HEALTH CHECKS -->
+<section id="gap-17">
+  <div class="container">
+    <div class="section-tag"><span class="num">17</span> <span>Health check endpoints</span> <span class="tier-tag tier-2">Tier 2 · v002</span></div>
+    <h2>Liveness for orchestrators. <em>Readiness for traffic.</em></h2>
+    <p class="large">Two endpoints, both following Kubernetes liveness/readiness conventions. <code>/health/live</code> confirms the server process is running. <code>/health/ready</code> confirms the server is ready to accept traffic — SQLite reachable, git remote reachable, index loaded. Container orchestrators use these for rolling updates, autoscaling, and failure recovery.</p>
+
+    <div class="status verified">Verified default — anchored to Kubernetes liveness/readiness pattern</div>
+
+    <h4>Endpoints</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Endpoint</th><th>Purpose</th><th style="width: 100px;">Response</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET /health/live</code></td>
+          <td>Is the server process running and the HTTP listener responsive? Should return 200 immediately if the process is alive. Used by orchestrator to decide whether to restart the container.</td>
+          <td>200 / 500</td>
+        </tr>
+        <tr>
+          <td><code>GET /health/ready</code></td>
+          <td>Is the server ready to accept traffic? Checks: SQLite connection open, index built, git remote reachable (if configured). Used by orchestrator to decide whether to route traffic.</td>
+          <td>200 / 503</td>
+        </tr>
+        <tr>
+          <td><code>GET /health</code></td>
+          <td>Alias for <code>/health/ready</code>. Common convention for simpler deployments that don't distinguish live/ready.</td>
+          <td>200 / 503</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Response format</h4>
+    <p>Both endpoints return JSON with a consistent schema. Liveness is intentionally minimal (any work in the liveness probe risks false negatives that trigger unnecessary restarts):</p>
+    <div class="code-block"><span class="comment">// GET /health/live — minimal, no dependencies checked</span>
+HTTP/<span class="value">1.1</span> <span class="value">200</span> OK
+{
+  <span class="string">"status"</span>: <span class="value">"alive"</span>,
+  <span class="string">"version"</span>: <span class="value">"0.1.0"</span>,
+  <span class="string">"uptime_seconds"</span>: <span class="value">8472</span>
+}
+
+<span class="comment">// GET /health/ready — checks dependencies</span>
+HTTP/<span class="value">1.1</span> <span class="value">200</span> OK
+{
+  <span class="string">"status"</span>: <span class="value">"ready"</span>,
+  <span class="string">"version"</span>: <span class="value">"0.1.0"</span>,
+  <span class="string">"checks"</span>: {
+    <span class="string">"sqlite"</span>: { <span class="string">"status"</span>: <span class="value">"ok"</span>, <span class="string">"latency_ms"</span>: <span class="value">1</span> },
+    <span class="string">"index"</span>: { <span class="string">"status"</span>: <span class="value">"ok"</span>, <span class="string">"fact_count"</span>: <span class="value">1247</span> },
+    <span class="string">"git_remote"</span>: { <span class="string">"status"</span>: <span class="value">"ok"</span>, <span class="string">"last_sync"</span>: <span class="value">"2026-05-22T14:30:00Z"</span> }
+  }
+}
+
+<span class="comment">// GET /health/ready — when not ready</span>
+HTTP/<span class="value">1.1</span> <span class="value">503</span> Service Unavailable
+{
+  <span class="string">"status"</span>: <span class="value">"not_ready"</span>,
+  <span class="string">"checks"</span>: {
+    <span class="string">"sqlite"</span>: { <span class="string">"status"</span>: <span class="value">"ok"</span> },
+    <span class="string">"index"</span>: { <span class="string">"status"</span>: <span class="value">"building"</span>, <span class="string">"progress"</span>: <span class="value">0.34</span> },
+    <span class="string">"git_remote"</span>: { <span class="string">"status"</span>: <span class="value">"ok"</span> }
+  }
+}</div>
+
+    <h4>What each check verifies</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 140px;">Check</th><th>What it tests</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>sqlite</code></td><td>SQLite database file is open and a simple <code>SELECT 1</code> succeeds within 100ms.</td></tr>
+        <tr><td><code>index</code></td><td>Index is loaded; reports fact count. During startup or full rebuild, returns <code>building</code> status with progress.</td></tr>
+        <tr><td><code>git_remote</code></td><td>For configurations with a git remote, verifies the remote is reachable. Records the timestamp of the most recent successful sync. Failures here do not mark unready — Krimto is still useful even if temporarily unable to push.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>When readiness returns 503</h4>
+    <ul>
+      <li>SQLite check failed (database locked, disk full, file corrupted)</li>
+      <li>Index is still building from initial git clone or full rebuild</li>
+      <li>Server is in the brief startup window before all subsystems are loaded</li>
+    </ul>
+    <p>Liveness returning 500 (which is rare) indicates the process is stuck — orchestrator should restart. Krimto should not return 500 from liveness for transient issues; that's what readiness is for.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> The split between liveness and readiness probes is the Kubernetes-recommended pattern documented at kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes. Hindsight, Langfuse, and Mem0 all ship <code>/health</code> or <code>/healthz</code> endpoints (verified across their respective documentation). The JSON response format with per-check status is the same shape used by Spring Boot Actuator's <code>/actuator/health</code> and by Kubernetes itself — verified universal pattern.
+      <span class="src">Source: kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes; standard health check pattern across modern services</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — git remote check does not block readiness:</strong> A temporarily unreachable git remote (network blip, GitHub outage) should not take Krimto offline. Reads still work from local SQLite; writes can still queue. The check is reported in the health response for observability but doesn't toggle the ready/not-ready bit. This is intentional — the alternative (taking Krimto down whenever GitHub has a brief incident) is worse than the current trade-off.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether 100ms is the right SQLite latency threshold. Anchored to standard health check timeouts but should be measured under realistic load.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 18: RATE LIMITING -->
+<section id="gap-18">
+  <div class="container">
+    <div class="section-tag"><span class="num">18</span> <span>Rate limiting policy</span> <span class="tier-tag tier-2">Tier 2 · v002</span></div>
+    <h2>Per-tier limits for hosted. <em>Off by default for self-host.</em></h2>
+    <p class="large">Krimto Cloud enforces per-tier rate limits anchored to Langfuse's verified published tiers. Self-hosted Krimto ships with rate limiting disabled by default — operators enable it via config if needed. Both surfaces use the standard <code>X-RateLimit-*</code> headers and respond with HTTP 429 + <code>Retry-After</code> when limits are exceeded.</p>
+
+    <div class="status verified">Verified default — anchored to Langfuse Cloud verified tier limits</div>
+
+    <h4>Krimto Cloud tier limits</h4>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 180px;">Tier</th>
+          <th>MCP API rate</th>
+          <th>Web API rate</th>
+          <th>Embedding writes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Free</strong> (free trial)</td>
+          <td>60 req/min per key</td>
+          <td>60 req/min</td>
+          <td>1,000 facts total</td>
+        </tr>
+        <tr>
+          <td><strong>Team</strong> ($29/month)</td>
+          <td>600 req/min per key</td>
+          <td>600 req/min</td>
+          <td>50,000 facts soft cap</td>
+        </tr>
+        <tr>
+          <td><strong>Enterprise</strong> (custom)</td>
+          <td>Custom</td>
+          <td>Custom</td>
+          <td>Custom</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Tier numbers are proposed values anchored to Langfuse's verified published tiers (Free 100 req/min, Pro 1,000 req/min, Enterprise custom — verified langfuse.com/enterprise May 2026). Krimto's Free/Team tiers are set proportionally lower because memory operations are heavier than telemetry ingestion. Adjustable based on real usage data after launch.</p>
+
+    <h4>Self-hosted defaults</h4>
+    <ul>
+      <li><strong>Default: no rate limit.</strong> Self-hosted operators control their own infrastructure and can choose their limits. The default is "off" so existing comparable patterns hold (Hindsight self-hosted has no built-in rate limit; Langfuse self-hosted has it but defaults to high values).</li>
+      <li><strong>Configurable via <code>config.yaml</code>:</strong>
+<div class="code-block">rate_limits:
+  enabled: <span class="value">false</span>     <span class="comment"># enable globally</span>
+  per_api_key: <span class="value">600</span>    <span class="comment"># requests per minute per API key</span>
+  per_ip: <span class="value">3000</span>        <span class="comment"># requests per minute per source IP</span>
+  burst: <span class="value">100</span>          <span class="comment"># allow short bursts above the steady rate</span></div></li>
+    </ul>
+
+    <h4>Response headers (always included)</h4>
+    <p>Whether rate limiting is enabled or not, Krimto always returns these headers so clients can adapt:</p>
+    <div class="code-block">X-RateLimit-Limit: <span class="value">600</span>
+X-RateLimit-Remaining: <span class="value">587</span>
+X-RateLimit-Reset: <span class="value">1716567480</span></div>
+    <p>The <code>Reset</code> header is a Unix timestamp indicating when the current rate-limit window resets. When limit is disabled, <code>Limit</code> reports a very large number and <code>Remaining</code> always matches.</p>
+
+    <h4>429 response</h4>
+    <div class="code-block">HTTP/<span class="value">1.1</span> <span class="value">429</span> Too Many Requests
+Retry-After: <span class="value">23</span>
+X-RateLimit-Limit: <span class="value">600</span>
+X-RateLimit-Remaining: <span class="value">0</span>
+X-RateLimit-Reset: <span class="value">1716567480</span>
+
+{
+  <span class="string">"error"</span>: {
+    <span class="string">"type"</span>: <span class="value">"rate_limit_exceeded"</span>,
+    <span class="string">"message"</span>: <span class="value">"Rate limit exceeded. Retry after 23 seconds."</span>,
+    <span class="string">"details"</span>: {
+      <span class="string">"limit"</span>: <span class="value">600</span>,
+      <span class="string">"window_seconds"</span>: <span class="value">60</span>,
+      <span class="string">"retry_after_seconds"</span>: <span class="value">23</span>
+    }
+  }
+}</div>
+
+    <h4>What counts as a request</h4>
+    <ul>
+      <li>Each MCP tool call (one call to <code>krimto_write</code>, <code>krimto_recall</code>, etc.) counts as one request.</li>
+      <li>Each REST API call counts as one request.</li>
+      <li>Health check endpoints (<code>/health/*</code>) do NOT count — orchestrators poll these continuously and including them would create rate-limit thrash.</li>
+      <li>Internal git pull operations do NOT count — these are server-internal.</li>
+    </ul>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> Langfuse Cloud publishes explicit tier limits at langfuse.com/enterprise (verified May 2026): Free 100 req/min ingestion; Pro 1,000 req/min API + 20,000 req/min ingestion; Enterprise custom. The <code>X-RateLimit-*</code> header convention is standard across Stripe, GitHub, Twilio, and most production APIs (verified). The <code>Retry-After</code> header for 429 responses is defined in RFC 6585. Self-hosted rate limiting being opt-in is anchored to Hindsight's default (no built-in rate limiting in self-hosted).
+      <span class="src">Source: langfuse.com/enterprise; IETF RFC 6585; standard X-RateLimit-* convention across major APIs</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — proportionally lower than Langfuse:</strong> Memory operations are heavier than telemetry ingestion (embedding API calls, git commits, index updates). The proposed 60/600/custom tier structure is lower than Langfuse's 100/1,000/20,000 ingestion tiers because the per-operation cost is higher. Numbers are starting points to be tuned with real usage data after launch.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether the Team tier 600 req/min limit is sufficient for real team usage. Should be measured per-cohort after launch. Some early customers may exceed it; the answer is either higher tier or adjusted defaults, both addressable without architectural change.
+    </div>
+  </div>
+</section>
+
+<!-- GAP 19: TELEMETRY POLICY -->
+<section id="gap-19">
+  <div class="container">
+    <div class="section-tag"><span class="num">19</span> <span>Telemetry policy</span> <span class="tier-tag tier-2">Tier 2 · v002</span></div>
+    <h2>No telemetry by default. <em>Opt-in, transparent if enabled.</em></h2>
+    <p class="large">Self-hosted Krimto reports no telemetry by default. The Apache 2.0 OSS positioning in dossier Sections 05, 10, and 12 depends on user trust, and silent telemetry is verified to break that trust. If an operator opts in, exactly what is collected is documented and inspectable. Krimto Cloud telemetry is separate — Cloud inherently has access to usage data and that policy is governed by the Cloud Terms of Service.</p>
+
+    <div class="status verified">Verified default — anchored to Cipher (no telemetry) + Langfuse self-hosted (opt-in)</div>
+
+    <h4>Self-hosted default</h4>
+    <ul>
+      <li><strong>No telemetry. No phone-home. No usage reporting.</strong> Self-hosted Krimto does not make outbound network calls to Krimto-controlled servers in default configuration.</li>
+      <li>The only outbound calls in default config are: (a) git push/pull to the configured git remote, (b) embedding API calls to the configured embedding provider, both of which are explicitly user-configured and serve direct user needs.</li>
+      <li>This matches Cipher's verified policy: "no account, no cloud, no telemetry."</li>
+    </ul>
+
+    <h4>Optional opt-in</h4>
+    <p>Operators may enable anonymous usage telemetry to help Krimto maintainers understand deployment patterns:</p>
+    <div class="code-block">telemetry:
+  enabled: <span class="value">false</span>             <span class="comment"># default; set to true to opt in</span>
+  endpoint: <span class="value">"https://telemetry.krimto.com"</span>
+  include:
+    - version                <span class="comment"># Krimto version string</span>
+    - install_id             <span class="comment"># random UUID, locally generated</span>
+    - deployment_type        <span class="comment"># self-hosted | cloud</span>
+    - fact_count_bucket      <span class="comment"># bucketed: 0-100, 100-1K, 1K-10K, 10K+</span>
+    - team_count_bucket      <span class="comment"># bucketed: 1, 2-5, 6-20, 20+</span>
+    - active_user_count_bucket <span class="comment"># bucketed: 1, 2-10, 11-50, 50+</span></div>
+
+    <h4>What is NEVER collected, even with opt-in</h4>
+    <ul>
+      <li><strong>No fact content.</strong> Markdown bodies, titles, tags — none of these are transmitted under any configuration.</li>
+      <li><strong>No user identities.</strong> Email addresses, OAuth claims, member names — never transmitted.</li>
+      <li><strong>No scope paths.</strong> Team names, org names, user identifiers in paths — never transmitted.</li>
+      <li><strong>No git remote URLs or repository names.</strong></li>
+      <li><strong>No retrieval queries.</strong> What users search for is private.</li>
+      <li><strong>No IP address logging beyond what is needed for the immediate HTTP response.</strong></li>
+    </ul>
+
+    <h4>Inspectability</h4>
+    <p>The telemetry payload is logged locally in plaintext to <code>logs/telemetry-outbound.jsonl</code> before transmission. Operators can inspect exactly what was sent. This is the verified Langfuse self-hosted pattern: every telemetry event is auditable.</p>
+
+    <h4>Krimto Cloud telemetry (separate policy)</h4>
+    <p>Krimto Cloud is the hosted service. The Cloud server inherently has access to usage patterns of its own customers — that's intrinsic to running a hosted service. Cloud telemetry policy is governed by the Krimto Cloud Terms of Service, which must be explicit about:</p>
+    <ul>
+      <li>What's collected (for billing, capacity planning, abuse detection)</li>
+      <li>What's never collected (fact content, retrieval queries, member identities beyond billing-required fields)</li>
+      <li>Data retention windows</li>
+      <li>The customer's right to export and delete their data (anchored to GDPR Article 15 and 17 requirements)</li>
+    </ul>
+    <p>The Cloud Terms of Service are a separate document from this build spec. Their content is informed by the same trust principles — explicit, narrow, inspectable — but the legal text is governed by counsel, not by the build spec.</p>
+
+    <div class="verified-anchor">
+      <strong>Verified anchor:</strong> Cipher (ByteRover open source) ships with explicit "no account, no cloud, no telemetry" policy (verified github.com/campfirein/cipher README). Langfuse self-hosted offers opt-in telemetry with documented collection at langfuse.com/self-hosting/telemetry (verified). The "never collect content, queries, or identities" boundary is the verified standard across reputable OSS infrastructure projects (PostgreSQL, Redis, SQLite all collect zero application data in their tooling).
+      <span class="src">Source: github.com/campfirein/cipher README; langfuse.com/self-hosting/telemetry; standard OSS infrastructure project privacy norms</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design decision — opt-in, not opt-out:</strong> Some OSS projects default telemetry on with an opt-out path. This is verified to generate user backlash (verified Homebrew telemetry controversy 2016; verified Atom telemetry controversy 2017). Krimto follows the safer pattern: off by default, on only when explicitly enabled. Trades a smaller telemetry sample size for trust.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> What opt-in rate Krimto will see if telemetry is enabled. Comparable opt-in telemetry sample sizes are typically 10-25% of installations based on industry reports, but actual rate depends on user demographics and the trust the project has built.
+    </div>
+  </div>
+</section>
+
+<!-- CHANGE LOG -->
+<section id="changelog">
+  <div class="container">
+    <div class="section-tag"><span class="num">★</span> <span>Change log</span></div>
+    <h2>What changed. <em>What didn't.</em></h2>
+    <p class="large">Each version records what was added, what was corrected, and what was intentionally not changed. Same discipline as the strategy dossier's revision log — surfaces both signal and noise across iterations, anchored to verified data where possible, honest about what cannot be verified.</p>
+
+    <h3 style="margin-top: 48px;">v004 — May 22, 2026 — Infrastructure references aligned to verified-owned resources</h3>
+    <p>v003 added positioning and messaging guidance to Gap 05. v004 makes no strategic, architectural, or capability change. It corrects placeholder and aspirational identifiers in the spec text to match the verified-owned infrastructure the project actually has. Hygiene change only. Sections 01-19 capability content unchanged.</p>
+
+    <h4>What v004 changed</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 220px;">Reference location</th><th style="width: 240px;">Was</th><th>Now</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Docker image — Gap 05 acceptance test</td>
+          <td><code>krimto/server</code></td>
+          <td><code>ghcr.io/krimto-labs/server</code></td>
+        </tr>
+        <tr>
+          <td>Docker image — Gap 06 OAuth bootstrap example</td>
+          <td><code>krimto/server</code></td>
+          <td><code>ghcr.io/krimto-labs/server</code></td>
+        </tr>
+        <tr>
+          <td>Docker image — Gap 13 self-hosted deploy-key example</td>
+          <td><code>krimto/server</code></td>
+          <td><code>ghcr.io/krimto-labs/server</code></td>
+        </tr>
+        <tr>
+          <td>Telemetry endpoint — Gap 19 opt-in example</td>
+          <td><code>https://telemetry.krimto.dev</code></td>
+          <td><code>https://telemetry.krimto.com</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Why these changes</h4>
+    <ul>
+      <li><strong>Docker image registry:</strong> The previous form (<code>krimto/server</code>) is Docker Hub convention assuming a <code>krimto</code> Docker Hub namespace that does not exist. The verified-owned GitHub organization is <code>krimto-labs</code>. GitHub Container Registry uses the GitHub org name as the namespace automatically (<code>ghcr.io/krimto-labs/server</code>) without requiring a separate Docker Hub account. Verified pattern: GHCR is published-image-namespace-equals-GitHub-org-name; standard for any project that already owns a GitHub org. Reversible to Docker Hub later if a <code>krimtolabs</code> Docker Hub namespace is registered.</li>
+      <li><strong>Telemetry endpoint domain:</strong> The verified-owned domain is <code>krimto.com</code>, not <code>krimto.dev</code>. The endpoint reference must point to a domain the project controls.</li>
+    </ul>
+
+    <h4>What v004 did NOT change</h4>
+    <ul>
+      <li><strong>Sections 01-19 capability content.</strong> Every specification, every algorithm, every verified anchor is unchanged.</li>
+      <li><strong>The MVP scope (Gap 05).</strong> Acceptance test steps and explicit non-goals unchanged.</li>
+      <li><strong>The Gap 13 hosted topology.</strong> Architecture unchanged; only the example image registry path corrected.</li>
+      <li><strong>The Gap 19 telemetry policy.</strong> What is collected, what is never collected, opt-in default — all unchanged.</li>
+      <li><strong>No new specs added. No specs removed.</strong></li>
+    </ul>
+
+    <h4>Verified-owned resources as of v004</h4>
+    <ul>
+      <li><strong>Domain:</strong> <code>krimto.com</code> (registered, owned by project)</li>
+      <li><strong>GitHub organization:</strong> <code>github.com/krimto-labs</code> (claimed)</li>
+      <li><strong>npm account:</strong> <code>krimto</code> (claimed; scope <code>@krimto/...</code> available for future JavaScript packages)</li>
+      <li><strong>Container registry namespace:</strong> <code>ghcr.io/krimto-labs/...</code> (via the GitHub org; no separate registration needed)</li>
+      <li><strong>Legal entity:</strong> Estonian company with VAT registration</li>
+    </ul>
+
+    <h3 style="margin-top: 56px;">v003 — May 22, 2026 — Positioning and messaging guidance added to Gap 05</h3>
+    <p>v001 defined the MVP capability scope. v002 added operational essentials (Sections 16-19). v003 adds a single subsection to Gap 05 covering the public positioning and messaging approach for v0.1 — the verified Langfuse pattern of claiming the strategic position by framing rather than by waiting until all features ship. Purely additive to Gap 05; no other sections changed.</p>
+
+    <h4>What v003 added to Gap 05</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 220px;">Element</th><th>Content</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>New subsection</td>
+          <td>"Positioning and messaging — claim the team-memory position from day one"</td>
+        </tr>
+        <tr>
+          <td>Verified anchor added</td>
+          <td>Langfuse 2023 launch positioned as "the LLM engineering platform" when v1 was traces only — full platform shipped over ~2.5 years before January 2026 acquisition by ClickHouse. Source: langfuse.com/changelog evolution; Orrick announcement January 2026.</td>
+        </tr>
+        <tr>
+          <td>Five specific guidance items</td>
+          <td>README headline frames Krimto as team memory; public roadmap visible from day one (<code>ROADMAP.md</code> in repo root); eight promises from dossier Section 05 listed with current-version status indicators; v0.1 release announcement explicitly states the v0.1 → v0.2 → v0.3 → v1.0 trajectory; strategic position is the four-property wedge, not the v1 feature set.</td>
+        </tr>
+        <tr>
+          <td>Design decision documented</td>
+          <td>Wedge claimed by framing, not by shipping all features at once. Anchored to verified pattern across Mem0 (single-user Python SDK at launch), Langfuse (traces only at launch), Hindsight (December 2025 launch with single-Docker), ChromaDB (single-user vector store at launch). No verified successful OSS AI infrastructure project shipped multi-user/team features as their first public release.</td>
+        </tr>
+        <tr>
+          <td>Honest disclosure added</td>
+          <td>Cannot verify whether team-memory framing of single-user v0.1 will read as honest commitment or overpromising. The verified Langfuse precedent suggests honest framing works when paired with visible roadmap progress. Mitigation: ship v0.2 within stated window, update roadmap status indicators publicly.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>What v003 did NOT change</h4>
+    <ul>
+      <li><strong>v0.1 capability scope</strong> stays personal-scope-only. No team features moved into v0.1.</li>
+      <li><strong>v0.1 acceptance test</strong> (5 steps) is unchanged.</li>
+      <li><strong>What v0.1 explicitly does NOT do</strong> list is unchanged.</li>
+      <li><strong>The original verified shipping pattern anchors</strong> (Hindsight December 2025, Mem0 January 2024, Langfuse 2023) are unchanged.</li>
+      <li><strong>Sections 01-04 and 06-19</strong> are unchanged. The change is scoped to Gap 05 only.</li>
+    </ul>
+
+    <h4>Origin of v003</h4>
+    <p>The positioning-and-messaging guidance emerged from a strategic question: should Krimto's first public release include team features (v0.2) to claim the "team memory" strategic position, or ship v0.1 as defined and claim the position by framing? Verified data across five comparable OSS AI infrastructure projects (Mem0, Langfuse, Hindsight, ChromaDB, memweave) confirmed the verified pattern: ship simple, evolve. Position-claiming-by-framing — the verified Langfuse approach — is the way to claim the team-memory strategic position without delaying v0.1 launch. v003 makes this guidance explicit in Gap 05 so a coding agent or maintainer reading the spec knows the messaging discipline that accompanies the v0.1 feature scope.</p>
+
+    <h3 style="margin-top: 56px;">v002 — May 22, 2026 — Operational essentials added</h3>
+    <p>v001 covered the original fifteen gaps from the gap analysis. An honest audit identified that the original analysis itself missed four standard production-infrastructure concerns. v002 adds those four as Sections 16-19, purely additively, without restructuring v001 content.</p>
+
+    <h4>What v002 added</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 60px;">§</th><th style="width: 240px;">Section</th><th>Anchored to</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>16</code></td>
+          <td>Error handling and HTTP status codes</td>
+          <td>JSON-RPC 2.0 specification, MCP specification, RFC 7231 HTTP status codes, Langfuse API error envelope</td>
+        </tr>
+        <tr>
+          <td><code>17</code></td>
+          <td>Health check endpoints</td>
+          <td>Kubernetes liveness/readiness pattern (kubernetes.io/docs), Hindsight/Langfuse/Mem0 health endpoint conventions</td>
+        </tr>
+        <tr>
+          <td><code>18</code></td>
+          <td>Rate limiting policy</td>
+          <td>Langfuse Cloud verified tier limits (langfuse.com/enterprise), Stripe/GitHub <code>X-RateLimit-*</code> convention, RFC 6585 for 429+Retry-After</td>
+        </tr>
+        <tr>
+          <td><code>19</code></td>
+          <td>Telemetry policy</td>
+          <td>Cipher "no telemetry" pattern (github.com/campfirein/cipher), Langfuse opt-in pattern (langfuse.com/self-hosting/telemetry)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>What v002 did NOT change</h4>
+    <ul>
+      <li><strong>Sections 01-15</strong> are unchanged. No restructuring. The original specs and anchors are intact.</li>
+      <li><strong>The MVP definition (Gap 05)</strong> still ships v0.1 with the original three MCP tools and personal-scope-only. Sections 16-19 are required before v0.2 ships, but the v0.1 acceptance test is unchanged.</li>
+      <li><strong>The hierarchical scope model (Gap 03)</strong> and the four-role access model (Gap 07) are unchanged.</li>
+      <li><strong>memweave-anchored retrieval pipeline (Gap 04)</strong> and SQLite schema (Gap 09) are unchanged.</li>
+    </ul>
+
+    <h4>What v002 explicitly did NOT add</h4>
+    <p>The honest discipline of refusing scope creep:</p>
+    <ul>
+      <li><strong>API versioning strategy</strong> — premature. Comparable projects (Mem0, Langfuse, Hindsight) launched without explicit versioning and added it when breaking changes were needed.</li>
+      <li><strong>Internationalization / localization</strong> — premature for v0.1-v0.3. English-only is the verified launch pattern.</li>
+      <li><strong>Accessibility (WCAG compliance)</strong> — required eventually, premature as a spec section before web UI ships in v0.3.</li>
+      <li><strong>Marketing site / docs site / customer support tooling</strong> — operational concerns, not build spec.</li>
+      <li><strong>Billing system integration</strong> — relevant for v1.0 Cloud release; anchored to Stripe billing pattern when needed, but separate from the core spec.</li>
+    </ul>
+
+    <h4>Honest acknowledgment of v002's origin</h4>
+    <p>The four sections added in v002 were not in the original gap analysis that produced v001. The original analysis was incomplete on standard production-infrastructure concerns. v001 implementation faithfully reflected the original analysis, so the omission was in the analysis layer, not the spec-writing layer. v002 records this honestly rather than presenting itself as "completing the original plan." The original plan was incomplete; v002 corrects it.</p>
+
+    <h3 style="margin-top: 56px;">v001 — May 22, 2026 — Initial spec</h3>
+    <p>First version of the Krimto Build Specification. Covered the original 15 gaps from the strategy dossier discussions.</p>
+
+    <h4>What v001 covered</h4>
+    <ul>
+      <li><strong>Tier 1 (gaps 1-5):</strong> Fact schema, MCP tool surface, scope convention, retrieval algorithm, MVP definition.</li>
+      <li><strong>Tier 2 (gaps 6-11):</strong> Auth, user/team/org model, concurrency, index maintenance, git remote auth, agent write workflow.</li>
+      <li><strong>Tier 3 (gaps 12-15):</strong> Web UI, hosted topology, source/provenance, testing/benchmarks.</li>
+    </ul>
+
+    <h4>Verified anchors in v001</h4>
+    <p>Eleven of fifteen sections anchored directly to verified production systems: memweave (Gaps 01, 04, 08, 09), Claude Code CLAUDE.md (Gap 01), Mem0 / Hindsight / ByteRover MCP tools (Gap 02), Langfuse OAuth providers (Gap 06), GitHub CODEOWNERS (Gap 07), GitHub App pattern (Gap 10), Hindsight deployment topology (Gap 13), LongMemEval + memweave benchmarks (Gap 15).</p>
+
+    <h4>Krimto-specific design decisions in v001</h4>
+    <p>Four sections are explicit Krimto design choices (no verified competitor ships them): three-level user/team/org hierarchy, hierarchical scope boost multipliers (1.5x / 1.2x / 1.0x), explicit-writes-only policy, four-role access model. Each labeled honestly in v001 as "design decision" rather than "verified default."</p>
+
+    <h4>Honest disclosures in v001</h4>
+    <p>Every section includes a "cannot verify" note naming what would require measurement after launch versus what is claimed as specification. No invented performance numbers. No invented timelines beyond "v0.1 / v0.2 / v0.3 / v1.0" sequencing without dates.</p>
+  </div>
+</section>
+
+<!-- CLOSING -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">CLOSING</span> <span>What this document is, and is not</span></div>
+    <h2>Nineteen specifications.<br>One <em>document</em>. Build from this.</h2>
+    <p class="large">This is a build specification, not a strategy document. It assumes the reader already understands why Krimto should exist (strategy dossier v012). It contains specific design decisions where Krimto's builder must choose, anchored to verified comparable patterns where they exist, with honest disclosure of what cannot be verified. The change log at the end records the verified history of additions and corrections.</p>
+
+    <div class="legend-note" style="border-left-color: var(--green);">
+      <p><strong class="verified">What is verified across this document:</strong> the retrieval pipeline (memweave's BM25 + vector + temporal decay + MMR with documented weights and thresholds), the SQLite schema (memweave's chunks / FTS5 / sqlite-vec / embedding_cache pattern), the OAuth provider list (Langfuse's verified providers), the GitHub App pattern for git remote authentication (Vercel / Render / Railway industry standard), the MCP tool count and naming conventions (anchored to Mem0 / Hindsight / ByteRover), the LongMemEval benchmark (Hindsight's verified high-water mark), the deployment topology (Hindsight's single-Docker-per-tenant pattern, Langfuse's stack composition), OpenAI text-embedding-3-small as the verified default embedding model, JSON-RPC 2.0 error codes from the MCP specification, Kubernetes liveness/readiness health check pattern, Langfuse Cloud's published rate limit tiers, and Cipher's "no telemetry" pattern combined with Langfuse's opt-in telemetry pattern.</p>
+      <p><strong class="design">What is Krimto design decision:</strong> the three-level user/team/org hierarchy (no verified competitor ships this), the hierarchical scope boost in retrieval (1.5x / 1.2x / 1.0x), the explicit-writes-only policy (diverges from Mem0/ByteRover, aligns with Hindsight), the four-role access model (org admin / team lead / team member / org member), members.yaml-in-git for membership data, batched git commits every 30 seconds or 10 writes, the seven-page web UI scope, the v0.1 / v0.2 / v0.3 / v1.0 shipping sequence, the custom JSON-RPC error codes -32000 through -32003, the proposed Krimto Cloud tier rate limits (60/600/custom req/min, proportionally lower than Langfuse), and the opt-in (not opt-out) telemetry default.</p>
+      <p><strong class="unknown">What this document does not claim:</strong> specific performance numbers for Krimto (latency, throughput, accuracy) — none of these are knowable before measurement. Specific gross margin at scale ($29/month works at low scale per the Gap 13 math; whether it works at 10,000 paying tenants depends on real usage patterns). Whether v0.1 to v0.2 is one quarter or two of engineering. Whether SAML/SCIM enterprise demand materializes in year one. The opt-in rate for self-hosted telemetry if enabled.</p>
+    </div>
+
+    <p style="margin-top: 32px;">For a coding agent: this document plus the strategy dossier v012 is enough context to begin implementing Krimto v0.1. Start with Gap 05 (MVP definition) and work through the Tier 1 gaps (01-05). Gap 05 now includes both the technical scope (single-user personal features only) and the positioning discipline (team-memory framing from day one with visible roadmap). Gaps 06-11 land in v0.2 along with the operational essentials (Gaps 16-19). Gaps 12-15 land in v0.3 and beyond. The change log section above this one records the history of v001, v002, and v003 — including the honest acknowledgment that the original gap analysis was incomplete and v002 corrected it, and that v003 added the strategic-positioning discipline anchored to verified Langfuse pattern.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>Krimto · Build Specification · v004</div>
+      <div>Compiled May 22, 2026 · 19 sections · Every spec sourced</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

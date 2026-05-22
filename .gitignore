@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# Runtime data & derived index (facts live in a git-backed data volume; SQLite index is derived)
+data/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# OS / editor artifacts
+.DS_Store
+.specstory/
+
+# Original planning drop — canonical copies live in docs/ (kept local, not tracked)
+files/
+
+# Sensitive internal strategy — MUST NOT be published to the public repo.
+# These remain on disk for local dev tooling (subagents) but are never committed.
+docs/krimto-concept-v013.html
+docs/krimto-north-star-v004.html

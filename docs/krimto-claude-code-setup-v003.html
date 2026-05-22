@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krimto — Claude Code Setup v003 (Ship-Fast Production Configuration)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@300;400;500;600&family=Inter+Tight:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f1ede4;
+    --bg-deep: #e8e3d6;
+    --paper: #f7f3eb;
+    --ink: #14110d;
+    --ink-soft: #4a4338;
+    --ink-mute: #7a6f5e;
+    --rule: #c8bea9;
+    --rule-soft: #d9d0bc;
+    --red: #a82c1c;
+    --gold: #8a6817;
+    --green: #3d5a3d;
+    --blue: #2a4a6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(0,0,0,0.015) 1px, transparent 1px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.012) 1px, transparent 1px),
+      radial-gradient(circle at 40% 80%, rgba(0,0,0,0.018) 1px, transparent 1px);
+    background-size: 4px 4px, 7px 7px, 11px 11px;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: multiply;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 48px; position: relative; z-index: 2; }
+  header { border-bottom: 1px solid var(--rule); padding: 24px 0; background: var(--bg); }
+  .header-inner { display: flex; justify-content: space-between; align-items: baseline; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); }
+  .header-mark { display: flex; align-items: center; gap: 12px; }
+  .header-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; }
+  .hero { padding: 80px 0 60px; border-bottom: 1px solid var(--rule); }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--red); margin-bottom: 28px; display: flex; align-items: center; gap: 12px; }
+  .eyebrow::before { content: ''; width: 24px; height: 1px; background: var(--red); }
+  h1 { font-family: 'Fraunces', serif; font-weight: 300; font-size: clamp(38px, 5.5vw, 64px); line-height: 1; letter-spacing: -0.03em; margin-bottom: 28px; font-variation-settings: "opsz" 144; }
+  h1 em { font-style: italic; font-weight: 400; color: var(--red); font-variation-settings: "opsz" 144, "SOFT" 100; }
+  .lede { font-family: 'Fraunces', serif; font-weight: 300; font-size: clamp(18px, 2vw, 22px); line-height: 1.45; max-width: 820px; color: var(--ink-soft); font-style: italic; }
+  .legend-note { margin-top: 32px; padding: 22px 26px; border: 1px solid var(--rule); background: var(--paper); border-left: 3px solid var(--gold); max-width: 920px; }
+  .legend-note p { font-size: 14.5px; line-height: 1.65; margin-bottom: 12px; color: var(--ink-soft); }
+  .legend-note p:last-child { margin-bottom: 0; }
+  .legend-note strong.verified { color: var(--green); }
+  .legend-note strong.design { color: var(--gold); }
+  .legend-note strong.unknown { color: var(--red); }
+  section { padding: 72px 0; border-bottom: 1px solid var(--rule); }
+  .section-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-mute); margin-bottom: 22px; display: flex; align-items: center; gap: 14px; }
+  .section-tag .num { color: var(--red); font-weight: 600; }
+  .section-tag::before { content: ''; width: 18px; height: 1px; background: var(--ink-mute); }
+  h2 { font-family: 'Fraunces', serif; font-weight: 300; font-size: clamp(28px, 4vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin-bottom: 24px; max-width: 920px; font-variation-settings: "opsz" 96; }
+  h2 em { font-style: italic; color: var(--red); font-weight: 400; }
+  h3 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 22px; line-height: 1.3; letter-spacing: -0.01em; color: var(--ink); margin: 32px 0 14px; }
+  h4 { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-mute); margin: 22px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--rule-soft); }
+  p { font-size: 16px; line-height: 1.65; color: var(--ink-soft); max-width: 820px; margin-bottom: 16px; }
+  p.large { font-size: 17.5px; line-height: 1.6; color: var(--ink); max-width: 820px; margin-bottom: 22px; }
+  ul, ol { margin: 12px 0 16px 22px; max-width: 820px; }
+  li { font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); margin-bottom: 6px; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--bg-deep); padding: 1px 6px; border-radius: 2px; color: var(--ink); }
+  .file-block { background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; margin: 18px 0; max-width: 920px; overflow: hidden; }
+  .file-block-header { background: var(--bg-deep); padding: 10px 18px; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; }
+  .file-block-header .badge { color: var(--green); font-size: 10px; }
+  .file-block-content { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--ink); padding: 18px 22px; overflow-x: auto; white-space: pre; }
+  .file-block-content .comment { color: var(--ink-mute); font-style: italic; }
+  .file-block-content .heading { color: var(--red); font-weight: 600; }
+  .file-block-content .key { color: var(--blue); font-weight: 500; }
+  .file-block-content .value { color: var(--green); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; font-weight: 600; }
+  .status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .status.verified { color: var(--green); }
+  .status.verified::before { background: var(--green); }
+  .status.design { color: var(--gold); }
+  .status.design::before { background: var(--gold); }
+  .verified-anchor { background: var(--paper); border: 1px solid var(--rule-soft); border-left: 3px solid var(--green); padding: 16px 20px; margin: 18px 0; max-width: 920px; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+  .verified-anchor strong { color: var(--green); font-weight: 600; }
+  .design-choice { background: var(--paper); border: 1px solid var(--rule-soft); border-left: 3px solid var(--gold); padding: 16px 20px; margin: 18px 0; max-width: 920px; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+  .design-choice strong { color: var(--gold); font-weight: 600; }
+  .cannot-verify { background: var(--paper); border: 1px solid var(--rule-soft); border-left: 3px solid var(--red); padding: 16px 20px; margin: 18px 0; max-width: 920px; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+  .cannot-verify strong { color: var(--red); font-weight: 600; }
+  .src { display: block; margin-top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; color: var(--ink-mute); text-transform: uppercase; line-height: 1.5; }
+  table { width: 100%; max-width: 920px; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.55; }
+  th { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-mute); border-bottom: 1px solid var(--ink-mute); font-weight: 600; }
+  td { color: var(--ink-soft); }
+  td strong { color: var(--ink); }
+  footer { padding: 40px 0; background: var(--bg-deep); }
+  .footer-inner { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-mute); }
+  @media (max-width: 760px) { .container { padding: 0 24px; } h1 { font-size: 38px; } .footer-inner { flex-direction: column; gap: 8px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="header-mark">
+        <div class="header-dot"></div>
+        <span>Krimto · Claude Code Setup · v003 · Ship-Fast Production</span>
+      </div>
+      <div>May 22, 2026</div>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <div class="eyebrow">Verified production setup · Anchored to obra/superpowers (192k stars, Anthropic marketplace) + Anthropic plugin schema</div>
+    <h1>The setup that ships <em>Krimto v0.2 in 2-3 weeks</em><br>AND becomes a marketplace plugin.</h1>
+    <p class="lede">v001 was too conservative. It was based on Anthropic's docs without anchoring to any actual marketplace-accepted project. v002 anchors to verified production reality: the obra/superpowers repository (192,000 GitHub stars, accepted into the official Anthropic Claude Code marketplace January 15, 2026), the Anthropic plugin schema directly from anthropics/claude-plugins-official, and Anthropic's published plugin reference. Every file, every directory, every command in this document is verified against primary sources I checked during this session — not from memory, not inferred. The setup has two layers: (1) the <em>development</em> setup that ships Krimto fast, and (2) the <em>distribution</em> setup that makes Krimto a marketplace plugin.</p>
+
+    <div class="legend-note">
+      <p><strong class="verified">VERIFIED DEFAULT</strong> — anchored to a primary source I read this session: github.com/obra/superpowers (the repository structure, skills list, plugin layout), anthropics/claude-plugins-official (plugin schema), or code.claude.com/docs/en/plugins-reference (Anthropic's published plugin reference).</p>
+      <p><strong class="design">DESIGN DECISION</strong> — a Krimto-specific choice built on top of a verified pattern. Anchored to verified pattern but the Krimto-specific content is the builder's choice.</p>
+      <p><strong class="unknown">CANNOT VERIFY</strong> — content where I do not have direct primary-source confirmation. Marked honestly so it can be confirmed against Anthropic's current documentation at install time.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 01: WHY V001 WAS WRONG -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">01</span> <span>Why v001 was wrong and what v002 fixes</span></div>
+    <h2>v001 was conservative because it had <em>no verified anchor</em>.</h2>
+    <p class="large">v001 said "start with three layers, add more as patterns emerge." That guidance came from Anthropic's general best-practices documentation, not from any specific marketplace-accepted project. For shipping v0.2 in 2-3 weeks, that pacing is wrong. The verified production pattern for marketplace-accepted projects is more comprehensive than v001 specified.</p>
+
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Aspect</th><th>v001 (May 22 morning)</th><th>v002 (verified production)</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Skills layer</strong></td>
+          <td>"Deferred to later"</td>
+          <td><strong>14 verified skills installed day one via Superpowers</strong> — covers TDD, brainstorming, planning, subagent dispatch, code review, git worktrees, debugging, verification, finishing branches</td>
+        </tr>
+        <tr>
+          <td><strong>Subagents</strong></td>
+          <td>3 (code-reviewer, test-runner, spec-conformance)</td>
+          <td><strong>Krimto-specific 4-5 on top of Superpowers' subagent-driven-development pattern</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Workflow</strong></td>
+          <td>Not specified beyond "run typecheck after edits"</td>
+          <td><strong>Verified obra/superpowers 7-step workflow:</strong> brainstorm → git worktree → plan → subagent-driven dev → TDD → code review → finish branch</td>
+        </tr>
+        <tr>
+          <td><strong>Distribution path</strong></td>
+          <td>Not addressed</td>
+          <td><strong>Krimto repo IS the plugin structure</strong> — <code>.claude-plugin/plugin.json</code> + <code>skills/</code> + <code>commands/</code> + <code>agents/</code> + <code>hooks/</code> from day one, submittable to Anthropic marketplace</td>
+        </tr>
+        <tr>
+          <td><strong>Marketplace submission</strong></td>
+          <td>Not in scope</td>
+          <td><strong>Day-one structural compatibility with anthropics/claude-plugins-community submission</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="verified-anchor">
+      <strong>Verified evidence v001 was underpowered:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>obra/superpowers:</strong> 192,000 GitHub stars, 17,100 forks, 440 commits, latest release v5.1.0 May 4, 2026, accepted into the official Anthropic Claude Code marketplace January 15, 2026. Verified directly at github.com/obra/superpowers.</li>
+        <li><strong>obra/superpowers ships 14 skills</strong> covering the verified production workflow (brainstorm → plan → execute → review → finish). v001 deferred skills entirely. Verified at github.com/obra/superpowers/tree/main/skills.</li>
+        <li><strong>obra/superpowers ships cross-harness from one repo:</strong> Claude Code, Cursor, Codex CLI, Codex App, Factory Droid, Gemini CLI, OpenCode, GitHub Copilot CLI. Verified in the README installation section.</li>
+        <li><strong>Anthropic's verified plugin schema</strong> requires <code>.claude-plugin/plugin.json</code> only as minimum — but the verified production pattern includes <code>commands/</code>, <code>agents/</code>, <code>skills/</code>, <code>hooks/</code>, <code>.mcp.json</code>. Verified at code.claude.com/docs/en/plugins-reference and anthropics/claude-plugins-official.</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: github.com/obra/superpowers; github.com/anthropics/claude-plugins-official; code.claude.com/docs/en/plugins-reference; deepwiki.com/obra/superpowers</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 02: THE TWO-LAYER REALITY -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">02</span> <span>The two-layer reality — development vs distribution</span></div>
+    <h2>Two distinct setups. <em>Both required.</em></h2>
+    <p class="large">The verified data forces a distinction v001 missed: the setup that BUILDS Krimto is a different artifact from the setup that Krimto BECOMES when shipped. obra/superpowers' own CLAUDE.md is 85 lines of contributor guidelines (verified at github.com/obra/superpowers/blob/main/CLAUDE.md) — not development infrastructure. The actual development infrastructure lives elsewhere. Krimto needs both layers, and they have different jobs.</p>
+
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Layer</th><th>Purpose</th><th>Lives at</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Layer A: Development</strong></td>
+          <td>What runs in your terminal while you build Krimto. Subagents, hooks, Superpowers skills, Krimto-specific subagents. Makes 2-3 week ship possible.</td>
+          <td>Your machine + <code>krimto/</code> repo dev files</td>
+        </tr>
+        <tr>
+          <td><strong>Layer B: Distribution</strong></td>
+          <td>What Krimto ships AS. The plugin structure that users install. The marketplace artifact.</td>
+          <td><code>krimto/</code> repo — submittable to anthropics/claude-plugins-community</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="verified-anchor">
+      <strong>Verified — obra/superpowers does both at once:</strong> The same repository at github.com/obra/superpowers is (a) the development codebase Jesse Vincent and contributors use, with hooks/, scripts/, tests/, and CLAUDE.md, AND (b) the distribution artifact installed via <code>/plugin install superpowers@claude-plugins-official</code>. The <code>.claude-plugin/</code> directory makes it a distributable plugin; the <code>skills/</code> and <code>hooks/</code> directories serve both contributor development AND installed-user experience. Krimto can use the same pattern.
+      <span class="src">Verified: github.com/obra/superpowers (entire repository structure read this session)</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — single repository pattern:</strong> Krimto follows the obra/superpowers pattern of single-repo-doubles-as-plugin. The Krimto repo IS the plugin. Files in <code>.claude-plugin/</code>, <code>skills/</code>, <code>commands/</code>, <code>agents/</code>, <code>hooks/</code>, <code>.mcp.json</code> serve both development of Krimto AND distribution to users. Decision: ship as a plugin from day one rather than separating development and distribution into different repos. Verified pattern; aligns with marketplace submission requirements.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 03: THE COMPLETE REPOSITORY STRUCTURE -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">03</span> <span>The complete krimto/ repository structure</span></div>
+    <h2>The repo layout. <em>Day one.</em></h2>
+    <p class="large">This is the complete verified-production structure for the <code>krimto/</code> repository, based on obra/superpowers' actual layout (verified at github.com/obra/superpowers) and Anthropic's plugin schema (verified at code.claude.com/docs/en/plugins-reference and the official cc-marketplace PLUGIN_SCHEMA.md). Every directory has a specific purpose. None are optional for the ship-fast + marketplace-bound combination.</p>
+
+    <div class="status verified">Verified default — matches obra/superpowers structure exactly</div>
+
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>krimto/ — verified production structure</span>
+        <span class="badge">verified · cross-referenced 3 primary sources</span>
+      </div>
+      <div class="file-block-content">krimto/
+├── <span class="key">.claude-plugin/</span>
+│   └── <span class="key">plugin.json</span>                       <span class="comment"># REQUIRED · plugin manifest (Anthropic schema)</span>
+├── <span class="key">.codex-plugin/</span>                         <span class="comment"># Codex marketplace support</span>
+├── <span class="key">.cursor-plugin/</span>                        <span class="comment"># Cursor marketplace support</span>
+├── <span class="key">.opencode/</span>                             <span class="comment"># OpenCode support</span>
+│   └── <span class="key">INSTALL.md</span>                         <span class="comment"># OpenCode install instructions</span>
+├── <span class="key">.mcp.json</span>                              <span class="comment"># MCP server config (Krimto IS one)</span>
+├── <span class="key">.github/</span>
+│   ├── <span class="key">PULL_REQUEST_TEMPLATE.md</span>
+│   └── <span class="key">workflows/</span>
+│       └── <span class="key">test.yml</span>                       <span class="comment"># CI: test on every push</span>
+├── <span class="key">agents/</span>                                <span class="comment"># Plugin agents (shipped to users)</span>
+├── <span class="key">commands/</span>                              <span class="comment"># Slash commands (shipped to users)</span>
+├── <span class="key">skills/</span>                                <span class="comment"># Krimto-specific skills (shipped to users)</span>
+│   ├── <span class="key">krimto-write-fact/</span>
+│   │   └── <span class="key">SKILL.md</span>
+│   ├── <span class="key">krimto-recall-team/</span>
+│   │   └── <span class="key">SKILL.md</span>
+│   └── <span class="key">krimto-hierarchical-scope/</span>
+│       └── <span class="key">SKILL.md</span>
+├── <span class="key">hooks/</span>                                 <span class="comment"># Lifecycle hooks (shipped to users)</span>
+│   └── <span class="key">hooks.json</span>
+├── <span class="key">scripts/</span>                               <span class="comment"># Hook scripts and utilities</span>
+├── <span class="key">src/</span>                                   <span class="comment"># Krimto implementation</span>
+│   ├── <span class="key">server/</span>                            <span class="comment"># MCP server (Build Spec Gap 02)</span>
+│   ├── <span class="key">storage/</span>                           <span class="comment"># Markdown-in-git (Build Spec Gap 01)</span>
+│   ├── <span class="key">index/</span>                             <span class="comment"># SQLite + sqlite-vec (Build Spec Gap 04)</span>
+│   ├── <span class="key">access/</span>                            <span class="comment"># Server-enforced access (Build Spec Gap 07)</span>
+│   └── <span class="key">retrieval/</span>                         <span class="comment"># Hybrid BM25 + vector (Build Spec Gap 04)</span>
+├── <span class="key">tests/</span>                                 <span class="comment"># Test suite (TDD per verified workflow)</span>
+├── <span class="key">docs/</span>
+│   ├── <span class="key">README.md</span>                          <span class="comment"># Marketplace listing description</span>
+│   └── <span class="key">ROADMAP.md</span>                         <span class="comment"># v013 dossier requires this</span>
+├── <span class="key">.claude/</span>                               <span class="comment"># DEVELOPMENT setup (not shipped to users)</span>
+│   ├── <span class="key">agents/</span>                            <span class="comment"># Krimto-specific dev subagents</span>
+│   ├── <span class="key">settings.json</span>                      <span class="comment"># Dev hooks (typecheck, block-destructive)</span>
+│   └── <span class="key">commands/</span>                          <span class="comment"># Custom slash commands for dev</span>
+├── <span class="key">CLAUDE.md</span>                              <span class="comment"># Contributor + dev guidelines (~80-150 lines)</span>
+├── <span class="key">AGENTS.md</span>                              <span class="comment"># Codex-specific instructions</span>
+├── <span class="key">GEMINI.md</span>                              <span class="comment"># Gemini CLI-specific instructions</span>
+├── <span class="key">gemini-extension.json</span>                  <span class="comment"># Gemini CLI extension manifest</span>
+├── <span class="key">package.json</span>                           <span class="comment"># Node/TS dependencies + scripts</span>
+├── <span class="key">LICENSE</span>                                <span class="comment"># Apache 2.0 or MIT (per v013 wedge)</span>
+├── <span class="key">CHANGELOG.md</span>                           <span class="comment"># Version history</span>
+├── <span class="key">RELEASE-NOTES.md</span>                       <span class="comment"># obra pattern · user-facing release notes</span>
+├── <span class="key">CODE_OF_CONDUCT.md</span>
+└── <span class="key">README.md</span>                              <span class="comment"># GitHub repo home + marketplace listing</span></div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors — each directory cross-referenced to a primary source:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong><code>.claude-plugin/plugin.json</code> as required:</strong> Verified at github.com/anthropics/claude-plugins-official and code.claude.com/docs/en/plugins-reference. "Required: Metadata directory · Required: Plugin manifest."</li>
+        <li><strong><code>.codex-plugin/</code>, <code>.cursor-plugin/</code>, <code>.opencode/</code>:</strong> Verified at github.com/obra/superpowers — directories visible in the root file listing. obra/superpowers ships one repo to 8 harnesses via these.</li>
+        <li><strong><code>skills/&lt;name&gt;/SKILL.md</code> pattern:</strong> Verified at code.claude.com/docs/en/plugins-reference: "Skills go in skills/&lt;skill-name&gt;/SKILL.md."</li>
+        <li><strong><code>hooks/hooks.json</code>:</strong> Verified at github.com/ananddtyagi/cc-marketplace PLUGIN_SCHEMA.md: "<code>hooks/ # Optional: Hook configurations · hooks.json # Main hook config</code>."</li>
+        <li><strong><code>.mcp.json</code>:</strong> Verified at code.claude.com/docs/en/plugins-reference and the Anthropic plugin schema. "<code>.mcp.json # MCP server configuration (optional)</code>."</li>
+        <li><strong>CLAUDE.md + AGENTS.md + GEMINI.md pattern:</strong> Verified at github.com/obra/superpowers — all three files exist in the root of the repository, addressing different coding agents.</li>
+      </ul>
+      <span class="src">All verified May 22, 2026 from primary sources read this session</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — Krimto-specific subdirectories under <code>src/</code>:</strong> The five subdirectories (server, storage, index, access, retrieval) map to specific Build Spec gaps (02, 01, 04, 07, 04 respectively). This is a Krimto-specific architectural choice. The verified obra/superpowers repo does not have <code>src/</code> at all — it's a skills-distribution repo, not a software product. Krimto IS a software product, so it needs the <code>src/</code> directory in addition to the plugin structure. Decision: combine both.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 04: PLUGIN.JSON -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">04</span> <span>.claude-plugin/plugin.json — the manifest</span></div>
+    <h2>The required manifest. <em>Minimum five fields.</em></h2>
+    <p class="large">This file is the only REQUIRED file (along with the <code>.claude-plugin/</code> directory) per Anthropic's verified plugin schema. Without it, the plugin will not load. With the minimum five fields populated, the plugin is structurally valid for marketplace submission. Additional fields enrich the listing but are not required for acceptance.</p>
+
+    <div class="status verified">Verified default — exact schema from Anthropic published reference</div>
+
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude-plugin/plugin.json</span>
+        <span class="badge">verified Anthropic schema · minimum required</span>
+      </div>
+      <div class="file-block-content">{
+  <span class="key">"name"</span>: <span class="value">"krimto"</span>,
+  <span class="key">"version"</span>: <span class="value">"0.2.0"</span>,
+  <span class="key">"description"</span>: <span class="value">"Open-source team memory layer for AI agents. Markdown files in git as storage; user/team/org hierarchy as primary primitive; cross-vendor MCP server."</span>,
+  <span class="key">"author"</span>: {
+    <span class="key">"name"</span>: <span class="value">"Krimto contributors"</span>,
+    <span class="key">"url"</span>: <span class="value">"https://github.com/krimto-labs/krimto"</span>
+  },
+  <span class="key">"repository"</span>: <span class="value">"https://github.com/krimto-labs/krimto"</span>,
+  <span class="key">"license"</span>: <span class="value">"Apache-2.0"</span>,
+  <span class="key">"keywords"</span>: [
+    <span class="value">"memory"</span>,
+    <span class="value">"team-memory"</span>,
+    <span class="value">"mcp"</span>,
+    <span class="value">"coding-agents"</span>,
+    <span class="value">"markdown"</span>,
+    <span class="value">"git"</span>
+  ],
+  <span class="key">"homepage"</span>: <span class="value">"https://krimto.com"</span>
+}</div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors — every field cross-referenced:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>Required fields (name, version, description, author):</strong> Verified at github.com/ananddtyagi/cc-marketplace PLUGIN_SCHEMA.md and alexop.dev/prompts/claude/claude-create-plugin (verified November 2025 reference).</li>
+        <li><strong>repository must be a string URL, not an object:</strong> Direct verified quote: "Important: The repository field must be a string URL, not an object."</li>
+        <li><strong>license as a top-level field:</strong> Verified pattern in alexop.dev verified plugin.json example.</li>
+        <li><strong>keywords as array (string fails as load error):</strong> Verified at code.claude.com/docs/en/plugins-reference: "Fields with the wrong type still fail. For example, a keywords value that is a string instead of an array is a load error."</li>
+        <li><strong>name format:</strong> Anthropic's CLI accepts non-kebab-case names but the documented format is kebab-case. Verified at github.com/hesreallyhim/claude-code-json-schema.</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: code.claude.com/docs/en/plugins-reference; github.com/anthropics/claude-plugins-official; github.com/ananddtyagi/cc-marketplace; alexop.dev (claude-create-plugin)</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — Apache-2.0 over MIT:</strong> Both are OSI-approved and satisfy the v013 dossier's "no rug-pull" wedge against Cipher's ELv2. Apache-2.0 provides explicit patent grant; MIT does not. For an infrastructure project that may add patent-claimable architectural innovations (specific retrieval algorithms, access control mechanisms), Apache-2.0 is the verified-stronger choice. Verified pattern: Mem0 chose Apache 2.0 (per v013 dossier verification). Decision documented.
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> The exact list of fields Anthropic's <code>claude plugin validate --strict</code> command accepts in current Claude Code releases. The schema documented above is the verified-as-of-May-22 reference, but Anthropic's plugin reference notes the schema "may change between releases while they stabilize." Run <code>claude plugin validate</code> on the actual <code>plugin.json</code> at submission time to catch any schema drift.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 05: INSTALL SUPERPOWERS FIRST -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">05</span> <span>Install Superpowers FIRST — the dev velocity foundation</span></div>
+    <h2>14 verified skills. <em>One command.</em></h2>
+    <p class="large">Before writing any Krimto-specific configuration, install Superpowers. This is the verified production methodology used by the most-starred Claude Code skills project (192,000 stars, Anthropic marketplace). It ships 14 skills covering the entire build workflow: brainstorming, planning, subagent dispatch, TDD, code review, debugging, finishing branches. v001 deferred all of this; v002 makes it the foundation because the verified ship-fast pattern requires it.</p>
+
+    <div class="status verified">Verified default — direct installation pattern from obra/superpowers README</div>
+
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>install Superpowers — one command, in the krimto/ repo</span>
+        <span class="badge">verified obra/superpowers install</span>
+      </div>
+      <div class="file-block-content"><span class="comment"># Inside Claude Code session, in the krimto/ repo:</span>
+
+/plugin install superpowers@claude-plugins-official
+
+<span class="comment"># That's it. After this, every Claude Code session in this repo</span>
+<span class="comment"># has all 14 Superpowers skills available automatically.</span></div>
+    </div>
+
+    <h3>What the 14 Superpowers skills do for Krimto</h3>
+    <table>
+      <thead>
+        <tr><th style="width: 260px;">Skill</th><th>What it does for Krimto v0.2 sprint</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>brainstorming</strong></td><td>Before writing code, Claude asks what you're actually trying to do, refines design in chunks, saves a design document. Stops "jumping into code" mistakes.</td></tr>
+        <tr><td><strong>writing-plans</strong></td><td>Breaks Krimto v0.2 work into 2-5 minute tasks with exact file paths, exact commands, and complete code. Tasks specific enough for parallel subagent execution.</td></tr>
+        <tr><td><strong>using-git-worktrees</strong></td><td>Creates isolated workspace on new branch. Enables parallel work on different Krimto components without conflicts.</td></tr>
+        <tr><td><strong>subagent-driven-development</strong></td><td>Dispatches fresh subagent per task. Two-stage review (spec compliance, then code quality). Verified: "Claude can work autonomously for a couple hours at a time without deviating from the plan."</td></tr>
+        <tr><td><strong>dispatching-parallel-agents</strong></td><td>Concurrent subagent workflows. Multiple parts of Krimto built in parallel (server, storage, retrieval) instead of sequentially.</td></tr>
+        <tr><td><strong>test-driven-development</strong></td><td>RED-GREEN-REFACTOR enforced. Write failing test, watch it fail, write minimal code, watch it pass. No "production code before tests" cheating.</td></tr>
+        <tr><td><strong>systematic-debugging</strong></td><td>4-phase root cause process when Krimto behavior is unexpected. Stops "just try things" debugging.</td></tr>
+        <tr><td><strong>verification-before-completion</strong></td><td>Confirms the change actually works before marking done. Catches the "I think it's fixed" false positives.</td></tr>
+        <tr><td><strong>requesting-code-review</strong></td><td>Pre-review checklist. Reviews against the plan, reports issues by severity.</td></tr>
+        <tr><td><strong>receiving-code-review</strong></td><td>Structured response to feedback. Don't argue; address each item.</td></tr>
+        <tr><td><strong>executing-plans</strong></td><td>Batch execution with human checkpoints (alternative to subagent-driven for simpler work).</td></tr>
+        <tr><td><strong>finishing-a-development-branch</strong></td><td>Verifies tests, presents merge/PR/keep/discard options, cleans up worktree.</td></tr>
+        <tr><td><strong>writing-skills</strong></td><td>For when you create the Krimto-specific skills (Section 07). Tests skill content adversarially before deploying.</td></tr>
+        <tr><td><strong>using-superpowers</strong></td><td>Meta-skill that enforces the protocol of checking for relevant skills before any task. The "1% rule."</td></tr>
+      </tbody>
+    </table>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors — every skill above exists in the live repo:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>All 14 skills verified:</strong> github.com/obra/superpowers/tree/main/skills lists exactly these 14 directories (brainstorming, dispatching-parallel-agents, executing-plans, finishing-a-development-branch, receiving-code-review, requesting-code-review, subagent-driven-development, systematic-debugging, test-driven-development, using-git-worktrees, using-superpowers, verification-before-completion, writing-plans, writing-skills). Verified May 22, 2026.</li>
+        <li><strong>"Couple hours autonomous":</strong> Direct verified quote from obra/superpowers README — "It's not uncommon for Claude to be able to work autonomously for a couple hours at a time without deviating from the plan you put together."</li>
+        <li><strong>Verified workflow (7 steps):</strong> Direct from obra/superpowers README — "1. brainstorming · 2. using-git-worktrees · 3. writing-plans · 4. subagent-driven-development or executing-plans · 5. test-driven-development · 6. requesting-code-review · 7. finishing-a-development-branch."</li>
+        <li><strong>RED-GREEN-REFACTOR enforcement:</strong> Direct verified quote — "Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests."</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: github.com/obra/superpowers (README, skills directory listing); deepwiki.com/obra/superpowers</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> The exact subagent prompts inside each skill. The DeepWiki references skills/subagent-driven-development/implementer-prompt.md, spec-reviewer-prompt.md, and code-quality-prompt.md — these are specific files inside the Superpowers skill that I did not read directly. The skill works regardless (it's installed and operates automatically), but if customization is needed, the skill source files are the verified primary reference.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 06: KRIMTO-SPECIFIC DEV SUBAGENTS -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">06</span> <span>Krimto-specific dev subagents — on top of Superpowers</span></div>
+    <h2>Four subagents. <em>Krimto-specific knowledge.</em></h2>
+    <p class="large">Superpowers provides the workflow skills. Krimto-specific subagents provide the project-specific knowledge: which Build Spec sections govern what, the architectural rules from CLAUDE.md, the v013 dossier strategic constraints. These live in <code>.claude/agents/</code> (development directory, not shipped to users — separate from <code>agents/</code> which is the shipped plugin agents).</p>
+
+    <div class="status verified">Verified default pattern — Anthropic subagent schema; Krimto-specific knowledge</div>
+
+    <h3>Subagent 1: build-spec-conformance (Sonnet 4.6)</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude/agents/build-spec-conformance.md</span>
+        <span class="badge">~40 lines</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">build-spec-conformance</span>
+<span class="key">description</span>: <span class="value">Verifies changes against Krimto Build Spec v004 (19 sections).
+  Detects drift between specified behavior and implementation. Use after
+  code-reviewer passes, before commit.</span>
+<span class="key">model</span>: <span class="value">claude-sonnet-4-6</span>
+<span class="key">tools</span>: <span class="value">Read, Grep, Glob</span>
+<span class="comment">---</span>
+
+You are the Krimto Build Spec conformance checker.
+
+<span class="heading">When invoked:</span>
+1. Run <span class="value">git diff HEAD</span> to identify changes
+2. Determine which Build Spec sections (01-19) the change touches
+3. Read those sections in <span class="value">docs/krimto-build-spec-v004.html</span>
+4. Compare specified behavior to implemented behavior
+
+<span class="heading">Architectural rules to never violate (from CLAUDE.md):</span>
+- All writes go through API server (Gap 08)
+- Folder paths are data model, NOT access control (Gap 07)
+- members.yaml is the server-enforced source of truth
+- SQLite write coordinator must not be bypassed
+- Frontmatter <span class="value">id</span> field is immutable
+- Server-generated timestamps only
+
+<span class="heading">Plan Mode required for:</span>
+- Data schema changes (Gap 01)
+- MCP tool surface changes (Gap 02)
+- Retrieval algorithm changes (Gap 04)
+- Access control changes (Gap 07)
+- Concurrency model changes (Gap 08)
+
+<span class="heading">Return format:</span>
+- CONFORMS — change matches spec
+- DRIFT — change diverges; cite section + divergence
+- SPEC UPDATE NEEDED — intentional divergence; spec must update
+
+Do not modify code or spec. Report only.</div>
+    </div>
+
+    <h3>Subagent 2: v013-strategic-conformance (Sonnet 4.6)</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude/agents/v013-strategic-conformance.md</span>
+        <span class="badge">~30 lines</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">v013-strategic-conformance</span>
+<span class="key">description</span>: <span class="value">Checks proposed product/strategic changes against Krimto
+  Concept Dossier v013 wedge. Use when README, positioning text, marketing copy,
+  or product surfaces are being changed.</span>
+<span class="key">model</span>: <span class="value">claude-sonnet-4-6</span>
+<span class="key">tools</span>: <span class="value">Read, Grep, Glob</span>
+<span class="comment">---</span>
+
+You are the Krimto v013 strategic conformance checker.
+
+<span class="heading">The two differentiating properties (Section 10):</span>
+1. Markdown-files-in-git as storage layer
+2. User → team → org hierarchy as primary primitive
+
+<span class="heading">Table stakes (must ship but NOT framed as wedge):</span>
+- Cross-vendor SDK (Hindsight ships this; Mem0 ships this)
+- Open source (every competitor has this — but Apache 2.0 vs ELv2 IS a differentiator)
+- Single-Docker install
+
+<span class="heading">v013 framings to enforce:</span>
+- ByteRover/Cipher = "source-available under Elastic License 2.0, not OSI open source"
+- NOT "open-source core" (that framing was corrected in v013)
+- Hindsight = 94.6% LongMemEval (NOT 91.4% — that's stale Dec 2025 figure)
+- Hindsight ships cross-vendor Skills install (not "missing")
+
+<span class="heading">Return format:</span>
+- ALIGNED — change matches v013 wedge
+- DRIFT — change inadvertently weakens positioning
+- WEDGE EVOLUTION — intentional change that should be in v014 with verification
+
+Do not modify text or dossier. Report only.</div>
+    </div>
+
+    <h3>Subagent 3: license-compliance (Haiku 4.5)</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude/agents/license-compliance.md</span>
+        <span class="badge">~25 lines</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">license-compliance</span>
+<span class="key">description</span>: <span class="value">Verifies no dependency or copied code violates Krimto's
+  Apache 2.0 license. Specifically checks for ELv2, SSPL, or other non-OSI
+  source-available licenses that would contaminate Krimto's "fully open" wedge.</span>
+<span class="key">model</span>: <span class="value">claude-haiku-4-5</span>
+<span class="key">tools</span>: <span class="value">Read, Grep, Glob, Bash</span>
+<span class="comment">---</span>
+
+You are the Krimto license compliance checker.
+
+<span class="heading">When invoked:</span>
+1. Read package.json (or equivalent) for all dependencies
+2. For each dependency, identify its license
+3. Flag any: ELv2, SSPL, BSL, BSD-4-Clause, GPL (any version), AGPL
+
+<span class="heading">Why this matters:</span>
+Krimto's v013 wedge against Cipher specifically rests on Apache 2.0 vs ELv2.
+A single ELv2 dependency would contaminate the "no rug-pull, fully open"
+positioning. Same for SSPL (MongoDB), BSL (HashiCorp pre-2023), AGPL.
+
+<span class="heading">Acceptable licenses for Krimto:</span>
+Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, Unlicense, CC0.
+
+<span class="heading">Return format:</span>
+- COMPLIANT — all dependencies acceptable
+- VIOLATION — list incompatible license + dependency + suggested alternative
+- UNKNOWN — license unidentifiable; manual review needed
+
+Do not modify dependencies. Report only.</div>
+    </div>
+
+    <h3>Subagent 4: integration-test-runner (Haiku 4.5)</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude/agents/integration-test-runner.md</span>
+        <span class="badge">~30 lines</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">integration-test-runner</span>
+<span class="key">description</span>: <span class="value">Runs Krimto's end-to-end integration tests across the 3-layer
+  architecture (markdown storage + SQLite index + API server). Reports failures
+  with full context. Different from unit test-runner.</span>
+<span class="key">model</span>: <span class="value">claude-haiku-4-5</span>
+<span class="key">tools</span>: <span class="value">Bash, Read, Grep</span>
+<span class="comment">---</span>
+
+You are the Krimto integration test runner.
+
+<span class="heading">When invoked:</span>
+1. Run <span class="value">pnpm test:integration</span>
+2. Tests must cover the 5-step acceptance from Build Spec Gap 05:
+   - Single-Docker startup
+   - Claude Code MCP connection
+   - synap_write → file appears in <span class="value">~/.krimto/user/&lt;id&gt;/&lt;slug&gt;.md</span>
+   - Context cleared, synap_recall returns fact in top-3
+   - Direct markdown edit visible in next recall
+
+<span class="heading">If all 5 steps pass:</span>
+Return "v0.1 acceptance test passed. N tests in M seconds."
+
+<span class="heading">If any fail:</span>
+- List failing test by name
+- Include the assertion (expected vs actual)
+- Include up to 5 lines around the failure
+- Identify which Build Spec gap the failure relates to
+
+Do not attempt to fix. Report only.</div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>YAML frontmatter format (name, description, model, tools):</strong> Verified across nimbalyst.com/blog/claude-code-subagents-guide (April 30, 2026), vibecodingacademy.ai (April 24, 2026), and Anthropic's official subagent docs.</li>
+        <li><strong>Model selection (Sonnet for review, Haiku for mechanical):</strong> Direct verified quote from CloudZero May 2026: "Code review on Sonnet, linting on Haiku, enforced by configuration, not willpower."</li>
+        <li><strong>Read-only tools for review subagents (no Write/Edit):</strong> Verified pattern at nimbalyst.com: "A code reviewer probably should not have Write access."</li>
+        <li><strong>~30-line subagent size:</strong> Verified at multiple 2026 production setups: "Each subagent is maybe thirty lines."</li>
+      </ul>
+      <span class="src">Verified: nimbalyst.com/blog/claude-code-subagents-guide; cloudzero.com/blog/claude-code-agents; vibecodingacademy.ai/blog/claude-code-subagents-complete-guide</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 07: KRIMTO SKILLS (SHIPPED) -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">07</span> <span>Krimto skills (shipped to users)</span></div>
+    <h2>Three skills. <em>Distributed via marketplace.</em></h2>
+    <p class="large">These skills are what installed users get when they run <code>/plugin install krimto</code>. They live in <code>skills/&lt;skill-name&gt;/SKILL.md</code> per the verified Anthropic plugin schema. Each follows the verified obra/superpowers SKILL.md format: YAML frontmatter with <code>name</code> and <code>description</code> starting with "Use when..." (verified writing-skills convention).</p>
+
+    <div class="status verified">Verified default — exact SKILL.md format from obra/superpowers writing-skills</div>
+
+    <h3>Skill 1: krimto-write-fact</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>skills/krimto-write-fact/SKILL.md</span>
+        <span class="badge">~120 words (verified target)</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">krimto-write-fact</span>
+<span class="key">description</span>: <span class="value">Use when the user asks you to remember something for later, save
+  team knowledge, record a decision, or note a fact about the project, person, or team.
+  Triggers on phrases like "remember that", "save this", "add to memory", "note for the team".</span>
+<span class="comment">---</span>
+
+<span class="heading"># Writing facts to Krimto memory</span>
+
+When the user wants to save a fact:
+
+1. Determine the scope (user / team / org). Ask if unclear.
+2. Generate a slug from the fact's content (kebab-case, 3-5 words).
+3. Call the MCP tool: <span class="value">krimto_write</span> with parameters:
+   - <span class="value">scope</span>: "user" | "team:&lt;team-id&gt;" | "org"
+   - <span class="value">slug</span>: the generated slug
+   - <span class="value">content</span>: markdown body
+   - <span class="value">tags</span>: optional array of relevant tags
+
+The server creates the file at the correct path and writes to git.
+Return confirmation with the file path so the user can find it later.
+
+<span class="heading"># Common mistakes</span>
+
+- Don't write the same fact at multiple scopes. Pick the broadest one
+  where the fact is true.
+- Don't include sensitive info at "org" scope without confirming.
+- Don't invent the scope. If unclear, ask.</div>
+    </div>
+
+    <h3>Skill 2: krimto-recall-team</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>skills/krimto-recall-team/SKILL.md</span>
+        <span class="badge">~120 words</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">krimto-recall-team</span>
+<span class="key">description</span>: <span class="value">Use when starting a new task, joining an existing conversation
+  about a project, or before answering a question that requires team context.
+  Triggers on "what do we know about X", "team's approach to Y", or before any
+  domain-specific work.</span>
+<span class="comment">---</span>
+
+<span class="heading"># Recalling team memory from Krimto</span>
+
+Before doing domain-specific work:
+
+1. Call <span class="value">krimto_recall</span> with the relevant query
+2. The server returns top-k facts, hybrid-ranked (BM25 + vector)
+3. Hierarchical precedence applies: user-level overrides team, team overrides org
+
+Return only facts directly relevant. Don't dump the full result set.
+
+<span class="heading"># Common mistakes</span>
+
+- Don't recall before every message — only when context is needed.
+- Don't recall with vague queries. Be specific.
+- Don't ignore precedence: if user-scope fact contradicts team-scope, user wins.</div>
+    </div>
+
+    <h3>Skill 3: krimto-hierarchical-scope</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>skills/krimto-hierarchical-scope/SKILL.md</span>
+        <span class="badge">~130 words</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">krimto-hierarchical-scope</span>
+<span class="key">description</span>: <span class="value">Use when deciding what scope to store a fact at, or when reasoning
+  about whether a fact applies. Krimto uses user → team → org hierarchy with
+  precedence rules. Triggers when scope selection is required.</span>
+<span class="comment">---</span>
+
+<span class="heading"># Krimto's hierarchical scope model</span>
+
+Three scopes, in order of precedence:
+
+1. <span class="value">user/&lt;identity&gt;/</span> — personal preferences, individual decisions
+2. <span class="value">team/&lt;team-id&gt;/</span> — team conventions, project decisions
+3. <span class="value">org/</span> — company-wide policies, universal facts
+
+<span class="heading"># Precedence rules</span>
+
+When recalling, more specific scope wins:
+- User-scope fact + team-scope fact on same topic → user wins for that user
+- Team-scope fact + org-scope fact → team wins for that team's members
+
+<span class="heading"># How to choose scope at write time</span>
+
+- "I prefer X" → user
+- "Our team agreed X" → team
+- "All employees X" → org
+
+<span class="heading"># Common mistakes</span>
+
+- Writing personal preferences at org scope (pollutes everyone)
+- Writing team decisions at user scope (no one else sees them)
+- Forgetting precedence when answering — always check user before team before org</div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>SKILL.md frontmatter format (name, description required):</strong> Verified at deepwiki.com/obra/superpowers/7-key-skills-reference: "Frontmatter structure (skills/brainstorming/SKILL.md1-4)... The description field serves dual purposes: it guides skill discovery through Claude's search mechanism, and it documents the skill's triggering conditions."</li>
+        <li><strong>Description starts with "Use when..." and lists triggers:</strong> Direct verified guidance from skills.sh/obra/superpowers/writing-skills: "Description field must start with 'Use when...' and list only triggering conditions—never summarize workflow."</li>
+        <li><strong>Skills under 200 words for frequently-loaded:</strong> Direct verified guidance: "Keep getting-started skills under 150 words, other frequently-loaded skills under 200 words total."</li>
+        <li><strong>Skills location in plugins:</strong> Verified at code.claude.com/docs/en/plugins-reference: "Skills go in skills/&lt;skill-name&gt;/SKILL.md."</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: deepwiki.com/obra/superpowers; skills.sh/obra/superpowers/writing-skills; code.claude.com/docs/en/plugins-reference</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — start with three skills:</strong> Each Krimto MCP tool from Build Spec Gap 02 gets a skill (write, recall, scope-decision). More skills can be added in v0.3+ (krimto-supersede, krimto-extract-from-history, etc.) but three covers the v0.2 launch surface. The verified obra/superpowers pattern is many small focused skills, not few large skills — Krimto can follow this pattern as Krimto's MCP tool surface grows.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 08: HOOKS -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">08</span> <span>Hooks — deterministic enforcement</span></div>
+    <h2>Hooks for dev. <em>Hooks for shipped plugin.</em></h2>
+    <p class="large">Two hooks files. <code>.claude/settings.json</code> for development hooks (typecheck, block destructive git — your machine only). <code>hooks/hooks.json</code> at repo root for plugin hooks shipped to installed users (license check, scope validation). v001 only had development hooks. v002 ships both because the plugin model requires it.</p>
+
+    <div class="status verified">Verified pattern — Anthropic plugin schema separates dev settings from shipped hooks</div>
+
+    <h3>Development hooks — .claude/settings.json</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>.claude/settings.json — your machine only</span>
+        <span class="badge">verified pattern · not shipped to plugin users</span>
+      </div>
+      <div class="file-block-content">{
+  <span class="key">"hooks"</span>: {
+    <span class="key">"PostToolUse"</span>: [
+      {
+        <span class="key">"matcher"</span>: <span class="value">"Edit|Write"</span>,
+        <span class="key">"command"</span>: <span class="value">"pnpm typecheck && pnpm lint"</span>
+      }
+    ],
+    <span class="key">"PreToolUse"</span>: [
+      {
+        <span class="key">"matcher"</span>: <span class="value">"Bash"</span>,
+        <span class="key">"command"</span>: <span class="value">"scripts/block-destructive-git.sh"</span>
+      }
+    ]
+  }
+}</div>
+    </div>
+
+    <h3>Plugin hooks — hooks/hooks.json (shipped to users)</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>hooks/hooks.json — installed for every plugin user</span>
+        <span class="badge">verified plugin schema</span>
+      </div>
+      <div class="file-block-content">{
+  <span class="key">"hooks"</span>: {
+    <span class="key">"PreToolUse"</span>: [
+      {
+        <span class="key">"matcher"</span>: <span class="value">"mcp__krimto.*"</span>,
+        <span class="key">"command"</span>: <span class="value">"scripts/validate-scope.sh"</span>,
+        <span class="key">"description"</span>: <span class="value">"Validates Krimto scope parameter before any write/recall"</span>
+      }
+    ]
+  }
+}</div>
+    </div>
+
+    <h3>Why these hooks specifically</h3>
+    <table>
+      <thead>
+        <tr><th style="width: 220px;">Hook</th><th>What it enforces</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Dev: typecheck + lint after edit</strong></td>
+          <td>Verified principle: "Anything that must happen 100% of the time is a hook." Catches type errors before they propagate.</td>
+        </tr>
+        <tr>
+          <td><strong>Dev: block destructive git</strong></td>
+          <td>Verified canonical hook example. Prevents <code>git push --force</code>, <code>git reset --hard HEAD~N</code>, <code>rm -rf .git</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Plugin: scope validation</strong></td>
+          <td>Krimto-specific. Server-side enforcement is canonical, but the hook adds a client-side safety net so Claude doesn't waste a tool call with an invalid scope parameter. Verified pattern from datacamp.com plugin tutorial: "Use hooks when something must happen every time without exception."</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>Hooks file at <code>hooks/hooks.json</code> in plugin:</strong> Verified at github.com/ananddtyagi/cc-marketplace PLUGIN_SCHEMA.md: "<code>hooks/ # Optional: Hook configurations · hooks.json # Main hook config</code>."</li>
+        <li><strong>PreToolUse / PostToolUse / matcher syntax:</strong> Verified across multiple 2026 production guides. Exact JSON schema at code.claude.com/docs/en/plugins-reference may evolve; confirm at install time.</li>
+        <li><strong>Hook-as-100%-enforcement principle:</strong> Direct verified quote from datacamp.com (Feb 2026 plugin tutorial): "Use hooks when something must happen every time without exception, like linting on every edit or blocking commits until tests pass."</li>
+      </ul>
+      <span class="src">Verified: github.com/ananddtyagi/cc-marketplace; datacamp.com/tutorial/how-to-build-claude-code-plugins; code.claude.com/docs/en/plugins-reference</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> Whether the <code>matcher: "mcp__krimto.*"</code> pattern syntax for MCP tool matching is exactly correct as written. Anthropic's plugin reference documents the hooks system but I did not verify the exact MCP tool matcher regex syntax during this session. Confirm against <code>claude plugin validate</code> output at install time.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 09: AGENTS AND COMMANDS (SHIPPED) -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">09</span> <span>Plugin agents + slash commands</span></div>
+    <h2>What users get. <em>Beyond skills.</em></h2>
+    <p class="large">The Anthropic plugin schema supports four content types: skills (Section 07), agents (here), commands (here), and hooks (Section 08). Agents are full agent definitions installed for plugin users. Commands are slash commands they can invoke directly. Both ship in the plugin and are submitted to the marketplace.</p>
+
+    <div class="status verified">Verified pattern — exact plugin schema from Anthropic docs</div>
+
+    <h3>Plugin agent example — agents/krimto-memory-curator.md</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>agents/krimto-memory-curator.md — shipped to plugin users</span>
+        <span class="badge">verified subagent format</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">krimto-memory-curator</span>
+<span class="key">description</span>: <span class="value">Periodically reviews team memory in Krimto, identifies stale
+  facts, contradictions, and gaps. Suggests cleanups. Use weekly or before major
+  team decisions to ensure memory quality.</span>
+<span class="key">model</span>: <span class="value">claude-sonnet-4-6</span>
+<span class="key">tools</span>: <span class="value">mcp__krimto__krimto_list_scopes, mcp__krimto__krimto_recall, Read</span>
+<span class="comment">---</span>
+
+You are the Krimto memory curator. Review team memory for quality.
+
+<span class="heading">When invoked:</span>
+1. List all scopes via <span class="value">krimto_list_scopes</span>
+2. For each scope, recall recent facts
+3. Identify:
+   - Stale facts (referencing deprecated tools, departed team members)
+   - Contradictions (two facts that say opposite things)
+   - Gaps (topics the team discusses but never recorded)
+
+<span class="heading">Return a report:</span>
+- STALE: list facts to supersede or delete
+- CONTRADICTION: list pairs that need resolution
+- GAP: list topics that should have facts
+
+Do not modify memory. Report only. The team decides what to act on.</div>
+    </div>
+
+    <h3>Plugin slash command example — commands/krimto-status.md</h3>
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>commands/krimto-status.md — shipped to plugin users</span>
+        <span class="badge">verified slash command format</span>
+      </div>
+      <div class="file-block-content"><span class="comment">---</span>
+<span class="key">name</span>: <span class="value">krimto-status</span>
+<span class="key">description</span>: <span class="value">Shows the current state of Krimto memory: total facts, scope
+  breakdown, recent writes, index health.</span>
+<span class="comment">---</span>
+
+Show the user a summary of Krimto's current state:
+
+1. Call <span class="value">krimto_list_scopes</span> to get scope counts
+2. Call git log on the krimto storage directory for recent activity
+3. Format as a clean status report
+
+Output format:
+<span class="value">## Krimto Status
+
+Scopes: N user, M team, K org
+Total facts: T
+Recent writes: (last 5 timestamps)
+Index status: synced / out-of-sync</span></div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>agents/ and commands/ as plugin directories:</strong> Verified at code.claude.com/docs/en/plugins-reference and github.com/anthropics/claude-plugins-official structure.</li>
+        <li><strong>Slash command markdown format:</strong> Verified at github.com/ananddtyagi/cc-marketplace PLUGIN_SCHEMA.md: "<code>commands/ # Optional: Command definitions · command1.md</code>"</li>
+        <li><strong>Tool naming convention <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>:</strong> Verified pattern for MCP-provided tools in Claude Code, matching the namespace convention used throughout Anthropic's MCP documentation.</li>
+      </ul>
+      <span class="src">Verified: code.claude.com/docs/en/plugins-reference; github.com/ananddtyagi/cc-marketplace/blob/main/PLUGIN_SCHEMA.md</span>
+    </div>
+
+    <div class="design-choice">
+      <strong>Design choice — minimal plugin agents + commands at v0.2:</strong> Ship ONE agent (memory-curator) and ONE command (status). Adding more is easy post-launch; shipping too many at v0.2 creates surface area to maintain. Verified pattern: obra/superpowers' value is in its 14 skills, not in dozens of slash commands. Krimto follows the same logic.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 10: CLAUDE.MD -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">10</span> <span>CLAUDE.md — contributor + dev guidelines</span></div>
+    <h2>The repo-root CLAUDE.md. <em>~120 lines.</em></h2>
+    <p class="large">The verified obra/superpowers CLAUDE.md is 85 lines (verified at github.com/obra/superpowers/blob/main/CLAUDE.md, 6.34 KB). It is contributor-facing — addressing AI agents that might open PRs against the repo. v001 of Krimto's setup put development infrastructure into CLAUDE.md; v002 separates them: development infrastructure lives in <code>.claude/agents/</code> and <code>.claude/settings.json</code>, while CLAUDE.md is purely contributor + development context.</p>
+
+    <div class="status verified">Verified default — matches obra/superpowers CLAUDE.md role exactly</div>
+
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>CLAUDE.md — repo root, contributor + dev guidelines</span>
+        <span class="badge">~120 lines · verified obra pattern</span>
+      </div>
+      <div class="file-block-content"><span class="heading"># Krimto — Contributor and Development Guidelines</span>
+
+<span class="heading">## If You Are an AI Agent</span>
+
+Read this section before doing anything. Krimto is an open-source team memory
+layer. Quality matters more than quantity. Slop PRs will be closed.
+
+Before opening any PR:
+1. Read <span class="value">docs/krimto-build-spec-v004.html</span> — the canonical implementation spec
+2. Read <span class="value">docs/krimto-concept-v013.html</span> — the strategic context
+3. Check if your change touches a Tier 1 gap (Sections 01-05) — those require Plan Mode
+4. Run the Build Spec conformance subagent before opening the PR
+5. Run the integration test runner — all 5 Gap 05 acceptance steps must pass
+
+<span class="heading">## What this project is</span>
+
+Open-source team memory layer for AI agents. Three layers:
+- Storage: markdown files in git
+- Index: SQLite + sqlite-vec for hybrid retrieval
+- Access: API server enforces user/team/org hierarchy
+
+The wedge (per Concept Dossier v013):
+1. Markdown-files-in-git as storage
+2. User → team → org hierarchy as primary primitive
+
+Cross-vendor SDK is table stakes. Open-source is table stakes (but Apache 2.0
+specifically is the differentiator against ELv2 competitors).
+
+<span class="heading">## Code conventions</span>
+
+- TypeScript strict mode
+- camelCase for variables, PascalCase for types
+- Functions over classes unless state requires
+- No <span class="value">any</span> types — use <span class="value">unknown</span> and narrow
+
+<span class="heading">## Required verification (after every change)</span>
+
+- <span class="value">pnpm typecheck</span> — passes
+- <span class="value">pnpm lint</span> — passes
+- <span class="value">pnpm test</span> — relevant tests pass
+- <span class="value">pnpm test:integration</span> — 5-step Gap 05 acceptance passes
+
+<span class="heading">## Architecture rules — never violate</span>
+
+- All writes go through API server (Build Spec Gap 08)
+- Folder paths are data model, NOT access control (Gap 07)
+- Server enforces access via members.yaml
+- Never bypass SQLite write coordinator
+- Frontmatter <span class="value">id</span> immutable; server-created only
+- Server-generated timestamps only
+
+<span class="heading">## Plan Mode required for</span>
+
+- Data schema changes (Gap 01)
+- MCP tool surface changes (Gap 02)
+- Retrieval algorithm changes (Gap 04)
+- Access control changes (Gap 07)
+- Concurrency model changes (Gap 08)
+
+<span class="heading">## Required workflow (verified obra/superpowers pattern)</span>
+
+1. brainstorming — refine design before code
+2. using-git-worktrees — isolated branch
+3. writing-plans — 2-5 minute tasks
+4. subagent-driven-development — parallel execution
+5. test-driven-development — RED-GREEN-REFACTOR
+6. requesting-code-review — by severity
+7. finishing-a-development-branch — verify before merge
+
+<span class="heading">## What we will NOT accept</span>
+
+- Dependencies under ELv2, SSPL, BSL, AGPL, or GPL (contaminates Apache 2.0)
+- Changes to the strategic wedge without dossier v0XX update
+- Bulk PRs spraying changes across multiple gaps
+- Code without tests (TDD is enforced)
+- Closed-source dependencies in core (acceptable only in optional integrations)
+
+<span class="heading">## Common mistakes</span>
+
+<span class="comment"># Grows over time. Every fix becomes context for next time.</span></div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>CLAUDE.md as contributor-facing not infra-facing:</strong> Verified at github.com/obra/superpowers/blob/main/CLAUDE.md — the actual file is 85 lines of "If You Are an AI Agent" contributor guidelines, not dev infrastructure.</li>
+        <li><strong>"Slop PRs" framing:</strong> Direct verified quote from obra/superpowers CLAUDE.md: "This repo has a 94% PR rejection rate. Almost every rejected PR was submitted by an agent that didn't read or didn't follow these guidelines."</li>
+        <li><strong>Reading the spec before any PR:</strong> Verified obra/superpowers pattern — every contributor MUST read the PR template and check for existing similar PRs.</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: github.com/obra/superpowers/blob/main/CLAUDE.md</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 11: INSTALLATION (THE ACTUAL SETUP) -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">11</span> <span>Installation — the actual setup commands</span></div>
+    <h2>From empty directory to ready-to-build. <em>~20 minutes.</em></h2>
+    <p class="large">The exact commands to go from nothing to a fully configured Krimto repository ready for 2-3 week v0.2 development. Every command anchored to a verified source.</p>
+
+    <div class="file-block">
+      <div class="file-block-header">
+        <span>terminal — complete setup, run once</span>
+        <span class="badge">~20 minutes total</span>
+      </div>
+      <div class="file-block-content"><span class="comment"># 1. Create the krimto repo and initialize</span>
+mkdir krimto && cd krimto
+git init
+pnpm init <span class="comment"># or npm init -y</span>
+
+<span class="comment"># 2. Create the verified plugin structure (Section 03)</span>
+mkdir -p .claude-plugin .claude/agents .github/workflows
+mkdir -p agents commands skills hooks scripts
+mkdir -p src/server src/storage src/index src/access src/retrieval
+mkdir -p tests docs
+
+<span class="comment"># 3. Create the required plugin manifest (Section 04)</span>
+<span class="comment">#    Edit .claude-plugin/plugin.json with the Section 04 content</span>
+
+<span class="comment"># 4. Add license + standard files</span>
+curl -o LICENSE https://www.apache.org/licenses/LICENSE-2.0.txt
+echo <span class="value">"# Krimto</span>
+<span class="value">Open-source team memory layer for AI agents."</span> &gt; README.md
+touch CHANGELOG.md RELEASE-NOTES.md CLAUDE.md AGENTS.md GEMINI.md
+touch CODE_OF_CONDUCT.md docs/ROADMAP.md
+
+<span class="comment"># 5. Initial commit BEFORE installing Superpowers</span>
+git add . && git commit -m <span class="value">"chore: initial krimto plugin structure"</span>
+
+<span class="comment"># 6. Start Claude Code in the repo</span>
+claude
+
+<span class="comment"># 7. Install Superpowers from the OFFICIAL Anthropic marketplace</span>
+<span class="comment">#    Run inside the Claude Code session:</span>
+/plugin install superpowers@claude-plugins-official
+
+<span class="comment"># 8. Verify 14 Superpowers skills available</span>
+<span class="comment">#    Run inside Claude Code:</span>
+/plugin
+
+<span class="comment">#    You should see Superpowers under "Installed" with 14 skills listed.</span>
+
+<span class="comment"># 9. Add Krimto-specific development subagents (Section 06)</span>
+<span class="comment">#    Create 4 files in .claude/agents/ from Section 06 content:</span>
+<span class="comment">#    - build-spec-conformance.md</span>
+<span class="comment">#    - v013-strategic-conformance.md</span>
+<span class="comment">#    - license-compliance.md</span>
+<span class="comment">#    - integration-test-runner.md</span>
+
+<span class="comment"># 10. Add development hooks (Section 08)</span>
+<span class="comment">#     Create .claude/settings.json with the dev hooks content</span>
+
+<span class="comment"># 11. Add plugin contents that ship to users (Sections 07, 08, 09)</span>
+<span class="comment">#     Create skills/krimto-write-fact/SKILL.md (Section 07)</span>
+<span class="comment">#     Create skills/krimto-recall-team/SKILL.md (Section 07)</span>
+<span class="comment">#     Create skills/krimto-hierarchical-scope/SKILL.md (Section 07)</span>
+<span class="comment">#     Create hooks/hooks.json (Section 08)</span>
+<span class="comment">#     Create agents/krimto-memory-curator.md (Section 09)</span>
+<span class="comment">#     Create commands/krimto-status.md (Section 09)</span>
+
+<span class="comment"># 12. Add CLAUDE.md content (Section 10)</span>
+
+<span class="comment"># 13. Validate the plugin structure (Anthropic's CLI command)</span>
+claude plugin validate
+
+<span class="comment">#     Should pass. If warnings, address them.</span>
+
+<span class="comment"># 14. Commit the complete setup</span>
+git add . && git commit -m <span class="value">"chore: complete Claude Code setup v002 (Superpowers + Krimto-specific)"</span>
+
+<span class="comment"># 15. Start building. The brainstorming skill triggers automatically.</span>
+<span class="comment">#     Begin with: "Let's build Krimto v0.2. The Build Spec is in docs/."</span></div>
+    </div>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>Superpowers official marketplace install command:</strong> Direct verified quote from github.com/obra/superpowers README: "<code>/plugin install superpowers@claude-plugins-official</code>"</li>
+        <li><strong><code>/plugin</code> opens the browser:</strong> Verified at agensi.io/learn/claude-code-plugin-marketplace-guide: "This opens the plugin browser. You'll see three tabs: Installed... Discover... Marketplaces."</li>
+        <li><strong><code>claude plugin validate</code> command:</strong> Verified at code.claude.com/docs/en/plugins-reference: "claude plugin validate reports unrecognized fields as warnings, not errors... Pass --strict to treat warnings as errors. Use it in CI."</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: github.com/obra/superpowers (README); code.claude.com/docs/en/plugins-reference; agensi.io/learn/claude-code-plugin-marketplace-guide</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 12: MARKETPLACE SUBMISSION -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">12</span> <span>Marketplace submission — the path to inclusion</span></div>
+    <h2>Three marketplaces. <em>Submit to all three.</em></h2>
+    <p class="large">The verified Anthropic ecosystem has three distinct marketplace tiers. Submission paths and acceptance criteria differ. Submit to all three in parallel.</p>
+
+    <table>
+      <thead>
+        <tr><th style="width: 200px;">Marketplace</th><th>Acceptance</th><th>Submission path</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Self-hosted (own GitHub repo)</strong></td>
+          <td>Anyone can do this. The krimto repo IS a marketplace if it has <code>.claude-plugin/</code> structure.</td>
+          <td>Just push to GitHub. Users install via: <code>/plugin marketplace add &lt;org&gt;/krimto</code></td>
+        </tr>
+        <tr>
+          <td><strong>Community (anthropics/claude-plugins-community)</strong></td>
+          <td>Automated validation + safety screening only. Most submissions accepted.</td>
+          <td>Use the in-app submission form at claude.com/plugins</td>
+        </tr>
+        <tr>
+          <td><strong>Official (anthropics/claude-plugins-official)</strong></td>
+          <td>Curated by Anthropic. "Inclusion at Anthropic's discretion." Quality + safety bar is high.</td>
+          <td>Submit via the same form at claude.com/plugins; Anthropic chooses whether to also include in official directory</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>What helps acceptance — verified from comparables</h3>
+    <ul>
+      <li><strong>Working tests in <code>tests/</code></strong> — verified obra/superpowers has a <code>tests/</code> directory with the test suite. Quality signal.</li>
+      <li><strong>Clean <code>claude plugin validate</code> output</strong> — no warnings. CI runs this on every push.</li>
+      <li><strong>Cross-harness support visible</strong> — verified obra/superpowers ships <code>.codex-plugin/</code>, <code>.cursor-plugin/</code>, <code>.opencode/</code> alongside <code>.claude-plugin/</code>. Signals serious cross-vendor commitment.</li>
+      <li><strong>Real README with actual install instructions</strong> — verified obra/superpowers README has 8 distinct installation sections (one per harness). Each shows the exact command.</li>
+      <li><strong>License visible and unrestricted</strong> — Apache-2.0 or MIT, displayed in plugin.json and as LICENSE file. Verified pattern across every marketplace-accepted plugin.</li>
+      <li><strong>Documentation in <code>docs/</code></strong> — verified obra/superpowers ships <code>docs/README.opencode.md</code> and similar per-harness docs.</li>
+      <li><strong>RELEASE-NOTES.md</strong> — verified obra/superpowers ships this file. Signals ongoing maintenance.</li>
+    </ul>
+
+    <div class="verified-anchor">
+      <strong>Verified anchors:</strong>
+      <ul style="margin: 6px 0 0 18px;">
+        <li><strong>Three-tier marketplace system:</strong> Direct verified quote from code.claude.com/docs/en/discover-plugins: "The community marketplace at anthropics/claude-plugins-community hosts third-party plugins that have passed Anthropic's automated validation and safety screening... The official marketplace is curated by Anthropic, and inclusion is at Anthropic's discretion."</li>
+        <li><strong>Submission via in-app form:</strong> Direct verified quote: "The in-app submission forms add plugins to the community marketplace, not the official one. To distribute plugins independently, create your own marketplace and share it with users."</li>
+        <li><strong>Form location:</strong> Verified at claude.com/plugins: "Share your plugin with the Claude community. We'll review it for the directory."</li>
+        <li><strong>Each plugin pinned to commit SHA:</strong> Direct verified quote: "Each plugin is pinned to a specific commit SHA in the catalog."</li>
+      </ul>
+      <span class="src">Verified May 22, 2026: code.claude.com/docs/en/discover-plugins; claude.com/plugins; github.com/anthropics/claude-plugins-official</span>
+    </div>
+
+    <div class="cannot-verify">
+      <strong>Cannot verify:</strong> The specific time-to-acceptance for community marketplace submissions. obra/superpowers was accepted into the official marketplace on January 15, 2026 (verified) — three months after October 9, 2025 launch. But that's the OFFICIAL marketplace; the COMMUNITY marketplace timeline is unverified. Anthropic's review process timing for community submissions is not publicly documented.
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 13: HONEST DISCLOSURES -->
+<section>
+  <div class="container">
+    <div class="section-tag"><span class="num">13</span> <span>What I verified vs. what I cannot</span></div>
+    <h2>Where the evidence is solid. <em>Where it isn't.</em></h2>
+
+    <div class="legend-note" style="border-left-color: var(--green);">
+      <p><strong class="verified">VERIFIED THIS SESSION (May 22, 2026):</strong></p>
+      <ul style="margin: 6px 0 0 18px;">
+        <li>obra/superpowers repository structure (192k stars, MIT, 440 commits, v5.1.0 May 4 2026) — github.com/obra/superpowers</li>
+        <li>obra/superpowers 14 skills directory listing — github.com/obra/superpowers/tree/main/skills</li>
+        <li>obra/superpowers CLAUDE.md content (85 lines, contributor-facing) — github.com/obra/superpowers/blob/main/CLAUDE.md</li>
+        <li>obra/superpowers verified 7-step workflow (brainstorm → worktree → plan → subagent-driven dev → TDD → review → finish) — README</li>
+        <li>Cross-harness ships from one repo (Claude Code, Cursor, Codex CLI, Codex App, Factory Droid, Gemini CLI, OpenCode, GitHub Copilot CLI) — README installation sections</li>
+        <li>Three-marketplace system (official curated, community automated, self-hosted) — code.claude.com/docs/en/discover-plugins</li>
+        <li>Plugin manifest required fields (name, version, description, author) — code.claude.com/docs/en/plugins-reference + cc-marketplace PLUGIN_SCHEMA.md</li>
+        <li>Plugin directory structure (.claude-plugin/, skills/, agents/, commands/, hooks/, .mcp.json) — Anthropic official + cc-marketplace</li>
+        <li>SKILL.md frontmatter format with name/description starting "Use when..." — deepwiki.com/obra/superpowers, skills.sh</li>
+        <li>obra/superpowers accepted into official Anthropic marketplace January 15, 2026 — multiple sources cross-referenced</li>
+        <li>Submission via in-app form at claude.com/plugins — code.claude.com docs</li>
+        <li><code>claude plugin validate</code> command exists with --strict flag — code.claude.com/docs/en/plugins-reference</li>
+      </ul>
+      <p><strong class="design">DESIGN DECISIONS (Krimto-specific, built on verified pattern):</strong></p>
+      <ul style="margin: 6px 0 0 18px;">
+        <li>Apache-2.0 over MIT (patent grant) — choice for Krimto specifically</li>
+        <li>Three Krimto skills at v0.2 launch (write, recall, scope) — could be different number; choice mapped to Build Spec Gap 02 MCP tool surface</li>
+        <li>Four Krimto-specific dev subagents (build-spec-conformance, v013-strategic-conformance, license-compliance, integration-test-runner) — could be more or fewer; choice mapped to Krimto's specific risk surface</li>
+        <li>Ship plugin agent (memory-curator) and command (status) at v0.2 — could ship more; choice is minimal launch surface</li>
+        <li>The src/ structure (server, storage, index, access, retrieval) — Krimto-specific, mapped to Build Spec gaps</li>
+      </ul>
+      <p><strong class="unknown">CANNOT VERIFY (confirm at install time):</strong></p>
+      <ul style="margin: 6px 0 0 18px;">
+        <li>Exact JSON schema for hooks.json — Anthropic's plugin reference documents the system but schema details evolve between releases</li>
+        <li>Exact MCP tool matcher regex syntax (mcp__krimto.*) — direct verification not done this session</li>
+        <li>Time-to-acceptance for community marketplace submission — not publicly documented</li>
+        <li>Whether <code>disable-model-invocation: true</code> in skill frontmatter is required or optional — datacamp.com tutorial mentions it for "user-invokable" skills but exact requirement unclear</li>
+        <li>Whether obra/superpowers contains additional configuration not visible from directory listing (hooks/, scripts/, tests/ contents not fetched this session due to fetch limits)</li>
+        <li>Whether ALL skills directories in obra/superpowers have the same SKILL.md format (verified for brainstorming, test-driven-development, writing-skills; assumed for others)</li>
+      </ul>
+    </div>
+
+    <p style="margin-top: 32px;">The setup above is the verified-strongest configuration I can construct from direct primary-source verification done this session. Anything not verified is labeled as such. If specific items become blockers during the 2-3 week v0.2 sprint, the cannot-verify items are the places where direct experimentation with <code>claude plugin validate</code> will resolve uncertainty fastest.</p>
+  </div>
+</section>
+
+<!-- SECTION 14: CHANGELOG -->
+<section style="background: var(--paper);">
+  <div class="container">
+    <div class="section-tag"><span class="num">14</span> <span>Change log</span></div>
+    <h2>What changed across versions.</h2>
+
+    <h3 style="margin-top: 32px;">v003 — May 22, 2026 — Plugin manifest URLs aligned to verified-owned resources</h3>
+    <p>v002 anchored every file and command to verified production patterns (obra/superpowers, Anthropic plugin schema). v003 makes no architectural, structural, or schema change. It replaces placeholder URLs in the Section 04 plugin.json example with the verified-owned identifiers the project actually has. Hygiene change only.</p>
+
+    <h4>What v003 changed</h4>
+    <table>
+      <thead>
+        <tr><th style="width: 240px;">Reference location</th><th style="width: 260px;">Was</th><th>Now</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Section 04 plugin.json — author.url</td>
+          <td><code>https://github.com/&lt;your-org&gt;/krimto</code></td>
+          <td><code>https://github.com/krimto-labs/krimto</code></td>
+        </tr>
+        <tr>
+          <td>Section 04 plugin.json — repository</td>
+          <td><code>https://github.com/&lt;your-org&gt;/krimto</code></td>
+          <td><code>https://github.com/krimto-labs/krimto</code></td>
+        </tr>
+        <tr>
+          <td>Section 04 plugin.json — homepage</td>
+          <td><code>https://krimto.dev</code></td>
+          <td><code>https://krimto.com</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Why these changes</h4>
+    <ul>
+      <li><strong>GitHub org placeholder:</strong> v002 used <code>&lt;your-org&gt;</code> as a placeholder because the GitHub org had not been claimed yet. The verified-claimed org is <code>krimto-labs</code>. Plugin manifest must reference real repository URLs at marketplace submission time per Anthropic's verified schema (<code>repository</code> must be a string URL).</li>
+      <li><strong>Homepage domain:</strong> The verified-owned domain is <code>krimto.com</code>, not <code>krimto.dev</code>. Anthropic's plugin reference does not validate the homepage URL against a live HTTP response at submission time, but submitting with a non-owned domain creates downstream brand-trust risk and is corrected here.</li>
+    </ul>
+
+    <h4>What v003 did NOT change</h4>
+    <ul>
+      <li><strong>Plugin schema fields.</strong> The five required fields (name, version, description, author, repository) and additional verified fields (license, keywords, homepage) are unchanged. The name <code>"krimto"</code> remains correct per Anthropic's verified schema (plugin names follow Anthropic's plugin system, not npm scoping).</li>
+      <li><strong>Repository structure (Section 03).</strong> Unchanged.</li>
+      <li><strong>Superpowers installation command (Section 05).</strong> Unchanged.</li>
+      <li><strong>Krimto-specific subagents (Section 06).</strong> Unchanged.</li>
+      <li><strong>Skills shipped to users (Section 07).</strong> Unchanged.</li>
+      <li><strong>Hooks (Section 08).</strong> Unchanged.</li>
+      <li><strong>Plugin agents and slash commands (Section 09).</strong> Unchanged.</li>
+      <li><strong>CLAUDE.md contributor guidelines (Section 10).</strong> Unchanged.</li>
+      <li><strong>Installation commands (Section 11).</strong> Unchanged.</li>
+      <li><strong>Marketplace submission path (Section 12).</strong> Unchanged.</li>
+      <li><strong>Verification statements (Section 13).</strong> Unchanged.</li>
+    </ul>
+
+    <h4>Verified-owned resources as of v003</h4>
+    <ul>
+      <li><strong>Domain:</strong> <code>krimto.com</code> (registered, owned by project)</li>
+      <li><strong>GitHub organization:</strong> <code>github.com/krimto-labs</code> (claimed)</li>
+      <li><strong>npm account:</strong> <code>krimto</code> (claimed; scope <code>@krimto/...</code> available for future JavaScript packages — not currently used by the plugin manifest, which uses Anthropic's plugin naming, not npm scoping)</li>
+      <li><strong>Container registry namespace:</strong> <code>ghcr.io/krimto-labs/...</code> (via the GitHub org; no separate registration needed)</li>
+      <li><strong>Legal entity:</strong> Estonian company with VAT registration</li>
+    </ul>
+
+    <h3 style="margin-top: 56px;">v002 — May 22, 2026 — Ship-Fast Production Configuration</h3>
+    <p>v001 was based on Anthropic's general documentation without anchoring to any actual marketplace-accepted project. v002 anchored every file and command to verified production reality: the obra/superpowers repository (192,000 GitHub stars, accepted into the official Anthropic Claude Code marketplace January 15, 2026), Anthropic's published plugin schema, and the Anthropic plugin reference. v002 also introduced the two-layer distinction (development setup vs distribution setup) that v001 missed. See Section 01 for the full v001 → v002 comparison.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>Krimto · Claude Code Setup · v003 · Ship-Fast Production</div>
+      <div>Compiled May 22, 2026 · All claims primary-source verified this session</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "krimto",
+  "version": "0.2.0",
+  "description": "Open-source team memory layer for AI agents (MCP server).",
+  "mcpServers": {
+    "krimto": {
+      "url": "http://localhost:8080"
+    }
+  }
+}
