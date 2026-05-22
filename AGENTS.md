@@ -1,7 +1,7 @@
 # Krimto — Agent Instructions (Codex / cross-harness)
 
 This repository is a Claude Code plugin and an MCP server. For full contributor and architecture
-guidelines, read `CLAUDE.md`. For the implementation spec, read `docs/krimto-build-spec-v004.html`.
+guidelines, read `CLAUDE.md`.
 
 Key rules:
 - All writes go through the API server; folder paths are the data model, not access control.

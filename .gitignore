@@ -28,7 +28,10 @@ logs/
 
 # Internal documents — MUST NOT be published to the public repo.
 # files/ is the original planning drop; docs/ holds the strategy/spec/explainer
-# dossiers. Both stay on disk for local dev tooling (subagents, CLAUDE.md
-# references) but are never committed.
+# dossiers. Both stay on disk for local dev tooling but are never committed.
 files/
 docs/
+
+# Development-only Claude Code setup (dev subagents, dev hooks). Per the setup
+# playbook this is "not shipped". Kept on disk locally; never committed.
+.claude/

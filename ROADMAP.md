@@ -1,12 +1,11 @@
 # Krimto Roadmap
 
 Krimto claims the **team memory layer** position from day one and fulfils it incrementally, in the
-open (the verified Langfuse pattern: claim the platform position at launch, ship toward it release by
-release). Each milestone has a tracking issue on GitHub.
+open — shipping toward it release by release. Each milestone has a tracking issue on GitHub.
 
 ## v0.2 — Team memory (first public release)
 
-The wedge, shipped. Single-Docker self-host with team hierarchy from day one.
+The core, shipped. Single-Docker self-host with team hierarchy from day one.
 
 - Markdown-in-git storage layer; one file per fact with mandatory frontmatter
 - `user → team → org` scope hierarchy with precedence at retrieval time
