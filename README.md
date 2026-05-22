@@ -69,11 +69,16 @@ Cline follow the same one-line pattern):
 
 ## How Krimto compares
 
-Krimto's seat is the intersection no other player occupies: **Apache-2.0** (vs ByteRover/Cipher's
-Elastic License 2.0 — source-available, *not* OSI open source, with a managed-service restriction),
-**markdown-files-in-git storage** (vs Hindsight's PostgreSQL, Mem0's vector+graph), and
-**`user → team → org` hierarchy as the primary primitive** (vs Mem0's user/session/agent). Cross-vendor
-reach is table stakes — Krimto ships it, but the wedge is the three properties above.
+Krimto combines three properties that are each uncommon among existing memory tools:
+
+- **Apache-2.0** — fully open, with no managed-service restriction. (ByteRover/Cipher is
+  source-available under the Elastic License 2.0, which is not OSI-approved open source.)
+- **Markdown-files-in-git storage** — human-readable and reviewable in git. (Hindsight uses
+  PostgreSQL; Mem0 uses a vector + graph database.)
+- **`user → team → org` hierarchy as the primary primitive.** (Mem0 organizes by user/session/agent.)
+
+Cross-vendor reach — working across Claude Code, Cursor, Codex, Gemini CLI, Copilot, OpenClaw, and
+Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 
 ## Roadmap
 
