@@ -26,10 +26,9 @@ logs/
 .DS_Store
 .specstory/
 
-# Original planning drop — canonical copies live in docs/ (kept local, not tracked)
+# Internal documents — MUST NOT be published to the public repo.
+# files/ is the original planning drop; docs/ holds the strategy/spec/explainer
+# dossiers. Both stay on disk for local dev tooling (subagents, CLAUDE.md
+# references) but are never committed.
 files/
-
-# Sensitive internal strategy — MUST NOT be published to the public repo.
-# These remain on disk for local dev tooling (subagents) but are never committed.
-docs/krimto-concept-v013.html
-docs/krimto-north-star-v004.html
+docs/
