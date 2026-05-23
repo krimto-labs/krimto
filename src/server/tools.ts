@@ -2,6 +2,7 @@
 // Handlers are pure functions of (context, input) so they can be tested without a
 // transport; the MCP/stdio wiring is a thin layer on top.
 
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { createFact, MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
 import { FactStore } from "../storage/store";
 import { isValidScope, type Requester } from "../access/scope";
@@ -247,4 +248,17 @@ export async function krimtoListScopes(ctx: ToolContext): Promise<ListScopesResu
       last_updated: s.lastUpdated,
     })),
   };
+}
+
+/** Build a Requester from a validated bearer token's AuthInfo (its `extra` carries identity+teams). */
+export function requesterFromAuth(authInfo: AuthInfo | undefined): Requester {
+  if (!authInfo) throw new KrimtoError("unauthorized", "missing or invalid bearer token");
+  const extra = (authInfo.extra ?? {}) as { identity?: unknown; teams?: unknown };
+  if (typeof extra.identity !== "string" || extra.identity.length === 0) {
+    throw new KrimtoError("unauthorized", "token has no identity");
+  }
+  const teams = Array.isArray(extra.teams)
+    ? extra.teams.filter((t): t is string => typeof t === "string")
+    : [];
+  return { identity: extra.identity, teams };
 }

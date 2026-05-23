@@ -12,6 +12,7 @@ import { promises as fs } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { Database as Db } from "better-sqlite3";
 import { z } from "zod";
 
@@ -33,6 +34,9 @@ import {
   krimtoWrite,
   type ToolContext,
 } from "./tools";
+import { type Requester } from "../access/scope";
+
+export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
 export const KRIMTO_VERSION = "0.2.0";
 
@@ -65,7 +69,7 @@ function fail(error: unknown): CallToolResult {
 }
 
 /** Build the MCP server with the five Krimto tools registered against the given context. */
-export function buildServer(ctx: ToolContext): McpServer {
+export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolver): McpServer {
   const server = new McpServer({ name: "krimto", version: KRIMTO_VERSION });
 
   server.registerTool(
@@ -85,9 +89,10 @@ export function buildServer(ctx: ToolContext): McpServer {
         supersedes: z.array(z.string()).optional(),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return ok(await krimtoWrite(ctx, args));
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoWrite({ ...ctx, requester }, args));
       } catch (e) {
         return fail(e);
       }
@@ -106,9 +111,10 @@ export function buildServer(ctx: ToolContext): McpServer {
         limit: z.number().optional(),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return ok(await krimtoRecall(ctx, args));
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoRecall({ ...ctx, requester }, args));
       } catch (e) {
         return fail(e);
       }
@@ -121,9 +127,10 @@ export function buildServer(ctx: ToolContext): McpServer {
       description: "Fetch one fact by id, including its full frontmatter.",
       inputSchema: { id: z.string() },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return ok(await krimtoRead(ctx, args.id));
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoRead({ ...ctx, requester }, args.id));
       } catch (e) {
         return fail(e);
       }
@@ -143,9 +150,10 @@ export function buildServer(ctx: ToolContext): McpServer {
         reason: z.string(),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return ok(await krimtoSupersede(ctx, args));
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoSupersede({ ...ctx, requester }, args));
       } catch (e) {
         return fail(e);
       }
@@ -158,9 +166,10 @@ export function buildServer(ctx: ToolContext): McpServer {
       description: "Discover the scopes that exist and what they contain.",
       inputSchema: {},
     },
-    async () => {
+    async (_args, extra) => {
       try {
-        return ok(await krimtoListScopes(ctx));
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoListScopes({ ...ctx, requester }));
       } catch (e) {
         return fail(e);
       }
