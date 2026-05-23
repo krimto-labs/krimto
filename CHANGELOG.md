@@ -27,8 +27,9 @@ Memory engine (Tier 1):
 Team layer + operations (Tier 2):
 - Membership + server-enforced access (Gap 07): `.krimto/members.yaml`, four roles,
   `canRead`/`canWrite` — the API server is the access enforcer, not the filesystem.
-- API key authentication (Gap 06): `krm_live_`/`krm_test_` keys hashed at rest, shown once;
-  OAuth providers scaffolded for the web UI.
+- API-key module (Gap 06): `krm_live_`/`krm_test_` key generation + at-rest hashing, implemented as
+  a library. **Not yet wired into the running server** — the stdio entrypoint resolves the requester
+  from `KRIMTO_IDENTITY`; bearer auth lands with the HTTP transport.
 - Access enforced across every tool: writes to disallowed scopes are forbidden; recall and
   list_scopes only surface readable scopes; read returns not_found for unreadable facts.
 - Pluggable embeddings (Gap 09): lexical-only by default (no key); OpenAI, Voyage, and custom
@@ -45,8 +46,9 @@ Team layer + operations (Tier 2):
   configurable via `KRIMTO_PULL_INTERVAL_MS`) and re-indexes teammates' direct edits — added,
   edited, and deleted facts all show up in search. Pull conflicts are aborted and retried, never
   blocking writes.
-- Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
-  (off-by-default) telemetry.
+- Structured error codes on the MCP surface: `KrimtoError` maps to JSON-RPC errors in the tool
+  handlers (`src/server/index.ts`). The health-check, rate-limit, and opt-in-telemetry modules
+  (Gaps 17-19) are implemented but **not yet served** — they activate with the HTTP transport.
 
 - Persistent SQLite index: FTS5 keyword search + sqlite-vec vector search with an embedding
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes

@@ -5,15 +5,20 @@ open — shipping toward it release by release. Each milestone has a tracking is
 
 ## v0.2 — Team memory (first public release)
 
-The core, shipped. Single-Docker self-host with team hierarchy from day one.
+The memory core, shipped — today as a local **MCP server over stdio**.
 
+**Shipped and wired into the running server:**
 - Markdown-in-git storage layer; one file per fact with mandatory frontmatter
 - `user → team → org` scope hierarchy with precedence at retrieval time
 - SQLite + sqlite-vec hybrid retrieval (BM25 + vector, temporal decay, MMR, scope boost)
-- MCP tool surface: `krimto_write`, `krimto_recall`, `krimto_read`, `krimto_supersede`, `krimto_list_scopes`
-- API-key auth (machines) + OAuth scaffold (humans); four-role access model enforced server-side
-- Server-coordinated batched writes to git; external-edit detection and re-index
-- Operational essentials: structured errors, health checks, rate limiting, opt-in telemetry
+- MCP tool surface over stdio: `krimto_write`, `krimto_recall`, `krimto_read`, `krimto_supersede`, `krimto_list_scopes`
+- Four-role access model enforced server-side (requester identity from `KRIMTO_IDENTITY` for now)
+- Server-coordinated batched writes to git; remote push; periodic pull with external-edit re-index
+
+**In progress (built as modules, not yet wired) — next up:**
+- HTTP transport + single-Docker image (`docker run`) — the precondition for the items below
+- API-key bearer auth (machines) + OAuth scaffold (humans)
+- Operational endpoints: structured errors (done on the MCP surface), health checks, rate limiting, opt-in telemetry
 - Minimal web UI (browse, search, fact detail, API keys)
 
 ## v0.3 — Humans on top of git
