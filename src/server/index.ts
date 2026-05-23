@@ -23,6 +23,7 @@ import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/provid
 import { openIndexDb, embeddingSpaceChanged, type IndexConfig } from "../index/db";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
+import { RemoteSync, syncConfigFromEnv } from "../storage/sync";
 import { KrimtoError } from "./errors";
 import {
   krimtoListScopes,
@@ -222,10 +223,22 @@ export async function main(): Promise<void> {
 
   batcher.start((fn) => ctx.writeQueue.run(fn));
 
+  const sync = new RemoteSync(
+    repo,
+    async () => {
+      await index.rebuild(await store.allFacts());
+    },
+    syncConfigFromEnv(),
+  );
+  if (process.env.KRIMTO_GIT_REMOTE) {
+    sync.start((fn) => ctx.writeQueue.run(fn));
+  }
+
   let shuttingDown = false;
   const shutdown = (): void => {
     if (shuttingDown) return; // ignore a second SIGINT/SIGTERM
     shuttingDown = true;
+    sync.stop();
     batcher.stop();
     void ctx.writeQueue.run(() => batcher.flush()).finally(() => process.exit(0));
   };
