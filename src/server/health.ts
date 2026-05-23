@@ -56,11 +56,15 @@ export function indexHealth(index: FactIndex, building: boolean): CheckResult {
   return { status: "ok", fact_count: index.factCount() };
 }
 
-/** Reports the last push status (observability only — never toggles readiness). */
-export function gitRemoteHealth(batcher: CommitBatcher): CheckResult {
-  const status = batcher.lastPushStatus();
+/** Maps a push status to a git_remote CheckResult. Single source of truth (used by the HTTP layer too). */
+export function gitRemoteCheck(status: "ok" | "skipped" | "error" | "none"): CheckResult {
   if (status === "error") return { status: "error", detail: "last push to the remote failed" };
   const detail =
     status === "ok" ? "last push ok" : status === "none" ? "no push yet" : "no remote configured";
   return { status: "ok", detail };
+}
+
+/** Reports the last push status (observability only — never toggles readiness). */
+export function gitRemoteHealth(batcher: CommitBatcher): CheckResult {
+  return gitRemoteCheck(batcher.lastPushStatus());
 }
