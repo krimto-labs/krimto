@@ -9,7 +9,7 @@ import { canRead, canWrite, type Membership } from "../access/membership";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { rankCandidates } from "../retrieval/pipeline";
-import { type GitWriter } from "../storage/git";
+import { type CommitBatcher } from "../storage/batcher";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
@@ -23,8 +23,8 @@ export interface ToolContext {
   embedQuery?: (query: string) => Promise<Float32Array | null>;
   /** Serializes write-path mutations. */
   writeQueue: Serializer;
-  /** Optional git writer; when present, writes are committed and commit_sha is populated (Gap 08). */
-  git?: GitWriter;
+  /** Optional commit batcher; when present, writes are staged and committed in batches (Gap 08). */
+  git?: CommitBatcher;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -131,17 +131,16 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
       ctx.index.removeFact(fact.frontmatter.id); // rollback the index entry
       throw e;
     }
-    let commit_sha: string | null = null;
     if (ctx.git) {
       try {
-        commit_sha = await ctx.git.recordWrite(path, fact);
+        await ctx.git.stage(path, fact);
       } catch (e) {
         process.stderr.write(
-          `krimto: git commit failed (fact ${fact.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
+          `krimto: git stage failed (fact ${fact.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
         );
       }
     }
-    return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha };
+    return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha: null };
   });
 }
 
@@ -225,17 +224,16 @@ export async function krimtoSupersede(
       ctx.index.removeFact(replacement.frontmatter.id); // rollback on markdown failure
       throw e;
     }
-    let commit_sha: string | null = null;
     if (ctx.git) {
       try {
-        commit_sha = await ctx.git.recordWrite(path, replacement);
+        await ctx.git.stage(path, replacement);
       } catch (e) {
         process.stderr.write(
-          `krimto: git commit failed (fact ${replacement.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
+          `krimto: git stage failed (fact ${replacement.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
         );
       }
     }
-    return { old_id: input.id, new_id: replacement.frontmatter.id, commit_sha };
+    return { old_id: input.id, new_id: replacement.frontmatter.id, commit_sha: null };
   });
 }
 

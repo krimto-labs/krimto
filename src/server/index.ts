@@ -16,7 +16,8 @@ import type { Database as Db } from "better-sqlite3";
 import { z } from "zod";
 
 import { FactStore } from "../storage/store";
-import { GitWriter } from "../storage/git";
+import { GitRepo } from "../storage/git";
+import { CommitBatcher, batcherConfigFromEnv } from "../storage/batcher";
 import { loadMembership, requesterFor } from "../access/membership";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
 import { openIndexDb, embeddingSpaceChanged, type IndexConfig } from "../index/db";
@@ -195,6 +196,8 @@ export async function main(): Promise<void> {
   const store = new FactStore(dataDir);
   const index = new FactIndex(db, embeddingProvider ?? undefined);
   await buildIndexIfNeeded(index, store, db, indexConfig);
+  const repo = await GitRepo.open(dataDir);
+  const batcher = new CommitBatcher(repo, batcherConfigFromEnv());
   const ctx: ToolContext = {
     store,
     index,
@@ -207,12 +210,25 @@ export async function main(): Promise<void> {
           return vec ? Float32Array.from(vec) : null;
         }
       : undefined,
-    git: await GitWriter.open(dataDir),
+    git: batcher,
   };
   const server = buildServer(ctx);
   if (embeddingProvider) {
     process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
   }
+
+  batcher.start((fn) => ctx.writeQueue.run(fn));
+
+  let shuttingDown = false;
+  const shutdown = (): void => {
+    if (shuttingDown) return; // ignore a second SIGINT/SIGTERM
+    shuttingDown = true;
+    batcher.stop();
+    void ctx.writeQueue.run(() => batcher.flush()).finally(() => process.exit(0));
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
   await server.connect(new StdioServerTransport());
   process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);
 }
