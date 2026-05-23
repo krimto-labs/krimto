@@ -6,6 +6,11 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 
+export interface PushResult {
+  status: "ok" | "skipped" | "error";
+  detail?: string;
+}
+
 export class GitRepo {
   private constructor(private readonly dir: string) {}
 
@@ -66,6 +71,36 @@ export class GitRepo {
       return stdout.trim();
     } catch {
       return null;
+    }
+  }
+
+  /** True when an `origin` remote is configured. */
+  async hasRemote(): Promise<boolean> {
+    try {
+      await exec("git", ["-C", this.dir, "remote", "get-url", "origin"]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Point `origin` at `url` (add if absent, update if present). */
+  async setRemote(url: string): Promise<void> {
+    if (await this.hasRemote()) {
+      await exec("git", ["-C", this.dir, "remote", "set-url", "origin", url]);
+    } else {
+      await exec("git", ["-C", this.dir, "remote", "add", "origin", url]);
+    }
+  }
+
+  /** Push HEAD to origin. Skipped when no remote; failures are returned, never thrown. */
+  async push(): Promise<PushResult> {
+    if (!(await this.hasRemote())) return { status: "skipped" };
+    try {
+      await exec("git", ["-C", this.dir, "push", "origin", "HEAD"]);
+      return { status: "ok" };
+    } catch (e) {
+      return { status: "error", detail: e instanceof Error ? e.message : String(e) };
     }
   }
 }
