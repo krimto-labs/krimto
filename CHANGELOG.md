@@ -38,6 +38,9 @@ Team layer + operations (Tier 2):
 - Batched git commits: writes are committed in batches (every 30s or 10 writes, configurable via
   `KRIMTO_COMMIT_INTERVAL_MS` / `KRIMTO_COMMIT_MAX_BATCH`) instead of one commit per write, keeping
   history clean. Markdown is written immediately; the commit is the deferred audit step.
+- Remote git push: when a remote is configured (`KRIMTO_GIT_REMOTE`), each batch commit is pushed
+  to it (self-host SSH deploy-key auth). Push is best-effort — failures are logged and retried on
+  the next batch; they never block writes or take the server down.
 - Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
   (off-by-default) telemetry.
 
@@ -45,10 +48,9 @@ Team layer + operations (Tier 2):
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 144 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
+Verified by 153 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
 access-control suite, and a hybrid keyword-mismatch retrieval.
 
-_Remaining v0.2 work (git remote auth/push, minimal web UI) tracked in
-[ROADMAP.md](ROADMAP.md)._
+_Remaining v0.2 work (pull + external-edit re-index, minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main
