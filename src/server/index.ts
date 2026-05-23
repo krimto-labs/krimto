@@ -1,13 +1,17 @@
 // Krimto MCP server entrypoint. Wires the five tools (Gap 02) over the markdown
-// store + hybrid retrieval and serves them on the MCP stdio transport.
+// store + hybrid retrieval. Serves via HTTP (KRIMTO_HTTP_PORT) or stdio.
 //
-// Auth (Gap 06) and membership (Gap 07) land in v0.2; until then the requester
-// identity/teams come from environment variables (single-user local default).
+// Auth (Gap 06): bearer API keys enforced in HTTP mode. stdio mode retains the
+// single-user local default (identity from env).
 
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { promises as fs } from "node:fs";
+
+import { ApiKeyStore } from "../access/auth";
+import { bootstrapAdmin } from "./bootstrap";
+import { buildHttpApp } from "./http";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -194,6 +198,21 @@ export async function buildIndexIfNeeded(
 export async function main(): Promise<void> {
   const dataDir = resolveDataDir();
   await fs.mkdir(dataDir, { recursive: true });
+
+  // Key store + bootstrap (must happen before membership is finalised so that
+  // ensureOrgAdmin's writes to members.yaml are visible in the loaded membership).
+  const keysPath = process.env.KRIMTO_KEYS_PATH ?? path.join(dataDir, ".krimto", "keys.json");
+  const keys = new ApiKeyStore(keysPath);
+  if (process.env.KRIMTO_BOOTSTRAP_ADMIN) {
+    const { key } = await bootstrapAdmin(process.env.KRIMTO_BOOTSTRAP_ADMIN, keys, dataDir);
+    if (key) {
+      process.stderr.write(
+        `Krimto: issued admin API key for ${process.env.KRIMTO_BOOTSTRAP_ADMIN} (shown once):\n${key}\n`,
+      );
+    }
+  }
+
+  // Load membership AFTER bootstrap so the new admin is present.
   const membership = await loadMembership(dataDir);
   const identity = resolveIdentity();
   const embedCfg = embeddingConfigFromEnv();
@@ -225,7 +244,6 @@ export async function main(): Promise<void> {
       : undefined,
     git: batcher,
   };
-  const server = buildServer(ctx);
   if (embeddingProvider) {
     process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
   }
@@ -254,8 +272,27 @@ export async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  await server.connect(new StdioServerTransport());
-  process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);
+  const httpPort = process.env.KRIMTO_HTTP_PORT ? Number(process.env.KRIMTO_HTTP_PORT) : undefined;
+  if (httpPort !== undefined && Number.isInteger(httpPort) && httpPort > 0) {
+    const app = buildHttpApp({
+      ctx,
+      keys,
+      membership: () => membership,
+      db,
+      index,
+      version: KRIMTO_VERSION,
+      startedAt: Date.now(),
+      isBuilding: () => false,
+      gitRemoteStatus: () => batcher.lastPushStatus(),
+    });
+    app.listen(httpPort, () => {
+      process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
+    });
+  } else {
+    const server = buildServer(ctx);
+    await server.connect(new StdioServerTransport());
+    process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);
+  }
 }
 
 const invokedDirectly =
