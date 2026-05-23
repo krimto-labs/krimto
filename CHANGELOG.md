@@ -41,6 +41,10 @@ Team layer + operations (Tier 2):
 - Remote git push: when a remote is configured (`KRIMTO_GIT_REMOTE`), each batch commit is pushed
   to it (self-host SSH deploy-key auth). Push is best-effort — failures are logged and retried on
   the next batch; they never block writes or take the server down.
+- Inbound sync: Krimto periodically pulls the remote (`git pull --rebase`, every 60s by default,
+  configurable via `KRIMTO_PULL_INTERVAL_MS`) and re-indexes teammates' direct edits — added,
+  edited, and deleted facts all show up in search. Pull conflicts are aborted and retried, never
+  blocking writes.
 - Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
   (off-by-default) telemetry.
 
@@ -48,9 +52,9 @@ Team layer + operations (Tier 2):
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 153 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
+Verified by 167 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
 access-control suite, and a hybrid keyword-mismatch retrieval.
 
-_Remaining v0.2 work (pull + external-edit re-index, minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
+_Remaining v0.2 work (minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main
