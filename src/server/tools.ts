@@ -8,6 +8,7 @@ import { recall } from "../retrieval/recall";
 import { isValidScope, type Requester } from "../access/scope";
 import { canRead, canWrite, type Membership } from "../access/membership";
 import { vectorScores, type EmbeddingCache, type EmbeddingProvider } from "../index/embeddings";
+import { type GitWriter } from "../storage/git";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
@@ -19,6 +20,8 @@ export interface ToolContext {
   /** Optional embedding provider; absent = lexical-only retrieval (Gap 09). */
   embeddings?: EmbeddingProvider;
   embeddingCache?: EmbeddingCache;
+  /** Optional git writer; when present, writes are committed and commit_sha is populated (Gap 08). */
+  git?: GitWriter;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -111,8 +114,8 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
     supersedes: input.supersedes,
     now: clock(ctx),
   });
-  // commit_sha is null until the git commit batcher lands (Gap 08, v0.2).
-  return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha: null };
+  const commit_sha = ctx.git ? await ctx.git.recordWrite(path, fact) : null;
+  return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha };
 }
 
 /** Search across one or more scopes using hybrid retrieval with hierarchical precedence. */
@@ -186,7 +189,7 @@ export async function krimtoSupersede(
   if (!input.new_title || input.new_title.length > MAX_TITLE_LENGTH) {
     throw new KrimtoError("invalid_params", `new_title is required and must be <= ${MAX_TITLE_LENGTH} chars`);
   }
-  const { fact } = await ctx.store.writeFact({
+  const { fact, path } = await ctx.store.writeFact({
     scope: old.fact.frontmatter.scope,
     title: input.new_title,
     body: input.new_body,
@@ -194,7 +197,8 @@ export async function krimtoSupersede(
     supersedes: [input.id],
     now: clock(ctx),
   });
-  return { old_id: input.id, new_id: fact.frontmatter.id, commit_sha: null };
+  const commit_sha = ctx.git ? await ctx.git.recordWrite(path, fact) : null;
+  return { old_id: input.id, new_id: fact.frontmatter.id, commit_sha };
 }
 
 /** Discover the scopes that exist and what they contain. */

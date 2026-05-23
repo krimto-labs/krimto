@@ -14,6 +14,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { FactStore } from "../storage/store";
+import { GitWriter } from "../storage/git";
 import { loadMembership, requesterFor } from "../access/membership";
 import { EmbeddingCache } from "../index/embeddings";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
@@ -174,6 +175,7 @@ export async function main(): Promise<void> {
     requester: requesterFor(membership, identity),
     embeddings: embeddings ?? undefined,
     embeddingCache: new EmbeddingCache(),
+    git: await GitWriter.open(dataDir),
   };
   const server = buildServer(ctx);
   if (embeddings) {
