@@ -42,7 +42,7 @@ Team layer + operations (Tier 2):
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 115 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
+Verified by 138 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
 access-control suite, and a hybrid keyword-mismatch retrieval.
 
 _Remaining v0.2 work (git remote auth/push + commit batching, minimal web UI) tracked in

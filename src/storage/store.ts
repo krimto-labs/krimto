@@ -1,6 +1,7 @@
 // Storage layer — facts as markdown files in a data directory laid out by scope:
 //   <root>/user/<id>/<slug>.md, <root>/team/<slug>/<slug>.md, <root>/org/<slug>/<slug>.md
-// v0.1 reads/scans the tree directly; the SQLite index (Gap 09) lands in v0.2.
+// Markdown is the source of truth; the derived SQLite index (built from this tree) serves
+// retrieval. allFacts() is the rebuild source.
 
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
@@ -60,7 +61,7 @@ export class FactStore {
     return null;
   }
 
-  /** Every fact in the store (used by recall until the SQLite index exists). */
+  /** Every fact in the store — the source for (re)building the SQLite index. */
   async allFacts(): Promise<Fact[]> {
     const facts: Fact[] = [];
     for (const abs of await this.factFiles()) {

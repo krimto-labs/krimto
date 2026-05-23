@@ -120,7 +120,7 @@ export class FactIndex {
         this.db.prepare("DELETE FROM facts_vec WHERE fact_id=?").run(fm.id);
         this.db
           .prepare("INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)")
-          .run(fm.id, Buffer.from(vec.buffer));
+          .run(fm.id, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength));
       }
     });
     tx();
@@ -154,11 +154,6 @@ export class FactIndex {
     return set;
   }
 
-  /**
-   * Build ranking candidates: FTS5 BM25 (top 50) unioned with sqlite-vec cosine KNN (top 50),
-   * scope-filtered, with expired + superseded excluded. Scores max-normalized to [0,1].
-   * Lexical-only (no query vector) skips the vector half and mirrors bm25 into vectorScore.
-   */
   listScopes(readableScopes: string[]): { path: string; factCount: number; lastUpdated: string | null }[] {
     if (readableScopes.length === 0) return [];
     const placeholders = readableScopes.map(() => "?").join(",");
@@ -192,6 +187,11 @@ export class FactIndex {
     return (this.db.prepare("select count(*) c from facts").get() as { c: number }).c;
   }
 
+  /**
+   * Build ranking candidates: FTS5 BM25 (top 50) unioned with sqlite-vec cosine KNN (top 50),
+   * scope-filtered, with expired + superseded excluded. Scores max-normalized to [0,1].
+   * Lexical-only (no query vector) skips the vector half and mirrors bm25 into vectorScore.
+   */
   async searchCandidates(
     query: string,
     opts: { readableScopes: string[]; now?: Date; queryVector?: Float32Array },
