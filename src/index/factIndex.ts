@@ -6,6 +6,8 @@ import type { Database as Db } from "better-sqlite3";
 
 import { type Fact, type FactFrontmatter } from "../storage/fact";
 import { type EmbeddingProvider, hashText } from "./embeddings";
+import { type Candidate } from "../retrieval/pipeline";
+import { tokenize } from "../retrieval/lexical";
 
 interface FactRow {
   id: string;
@@ -139,5 +141,86 @@ export class FactIndex {
       .prepare("SELECT * FROM facts WHERE id=?")
       .get(id) as FactRow | undefined;
     return row ? rowToFact(row) : null;
+  }
+
+  /** Fact ids that some other fact supersedes (small set; excluded from recall). */
+  private supersededIds(): Set<string> {
+    const set = new Set<string>();
+    for (const r of this.db.prepare("select supersedes from facts where supersedes is not null").all() as {
+      supersedes: string;
+    }[]) {
+      for (const id of JSON.parse(r.supersedes) as string[]) set.add(id);
+    }
+    return set;
+  }
+
+  /**
+   * Build ranking candidates: FTS5 BM25 (top 50) unioned with sqlite-vec cosine KNN (top 50),
+   * scope-filtered, with expired + superseded excluded. Scores max-normalized to [0,1].
+   * Lexical-only (no query vector) skips the vector half and mirrors bm25 into vectorScore.
+   */
+  async searchCandidates(
+    query: string,
+    opts: { readableScopes: string[]; now?: Date; queryVector?: Float32Array },
+  ): Promise<Candidate[]> {
+    const scopeList = opts.readableScopes;
+    if (scopeList.length === 0) return [];
+    const terms = [...new Set(tokenize(query))];
+    if (terms.length === 0) return [];
+    const ftsQuery = terms.join(" OR ");
+    const now = (opts.now ?? new Date()).toISOString();
+    const superseded = this.supersededIds();
+    const placeholders = scopeList.map(() => "?").join(",");
+
+    // Lexical (BM25). FTS5 bm25() is negative; smaller = better. Negate so larger = better.
+    const lexical = this.db
+      .prepare(
+        `SELECT f.id AS id, -bm25(facts_fts) AS raw
+           FROM facts_fts JOIN facts f ON f.rowid = facts_fts.rowid
+          WHERE facts_fts MATCH ?
+            AND f.scope IN (${placeholders})
+            AND (f.expires IS NULL OR f.expires > ?)
+          ORDER BY bm25(facts_fts) LIMIT 50`,
+      )
+      .all(ftsQuery, ...scopeList, now) as { id: string; raw: number }[];
+
+    const bm25 = new Map<string, number>();
+    const maxRaw = Math.max(0, ...lexical.map((r) => r.raw));
+    for (const r of lexical) bm25.set(r.id, maxRaw > 0 ? r.raw / maxRaw : 0);
+
+    // Vector (cosine) — only when a provider gave us a query vector (facts_vec exists then).
+    const vector = new Map<string, number>();
+    if (opts.queryVector && this.provider) {
+      const queryBuf = Buffer.from(
+        opts.queryVector.buffer,
+        opts.queryVector.byteOffset,
+        opts.queryVector.byteLength,
+      );
+      const knn = this.db
+        .prepare(`SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ? AND k = 50 ORDER BY distance`)
+        .all(queryBuf) as { fact_id: string; distance: number }[];
+      const sims = knn.map((r) => ({ id: r.fact_id, sim: Math.max(0, 1 - r.distance) }));
+      const maxSim = Math.max(0, ...sims.map((s) => s.sim));
+      for (const s of sims) vector.set(s.id, maxSim > 0 ? s.sim / maxSim : 0);
+    }
+
+    const ids = new Set<string>([...bm25.keys(), ...vector.keys()]);
+    const lexicalOnly = !opts.queryVector;
+    const out: Candidate[] = [];
+    const getFactStmt = this.db.prepare("select * from facts where id=?");
+    for (const id of ids) {
+      if (superseded.has(id)) continue;
+      const row = getFactStmt.get(id) as FactRow | undefined;
+      if (!row) continue;
+      if (!scopeList.includes(row.scope)) continue; // vector ids are filtered here
+      if (row.expires && row.expires <= now) continue;
+      const bm = bm25.get(id) ?? 0;
+      out.push({
+        id: row.id, scope: row.scope, title: row.title, body: row.body, author: row.author, updated: row.updated,
+        bm25Score: bm,
+        vectorScore: lexicalOnly ? bm : (vector.get(id) ?? 0),
+      });
+    }
+    return out;
   }
 }
