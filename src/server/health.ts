@@ -2,6 +2,9 @@
 // dependencies. A temporarily unreachable git remote does NOT block readiness:
 // reads still work from local state and writes can queue.
 
+import type { Database as Db } from "better-sqlite3";
+import type { FactIndex } from "../index/factIndex";
+
 export interface CheckResult {
   status: "ok" | "building" | "error";
   [detail: string]: unknown;
@@ -36,4 +39,18 @@ export function healthReady(version: string, checks: ReadyChecks): ReadyResponse
     http: ready ? 200 : 503,
     body: { status: ready ? "ready" : "not_ready", version, checks },
   };
+}
+
+export function sqliteHealth(db: Db): CheckResult {
+  try {
+    db.prepare("select 1").get();
+    return { status: "ok" };
+  } catch (e) {
+    return { status: "error", detail: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function indexHealth(index: FactIndex, building: boolean): CheckResult {
+  if (building) return { status: "building" };
+  return { status: "ok", fact_count: index.factCount() };
 }

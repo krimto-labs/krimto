@@ -7,17 +7,19 @@
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import * as path from "node:path";
+import { promises as fs } from "node:fs";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { Database as Db } from "better-sqlite3";
 import { z } from "zod";
 
 import { FactStore } from "../storage/store";
 import { GitWriter } from "../storage/git";
 import { loadMembership, requesterFor } from "../access/membership";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
-import { openIndexDb } from "../index/db";
+import { openIndexDb, embeddingSpaceChanged, type IndexConfig } from "../index/db";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { KrimtoError } from "./errors";
@@ -166,19 +168,35 @@ export function buildServer(ctx: ToolContext): McpServer {
   return server;
 }
 
+/** Build the index from the markdown source of truth when it's empty or the embedding space changed. */
+export async function buildIndexIfNeeded(
+  index: FactIndex,
+  store: FactStore,
+  db: Db,
+  config: IndexConfig,
+): Promise<void> {
+  if (index.factCount() === 0 || embeddingSpaceChanged(db, config)) {
+    await index.rebuild(await store.allFacts());
+  }
+}
+
 export async function main(): Promise<void> {
   const dataDir = resolveDataDir();
+  await fs.mkdir(dataDir, { recursive: true });
   const membership = await loadMembership(dataDir);
   const identity = resolveIdentity();
   const embedCfg = embeddingConfigFromEnv();
   const embeddingProvider = createEmbeddingProvider(embedCfg);
-  const db = openIndexDb(`${dataDir}/index.db`, {
+  const indexConfig: IndexConfig = {
     provider: embedCfg.provider ?? "none",
     dimensions: embeddingProvider?.dimensions ?? 0,
-  });
+  };
+  const db = openIndexDb(`${dataDir}/index.db`, indexConfig);
+  const store = new FactStore(dataDir);
   const index = new FactIndex(db, embeddingProvider ?? undefined);
+  await buildIndexIfNeeded(index, store, db, indexConfig);
   const ctx: ToolContext = {
-    store: new FactStore(dataDir),
+    store,
     index,
     writeQueue: new Serializer(),
     membership,
