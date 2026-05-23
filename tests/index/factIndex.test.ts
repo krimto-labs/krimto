@@ -76,3 +76,27 @@ describe("FactIndex upsert/get/remove", () => {
     db.close();
   });
 });
+
+describe("FactIndex.rebuild (atomic)", () => {
+  it("replaces the index with the new fact set, vectors included", async () => {
+    const dim = 4;
+    const embed = vi.fn(async (texts: string[]) =>
+      texts.map((t) => Array.from({ length: dim }, (_, i) => ((t.charCodeAt(i % t.length) || 1) % 7) / 7)),
+    );
+    const provider = { name: "stub", dimensions: dim, embed };
+    const db = openIndexDb(":memory:", { provider: "stub", dimensions: dim });
+    const idx = new FactIndex(db, provider);
+    await idx.upsertFact(createFact({ scope: "org/acme", title: "old", body: "obsolete", author: "a@x.com" }));
+    const fresh = createFact({ scope: "org/acme", title: "stripe", body: "idempotency keys", author: "a@x.com" });
+    await idx.rebuild([fresh]);
+    expect(idx.factCount()).toBe(1);
+    expect(idx.getFact(fresh.frontmatter.id)?.frontmatter.title).toBe("stripe");
+    const [qv] = await provider.embed(["idempotency keys"]);
+    const cands = await idx.searchCandidates("idempotency keys", {
+      readableScopes: ["org/acme"],
+      queryVector: Float32Array.from(qv!),
+    });
+    expect(cands.map((c) => c.id)).toContain(fresh.frontmatter.id);
+    db.close();
+  });
+});

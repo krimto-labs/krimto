@@ -76,52 +76,51 @@ export class FactIndex {
     return f32;
   }
 
+  /** Insert/update the facts row (FTS follows via trigger). Synchronous. */
+  private insertFactRow(fact: Fact, hash: string): void {
+    const fm = fact.frontmatter;
+    this.db
+      .prepare(
+        `INSERT INTO facts (id, scope, title, body, author, created, updated, tags, source, supersedes, expires, body_hash)
+         VALUES (@id, @scope, @title, @body, @author, @created, @updated, @tags, @source, @supersedes, @expires, @body_hash)
+         ON CONFLICT(id) DO UPDATE SET
+           scope=excluded.scope, title=excluded.title, body=excluded.body, author=excluded.author,
+           updated=excluded.updated, tags=excluded.tags, source=excluded.source,
+           supersedes=excluded.supersedes, expires=excluded.expires, body_hash=excluded.body_hash`,
+      )
+      .run({
+        id: fm.id,
+        scope: fm.scope,
+        title: fm.title,
+        body: fact.body,
+        author: fm.author,
+        created: fm.created,
+        updated: fm.updated,
+        tags: fm.tags ? JSON.stringify(fm.tags) : null,
+        source: fm.source ?? null,
+        supersedes: fm.supersedes ? JSON.stringify(fm.supersedes) : null,
+        expires: fm.expires ?? null,
+        body_hash: hash,
+      });
+  }
+
+  /** Replace the facts_vec row for a fact. Synchronous. */
+  private insertVecRow(id: string, vec: Float32Array): void {
+    this.db.prepare("DELETE FROM facts_vec WHERE fact_id=?").run(id);
+    this.db
+      .prepare("INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)")
+      .run(id, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength));
+  }
+
   /**
    * Insert or update a fact in `facts` (FTS5 follows via trigger) and `facts_vec`.
    */
   async upsertFact(fact: Fact): Promise<void> {
-    const fm = fact.frontmatter;
     const hash = hashText(fact.body);
     const vec = await this.embedBody(fact.body, hash);
-    this.writeFactTx(fm, fact.body, hash, vec);
-  }
-
-  private writeFactTx(
-    fm: FactFrontmatter,
-    body: string,
-    hash: string,
-    vec: Float32Array | null,
-  ): void {
     const tx = this.db.transaction(() => {
-      this.db
-        .prepare(
-          `INSERT INTO facts (id, scope, title, body, author, created, updated, tags, source, supersedes, expires, body_hash)
-           VALUES (@id, @scope, @title, @body, @author, @created, @updated, @tags, @source, @supersedes, @expires, @body_hash)
-           ON CONFLICT(id) DO UPDATE SET
-             scope=excluded.scope, title=excluded.title, body=excluded.body, author=excluded.author,
-             updated=excluded.updated, tags=excluded.tags, source=excluded.source,
-             supersedes=excluded.supersedes, expires=excluded.expires, body_hash=excluded.body_hash`,
-        )
-        .run({
-          id: fm.id,
-          scope: fm.scope,
-          title: fm.title,
-          body,
-          author: fm.author,
-          created: fm.created,
-          updated: fm.updated,
-          tags: fm.tags ? JSON.stringify(fm.tags) : null,
-          source: fm.source ?? null,
-          supersedes: fm.supersedes ? JSON.stringify(fm.supersedes) : null,
-          expires: fm.expires ?? null,
-          body_hash: hash,
-        });
-      if (vec) {
-        this.db.prepare("DELETE FROM facts_vec WHERE fact_id=?").run(fm.id);
-        this.db
-          .prepare("INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)")
-          .run(fm.id, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength));
-      }
+      this.insertFactRow(fact, hash);
+      if (vec) this.insertVecRow(fact.frontmatter.id, vec);
     });
     tx();
   }
@@ -173,14 +172,22 @@ export class FactIndex {
     );
   }
 
-  /** Drop live rows and re-index `facts` from scratch. embedding_cache is preserved. */
+  /** Atomically rebuild the index from `facts`. embedding_cache is preserved. */
   async rebuild(facts: Fact[]): Promise<void> {
-    const clear = this.db.transaction(() => {
+    const prepared: { fact: Fact; hash: string; vec: Float32Array | null }[] = [];
+    for (const fact of facts) {
+      const hash = hashText(fact.body);
+      prepared.push({ fact, hash, vec: await this.embedBody(fact.body, hash) });
+    }
+    const swap = this.db.transaction(() => {
       this.db.exec("DELETE FROM facts;");
       if (this.provider) this.db.exec("DELETE FROM facts_vec;");
+      for (const { fact, hash, vec } of prepared) {
+        this.insertFactRow(fact, hash);
+        if (vec) this.insertVecRow(fact.frontmatter.id, vec);
+      }
     });
-    clear();
-    for (const f of facts) await this.upsertFact(f);
+    swap();
   }
 
   factCount(): number {
