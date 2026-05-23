@@ -33,8 +33,11 @@ Team layer + operations (Tier 2):
   list_scopes only surface readable scopes; read returns not_found for unreadable facts.
 - Pluggable embeddings (Gap 09): lexical-only by default (no key); OpenAI, Voyage, and custom
   OpenAI-compatible adapters; hybrid (vector + lexical) retrieval when a provider is configured.
-- Git write coordination (Gap 08): each write committed with the spec message format; `commit_sha`
-  populated.
+- Git write coordination (Gap 08): the server is the single writer to git, committing with the
+  spec message format.
+- Batched git commits: writes are committed in batches (every 30s or 10 writes, configurable via
+  `KRIMTO_COMMIT_INTERVAL_MS` / `KRIMTO_COMMIT_MAX_BATCH`) instead of one commit per write, keeping
+  history clean. Markdown is written immediately; the commit is the deferred audit step.
 - Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
   (off-by-default) telemetry.
 
@@ -42,10 +45,10 @@ Team layer + operations (Tier 2):
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 138 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
+Verified by 144 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
 access-control suite, and a hybrid keyword-mismatch retrieval.
 
-_Remaining v0.2 work (git remote auth/push + commit batching, minimal web UI) tracked in
+_Remaining v0.2 work (git remote auth/push, minimal web UI) tracked in
 [ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main
