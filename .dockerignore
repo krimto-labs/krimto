@@ -1,0 +1,21 @@
+# Keep the build context small and never copy host-built native modules or secrets.
+node_modules
+.git
+.claude
+.specstory
+dist
+coverage
+docs
+files
+tests
+.vscode
+data
+logs
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+.DS_Store
+*.log

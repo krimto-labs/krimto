@@ -20,6 +20,9 @@ importers:
       sqlite-vec:
         specifier: ^0.1.9
         version: 0.1.9
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.3
       ulid:
         specifier: ^3.0.2
         version: 3.0.2
@@ -45,9 +48,6 @@ importers:
       eslint:
         specifier: ^9.13.0
         version: 9.39.4
-      tsx:
-        specifier: ^4.19.0
-        version: 4.22.3
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
