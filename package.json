@@ -5,8 +5,13 @@
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@11.2.2",
-  "engines": { "node": ">=20" },
-  "repository": { "type": "git", "url": "https://github.com/krimto-labs/krimto.git" },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krimto-labs/krimto.git"
+  },
   "homepage": "https://krimto.com",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -24,5 +29,9 @@
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.12.0",
     "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "ulid": "^3.0.2",
+    "yaml": "^2.9.0"
   }
 }
