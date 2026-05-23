@@ -159,6 +159,39 @@ export class FactIndex {
    * scope-filtered, with expired + superseded excluded. Scores max-normalized to [0,1].
    * Lexical-only (no query vector) skips the vector half and mirrors bm25 into vectorScore.
    */
+  listScopes(readableScopes: string[]): { path: string; factCount: number; lastUpdated: string | null }[] {
+    if (readableScopes.length === 0) return [];
+    const placeholders = readableScopes.map(() => "?").join(",");
+    return this.db
+      .prepare(
+        `SELECT scope AS path, COUNT(*) AS factCount, MAX(updated) AS lastUpdated
+           FROM facts WHERE scope IN (${placeholders})
+          GROUP BY scope ORDER BY scope`,
+      )
+      .all(...readableScopes) as { path: string; factCount: number; lastUpdated: string | null }[];
+  }
+
+  /** All distinct scopes present in the index. */
+  allScopes(): string[] {
+    return (this.db.prepare("select distinct scope from facts order by scope").all() as { scope: string }[]).map(
+      (r) => r.scope,
+    );
+  }
+
+  /** Drop live rows and re-index `facts` from scratch. embedding_cache is preserved. */
+  async rebuild(facts: Fact[]): Promise<void> {
+    const clear = this.db.transaction(() => {
+      this.db.exec("DELETE FROM facts;");
+      if (this.provider) this.db.exec("DELETE FROM facts_vec;");
+    });
+    clear();
+    for (const f of facts) await this.upsertFact(f);
+  }
+
+  factCount(): number {
+    return (this.db.prepare("select count(*) c from facts").get() as { c: number }).c;
+  }
+
   async searchCandidates(
     query: string,
     opts: { readableScopes: string[]; now?: Date; queryVector?: Float32Array },
