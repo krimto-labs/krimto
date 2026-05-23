@@ -38,10 +38,14 @@ Team layer + operations (Tier 2):
 - Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
   (off-by-default) telemetry.
 
+- Persistent SQLite index: FTS5 keyword search + sqlite-vec vector search with an embedding
+  cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
+  now serve from the index instead of scanning every file.
+
 Verified by 115 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
 access-control suite, and a hybrid keyword-mismatch retrieval.
 
-_Remaining v0.2 work (persistent SQLite + sqlite-vec index, git remote auth/push + commit
-batching, minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
+_Remaining v0.2 work (git remote auth/push + commit batching, minimal web UI) tracked in
+[ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main
