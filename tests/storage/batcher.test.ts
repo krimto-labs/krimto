@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileP = promisify(execFile);
 
 import { GitRepo } from "../../src/storage/git";
 import { FactStore } from "../../src/storage/store";
@@ -107,6 +110,53 @@ describe("CommitBatcher", () => {
     await new Promise((r) => setTimeout(r, 120));
     batcher.stop();
     expect(batcher.pendingCount()).toBe(0);
+    expect(await repo.head()).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
+
+describe("CommitBatcher remote push", () => {
+  let dir: string;
+  let remoteDir: string;
+  let repo: GitRepo;
+  let store: FactStore;
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-batchpush-"));
+    remoteDir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-remote-"));
+    await execFileP("git", ["init", "--bare", "-q", remoteDir]);
+    repo = await GitRepo.open(dir);
+    store = new FactStore(dir);
+  });
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(remoteDir, { recursive: true, force: true });
+  });
+
+  async function stageNew(batcher: CommitBatcher, i: number): Promise<void> {
+    const { fact, path: rel } = await store.writeFact({
+      scope: "org/acme",
+      title: `Fact ${i}`,
+      body: `body ${i}`,
+      author: "a@x.com",
+    });
+    await batcher.stage(rel, fact);
+  }
+
+  it("pushes the batch commit to a configured remote", async () => {
+    await repo.setRemote(remoteDir);
+    const batcher = new CommitBatcher(repo, { intervalMs: 60_000, maxBatch: 100 });
+    await stageNew(batcher, 1);
+    await batcher.flush();
+    expect(batcher.lastPushStatus()).toBe("ok");
+    const { stdout } = await execFileP("git", ["-C", remoteDir, "rev-list", "--all"]);
+    expect(stdout.trim()).not.toBe("");
+  });
+
+  it("commits and reports skipped push when no remote is configured", async () => {
+    const batcher = new CommitBatcher(repo, { intervalMs: 60_000, maxBatch: 100 });
+    expect(batcher.lastPushStatus()).toBe("none");
+    await stageNew(batcher, 1);
+    await batcher.flush();
+    expect(batcher.lastPushStatus()).toBe("skipped");
     expect(await repo.head()).toMatch(/^[0-9a-f]{40}$/);
   });
 });

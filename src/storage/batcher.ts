@@ -4,7 +4,7 @@
 // write serializer, so git `add`/`commit` never overlap. The pending list only drives the commit
 // message; staged files live in git's index, so a failed commit is swept into the next one.
 
-import { type GitRepo } from "./git";
+import { type GitRepo, type PushResult } from "./git";
 import { type Fact } from "./fact";
 
 export interface BatcherConfig {
@@ -49,6 +49,7 @@ export type RunExclusive = (task: () => Promise<unknown>) => Promise<unknown>;
 export class CommitBatcher {
   private readonly pending: Fact[] = [];
   private timer: ReturnType<typeof setInterval> | undefined;
+  private lastPush: PushResult["status"] | "none" = "none";
 
   constructor(
     private readonly repo: GitRepo,
@@ -57,6 +58,11 @@ export class CommitBatcher {
 
   pendingCount(): number {
     return this.pending.length;
+  }
+
+  /** Status of the most recent push attempt ("none" before any flush with a commit). */
+  lastPushStatus(): PushResult["status"] | "none" {
+    return this.lastPush;
   }
 
   /** Stage a fact's file and queue it; commit immediately once maxBatch is reached. */
@@ -68,7 +74,7 @@ export class CommitBatcher {
     }
   }
 
-  /** Commit all pending facts as one commit. Returns the SHA, or null if nothing pending. */
+  /** Commit all pending facts as one commit, then push to the remote (if any). */
   async flush(): Promise<string | null> {
     if (this.pending.length === 0) return null;
     const facts = this.pending.splice(0); // clear regardless of commit outcome
@@ -76,6 +82,14 @@ export class CommitBatcher {
     if (sha === null) {
       process.stderr.write(
         `krimto: batch commit of ${facts.length} fact(s) failed; files remain staged for the next commit\n`,
+      );
+      return null;
+    }
+    const push = await this.repo.push();
+    this.lastPush = push.status;
+    if (push.status === "error") {
+      process.stderr.write(
+        `krimto: push to remote failed (commits are saved locally, will retry next batch): ${push.detail ?? ""}\n`,
       );
     }
     return sha;
