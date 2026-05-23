@@ -3,6 +3,9 @@ import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { FactStore } from "../../src/storage/store";
+import { openIndexDb } from "../../src/index/db";
+import { FactIndex } from "../../src/index/factIndex";
+import { Serializer } from "../../src/index/serialize";
 import {
   krimtoListScopes,
   krimtoRead,
@@ -18,8 +21,11 @@ let ctx: ToolContext;
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-tools-"));
+  const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
   ctx = {
     store: new FactStore(root),
+    index: new FactIndex(db),
+    writeQueue: new Serializer(),
     requester: { identity: "alice@acme.com", teams: ["payments"] },
     // alice is an org admin (writes anywhere) and a payments member.
     membership: {
@@ -90,6 +96,22 @@ describe("krimto_read", () => {
 });
 
 describe("krimto_supersede", () => {
+  it("rejects when new_body is empty", async () => {
+    const original = await krimtoWrite(ctx, {
+      scope: "team/payments",
+      title: "Some fact",
+      body: "Original body.",
+    });
+    await expect(
+      krimtoSupersede(ctx, {
+        id: original.id,
+        new_title: "Some fact",
+        new_body: "",
+        reason: "Testing validation",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_params" });
+  });
+
   it("creates a replacement and the old fact drops out of recall", async () => {
     const original = await krimtoWrite(ctx, {
       scope: "team/payments",

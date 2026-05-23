@@ -8,6 +8,9 @@ import * as path from "node:path";
 
 import { FactStore } from "../../src/storage/store";
 import { parseFact, serializeFact } from "../../src/storage/fact";
+import { openIndexDb } from "../../src/index/db";
+import { FactIndex } from "../../src/index/factIndex";
+import { Serializer } from "../../src/index/serialize";
 import { krimtoRecall, krimtoWrite, type ToolContext } from "../../src/server/tools";
 
 let root: string;
@@ -15,8 +18,11 @@ let ctx: ToolContext;
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-accept-"));
+  const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
   ctx = {
     store: new FactStore(root),
+    index: new FactIndex(db),
+    writeQueue: new Serializer(),
     requester: { identity: "alice@acme.com", teams: ["payments"] },
     membership: { org: { slug: "acme", admins: ["alice@acme.com"] }, teams: [], users: [] },
   };
@@ -26,7 +32,7 @@ afterEach(async () => {
 });
 
 describe("v0.1 acceptance", () => {
-  it("write -> file on disk -> recall (top-3) -> external edit reflected", async () => {
+  it("write -> file on disk -> recall (top-3) -> external edit reflected after reindex", async () => {
     // 1. The agent writes a fact.
     const written = await krimtoWrite(ctx, {
       scope: "user/alice@acme.com",
@@ -43,12 +49,15 @@ describe("v0.1 acceptance", () => {
     const first = await krimtoRecall(ctx, { query: "can I run migrations on Sunday?" });
     expect(first.results.slice(0, 3).some((h) => h.id === written.id)).toBe(true);
 
-    // 4. The developer edits the markdown file directly.
+    // 4. The developer edits the markdown file directly, then the index is reindexed.
+    //    (Explicit rebuild from the markdown source of truth; automatic git-pull
+    //    external-edit detection is a later increment.)
     const edited = parseFact(await fs.readFile(abs, "utf8"));
     edited.body = "Migrations are wiped every Sunday at midnight; never run them then.";
     await fs.writeFile(abs, serializeFact(edited), "utf8");
+    await ctx.index.rebuild(await ctx.store.allFacts());
 
-    // 5. The next recall reflects the edited content.
+    // 5. The next recall reflects the edited content (same fact id preserved on disk).
     const second = await krimtoRecall(ctx, { query: "what happens to migrations Sunday midnight?" });
     const hit = second.results.find((h) => h.id === written.id);
     expect(hit?.body).toContain("wiped every Sunday at midnight");

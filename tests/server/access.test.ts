@@ -3,6 +3,9 @@ import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { FactStore } from "../../src/storage/store";
+import { openIndexDb } from "../../src/index/db";
+import { FactIndex } from "../../src/index/factIndex";
+import { Serializer } from "../../src/index/serialize";
 import {
   krimtoListScopes,
   krimtoRead,
@@ -21,16 +24,31 @@ const membership: Membership = {
   users: [],
 };
 
+// Membership with admin@acme.com as the requester (for seeding org-scope facts).
+const adminMembership: Membership = {
+  org: { slug: "acme", admins: ["admin@acme.com"] },
+  teams: [
+    { slug: "payments", members: ["alice@acme.com"], leads: [] },
+    { slug: "infra", members: ["bob@acme.com"], leads: [] },
+  ],
+  users: [],
+};
+
 let root: string;
 let store: FactStore;
+let index: FactIndex;
+let writeQueue: Serializer;
 let alice: ToolContext;
 let bob: ToolContext;
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-access-"));
   store = new FactStore(root);
-  alice = { store, membership, requester: { identity: "alice@acme.com", teams: ["payments"] } };
-  bob = { store, membership, requester: { identity: "bob@acme.com", teams: ["infra"] } };
+  const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
+  index = new FactIndex(db);
+  writeQueue = new Serializer();
+  alice = { store, index, writeQueue, membership, requester: { identity: "alice@acme.com", teams: ["payments"] } };
+  bob = { store, index, writeQueue, membership, requester: { identity: "bob@acme.com", teams: ["infra"] } };
 });
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
@@ -55,8 +73,15 @@ describe("write access", () => {
 
 describe("read access", () => {
   beforeEach(async () => {
-    // org fact seeded directly (as if written by an admin)
-    await store.writeFact({ scope: "org/acme", title: "Deploy policy", body: "deploy only in windows", author: "admin@acme.com" });
+    // org fact seeded via admin context (admin@acme.com can write org/acme)
+    const admin: ToolContext = {
+      store,
+      index,
+      writeQueue,
+      membership: adminMembership,
+      requester: { identity: "admin@acme.com", teams: [] },
+    };
+    await krimtoWrite(admin, { scope: "org/acme", title: "Deploy policy", body: "deploy only in windows" });
     await krimtoWrite(alice, { scope: "user/alice@acme.com", title: "Alice deploy", body: "deploy with my flags" });
     await krimtoWrite(alice, { scope: "team/payments", title: "Payments deploy", body: "deploy via stripe pipeline" });
     await krimtoWrite(bob, { scope: "team/infra", title: "Infra deploy", body: "deploy via kubernetes" });
@@ -72,10 +97,11 @@ describe("read access", () => {
   });
 
   it("read of another user's fact returns not_found (no existence leak)", async () => {
-    const found = await store.readFact(
-      (await store.allFacts()).find((f) => f.frontmatter.scope === "user/alice@acme.com")!.frontmatter.id,
-    );
-    await expect(krimtoRead(bob, found!.fact.frontmatter.id)).rejects.toMatchObject({ code: "not_found" });
+    // Find alice's user-scope fact via the index (alice's context can read it)
+    const { results } = await krimtoRecall(alice, { query: "deploy with my flags", scopes: ["user/alice@acme.com"] });
+    expect(results.length).toBeGreaterThan(0);
+    const aliceFact = results[0]!;
+    await expect(krimtoRead(bob, aliceFact.id)).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("list_scopes hides scopes the requester cannot read", async () => {

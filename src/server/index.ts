@@ -16,8 +16,10 @@ import { z } from "zod";
 import { FactStore } from "../storage/store";
 import { GitWriter } from "../storage/git";
 import { loadMembership, requesterFor } from "../access/membership";
-import { EmbeddingCache } from "../index/embeddings";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
+import { openIndexDb } from "../index/db";
+import { FactIndex } from "../index/factIndex";
+import { Serializer } from "../index/serialize";
 import { KrimtoError } from "./errors";
 import {
   krimtoListScopes,
@@ -168,18 +170,30 @@ export async function main(): Promise<void> {
   const dataDir = resolveDataDir();
   const membership = await loadMembership(dataDir);
   const identity = resolveIdentity();
-  const embeddings = createEmbeddingProvider(embeddingConfigFromEnv());
+  const embedCfg = embeddingConfigFromEnv();
+  const embeddingProvider = createEmbeddingProvider(embedCfg);
+  const db = openIndexDb(`${dataDir}/index.db`, {
+    provider: embedCfg.provider ?? "none",
+    dimensions: embeddingProvider?.dimensions ?? 0,
+  });
+  const index = new FactIndex(db, embeddingProvider ?? undefined);
   const ctx: ToolContext = {
     store: new FactStore(dataDir),
+    index,
+    writeQueue: new Serializer(),
     membership,
     requester: requesterFor(membership, identity),
-    embeddings: embeddings ?? undefined,
-    embeddingCache: new EmbeddingCache(),
+    embedQuery: embeddingProvider
+      ? async (query: string) => {
+          const [vec] = await embeddingProvider.embed([query]);
+          return vec ? Float32Array.from(vec) : null;
+        }
+      : undefined,
     git: await GitWriter.open(dataDir),
   };
   const server = buildServer(ctx);
-  if (embeddings) {
-    process.stderr.write(`Krimto embeddings: ${embeddings.name} (${embeddings.dimensions}d)\n`);
+  if (embeddingProvider) {
+    process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
   }
   await server.connect(new StdioServerTransport());
   process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);

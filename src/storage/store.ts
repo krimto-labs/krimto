@@ -35,9 +35,13 @@ export class FactStore {
 
   /** Create a fact (server-set id/timestamps), write it to its scope folder, return it + its path. */
   async writeFact(input: NewFactInput): Promise<StoredFact> {
-    if (!parseScope(input.scope)) throw new Error(`Invalid scope: ${input.scope}`);
-    const fact = createFact(input);
-    const rel = scopeRelativePath(input.scope);
+    return this.writeFactExact(createFact(input));
+  }
+
+  /** Write an already-created fact (id/timestamps set by the caller) to its scope folder. */
+  async writeFactExact(fact: Fact): Promise<StoredFact> {
+    if (!parseScope(fact.frontmatter.scope)) throw new Error(`Invalid scope: ${fact.frontmatter.scope}`);
+    const rel = scopeRelativePath(fact.frontmatter.scope);
     const dir = path.join(this.root, rel);
     await fs.mkdir(dir, { recursive: true });
     const filename = resolveFilename(slugifyTitle(fact.frontmatter.title), await this.markdownIn(dir));

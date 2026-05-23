@@ -2,24 +2,27 @@
 // Handlers are pure functions of (context, input) so they can be tested without a
 // transport; the MCP/stdio wiring is a thin layer on top.
 
-import { MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
+import { createFact, MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
 import { FactStore } from "../storage/store";
-import { recall } from "../retrieval/recall";
 import { isValidScope, type Requester } from "../access/scope";
 import { canRead, canWrite, type Membership } from "../access/membership";
-import { vectorScores, type EmbeddingCache, type EmbeddingProvider } from "../index/embeddings";
+import { FactIndex } from "../index/factIndex";
+import { Serializer } from "../index/serialize";
+import { rankCandidates } from "../retrieval/pipeline";
 import { type GitWriter } from "../storage/git";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
   store: FactStore;
+  index: FactIndex;
   /** Resolved from auth (Gap 06). */
   requester: Requester;
   /** Org/team/user membership for server-enforced access (Gap 07). */
   membership: Membership;
-  /** Optional embedding provider; absent = lexical-only retrieval (Gap 09). */
-  embeddings?: EmbeddingProvider;
-  embeddingCache?: EmbeddingCache;
+  /** Returns the query embedding, or null in lexical-only mode. */
+  embedQuery?: (query: string) => Promise<Float32Array | null>;
+  /** Serializes write-path mutations. */
+  writeQueue: Serializer;
   /** Optional git writer; when present, writes are committed and commit_sha is populated (Gap 08). */
   git?: GitWriter;
   /** Clock override for tests. */
@@ -88,6 +91,11 @@ function clock(ctx: ToolContext): Date {
   return ctx.now ? ctx.now() : new Date();
 }
 
+function readableScopesFor(ctx: ToolContext): string[] {
+  // Every scope present in the index that the requester is allowed to read.
+  return ctx.index.allScopes().filter((s) => canRead(ctx.membership, ctx.requester.identity, s));
+}
+
 /** Create a new fact. Author comes from the requester identity; scope is required. */
 export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<WriteResult> {
   if (!isValidScope(input.scope)) {
@@ -104,44 +112,53 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
   if (!canWrite(ctx.membership, ctx.requester.identity, input.scope)) {
     throw new KrimtoError("forbidden", `Not allowed to write to ${input.scope}`, { scope: input.scope });
   }
-  const { fact, path } = await ctx.store.writeFact({
-    scope: input.scope,
-    title: input.title,
-    body: input.body,
-    author: ctx.requester.identity,
-    tags: input.tags,
-    source: input.source,
-    supersedes: input.supersedes,
-    now: clock(ctx),
+  return ctx.writeQueue.run(async () => {
+    const fact = createFact({
+      scope: input.scope,
+      title: input.title,
+      body: input.body,
+      author: ctx.requester.identity,
+      tags: input.tags,
+      source: input.source,
+      supersedes: input.supersedes,
+      now: clock(ctx),
+    });
+    await ctx.index.upsertFact(fact); // SQLite first (coordination layer)
+    let path: string;
+    try {
+      ({ path } = await ctx.store.writeFactExact(fact)); // markdown (source of truth)
+    } catch (e) {
+      ctx.index.removeFact(fact.frontmatter.id); // rollback the index entry
+      throw e;
+    }
+    let commit_sha: string | null = null;
+    if (ctx.git) {
+      try {
+        commit_sha = await ctx.git.recordWrite(path, fact);
+      } catch (e) {
+        process.stderr.write(
+          `krimto: git commit failed (fact ${fact.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
+        );
+      }
+    }
+    return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha };
   });
-  const commit_sha = ctx.git ? await ctx.git.recordWrite(path, fact) : null;
-  return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha };
 }
 
 /** Search across one or more scopes using hybrid retrieval with hierarchical precedence. */
 export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promise<RecallResult> {
-  const all = await ctx.store.allFacts();
-  // Only ever consider facts the requester is allowed to read.
-  const readable = all.filter((f) =>
-    canRead(ctx.membership, ctx.requester.identity, f.frontmatter.scope),
-  );
-  const facts =
-    input.scopes && input.scopes.length > 0
-      ? readable.filter((f) => input.scopes!.includes(f.frontmatter.scope))
-      : readable;
-  let vScores: Map<string, number> | undefined;
-  if (ctx.embeddings) {
-    const docs = facts.map((f) => ({
-      id: f.frontmatter.id,
-      text: `${f.frontmatter.title}\n${f.body}`,
-    }));
-    vScores = await vectorScores(ctx.embeddings, input.query, docs, ctx.embeddingCache);
-  }
-  const ranked = recall(input.query, facts, {
-    requester: ctx.requester,
-    limit: input.limit,
+  const readable = readableScopesFor(ctx);
+  const scopes = input.scopes?.length ? readable.filter((s) => input.scopes!.includes(s)) : readable;
+  const queryVector = ctx.embedQuery ? await ctx.embedQuery(input.query) : null;
+  const candidates = await ctx.index.searchCandidates(input.query, {
+    readableScopes: scopes,
     now: clock(ctx),
-    vectorScores: vScores,
+    queryVector: queryVector ?? undefined,
+  });
+  const ranked = rankCandidates(candidates, {
+    requester: ctx.requester,
+    now: clock(ctx),
+    params: input.limit !== undefined ? { resultLimit: input.limit } : undefined,
   });
   return {
     results: ranked.map((r) => ({
@@ -158,12 +175,11 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
 
 /** Fetch one fact by id, including its full frontmatter (git history lands in Gap 08). */
 export async function krimtoRead(ctx: ToolContext, id: string): Promise<ReadResult> {
-  const found = await ctx.store.readFact(id);
+  const fact = ctx.index.getFact(id);
   // Not-found is returned for unreadable facts too, so existence isn't leaked.
-  if (!found || !canRead(ctx.membership, ctx.requester.identity, found.fact.frontmatter.scope)) {
+  if (!fact || !canRead(ctx.membership, ctx.requester.identity, fact.frontmatter.scope)) {
     throw new KrimtoError("not_found", `Fact ${id} not found`, { id });
   }
-  const { fact } = found;
   return {
     id: fact.frontmatter.id,
     scope: fact.frontmatter.scope,
@@ -179,33 +195,53 @@ export async function krimtoSupersede(
   ctx: ToolContext,
   input: SupersedeInput,
 ): Promise<SupersedeResult> {
-  const old = await ctx.store.readFact(input.id);
-  if (!old || !canRead(ctx.membership, ctx.requester.identity, old.fact.frontmatter.scope)) {
+  const old = ctx.index.getFact(input.id);
+  if (!old || !canRead(ctx.membership, ctx.requester.identity, old.frontmatter.scope)) {
     throw new KrimtoError("not_found", `Fact ${input.id} not found`, { id: input.id });
   }
-  if (!canWrite(ctx.membership, ctx.requester.identity, old.fact.frontmatter.scope)) {
-    throw new KrimtoError("forbidden", `Not allowed to write to ${old.fact.frontmatter.scope}`);
+  if (!canWrite(ctx.membership, ctx.requester.identity, old.frontmatter.scope)) {
+    throw new KrimtoError("forbidden", `Not allowed to write to ${old.frontmatter.scope}`);
   }
   if (!input.new_title || input.new_title.length > MAX_TITLE_LENGTH) {
     throw new KrimtoError("invalid_params", `new_title is required and must be <= ${MAX_TITLE_LENGTH} chars`);
   }
-  const { fact, path } = await ctx.store.writeFact({
-    scope: old.fact.frontmatter.scope,
-    title: input.new_title,
-    body: input.new_body,
-    author: ctx.requester.identity,
-    supersedes: [input.id],
-    now: clock(ctx),
+  if (!input.new_body) {
+    throw new KrimtoError("invalid_params", "new_body is required", { field: "new_body" });
+  }
+  return ctx.writeQueue.run(async () => {
+    const replacement = createFact({
+      scope: old.frontmatter.scope,
+      title: input.new_title,
+      body: input.new_body,
+      author: ctx.requester.identity,
+      supersedes: [input.id],
+      now: clock(ctx),
+    });
+    await ctx.index.upsertFact(replacement);
+    let path: string;
+    try {
+      ({ path } = await ctx.store.writeFactExact(replacement));
+    } catch (e) {
+      ctx.index.removeFact(replacement.frontmatter.id); // rollback on markdown failure
+      throw e;
+    }
+    let commit_sha: string | null = null;
+    if (ctx.git) {
+      try {
+        commit_sha = await ctx.git.recordWrite(path, replacement);
+      } catch (e) {
+        process.stderr.write(
+          `krimto: git commit failed (fact ${replacement.frontmatter.id} is persisted): ${e instanceof Error ? e.message : String(e)}\n`,
+        );
+      }
+    }
+    return { old_id: input.id, new_id: replacement.frontmatter.id, commit_sha };
   });
-  const commit_sha = ctx.git ? await ctx.git.recordWrite(path, fact) : null;
-  return { old_id: input.id, new_id: fact.frontmatter.id, commit_sha };
 }
 
 /** Discover the scopes that exist and what they contain. */
 export async function krimtoListScopes(ctx: ToolContext): Promise<ListScopesResult> {
-  const scopes = (await ctx.store.listScopes()).filter((s) =>
-    canRead(ctx.membership, ctx.requester.identity, s.path),
-  );
+  const scopes = ctx.index.listScopes(readableScopesFor(ctx));
   return {
     scopes: scopes.map((s) => ({
       path: s.path,

@@ -11,6 +11,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { buildServer } from "../../src/server/index";
 import { FactStore } from "../../src/storage/store";
+import { openIndexDb } from "../../src/index/db";
+import { FactIndex } from "../../src/index/factIndex";
+import { Serializer } from "../../src/index/serialize";
 import { type ToolContext } from "../../src/server/tools";
 
 let root: string;
@@ -27,8 +30,11 @@ function textContent(content: unknown): string {
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-mcp-"));
+  const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
   const ctx: ToolContext = {
     store: new FactStore(root),
+    index: new FactIndex(db),
+    writeQueue: new Serializer(),
     requester: { identity: "alice@acme.com", teams: ["payments"] },
     membership: {
       org: { slug: "acme", admins: ["alice@acme.com"] },

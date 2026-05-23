@@ -14,7 +14,10 @@ import {
   embeddingConfigFromEnv,
 } from "../../src/index/providers";
 import { FactStore } from "../../src/storage/store";
-import { krimtoRecall, type ToolContext } from "../../src/server/tools";
+import { openIndexDb } from "../../src/index/db";
+import { FactIndex } from "../../src/index/factIndex";
+import { Serializer } from "../../src/index/serialize";
+import { krimtoRecall, krimtoWrite, type ToolContext } from "../../src/server/tools";
 import { type Membership } from "../../src/access/membership";
 
 class FakeProvider implements EmbeddingProvider {
@@ -97,32 +100,39 @@ describe("hybrid recall with an embedding provider", () => {
 
   it("retrieves a keyword-mismatched fact via its vector", async () => {
     const store = new FactStore(root);
-    await store.writeFact({
+    // FactIndex embeds just the body text; the query vector comes from embedQuery.
+    const provider = new FakeProvider({
+      "database wiped weekly": [1, 0, 0],
+      "Staging is reset every Sunday.": [1, 0, 0], // body of staging fact
+      "Verify the signature.": [0, 1, 0],           // body of stripe fact
+    });
+    // Build the index with the same provider so embeddings are stored during upsert.
+    const db = openIndexDb(":memory:", { provider: "fake", dimensions: 3 });
+    const index = new FactIndex(db, provider);
+    const membership: Membership = { org: { slug: "acme", admins: ["alice@acme.com"] }, teams: [], users: [] };
+    const ctx: ToolContext = {
+      store,
+      index,
+      writeQueue: new Serializer(),
+      membership,
+      requester: { identity: "alice@acme.com", teams: [] },
+      // embedQuery returns the raw query vector via the same provider.
+      embedQuery: async (query: string) => {
+        const [vec] = await provider.embed([query]);
+        return vec ? Float32Array.from(vec) : null;
+      },
+    };
+
+    await krimtoWrite(ctx, {
       scope: "user/alice@acme.com",
       title: "Staging reset",
       body: "Staging is reset every Sunday.",
-      author: "alice@acme.com",
     });
-    await store.writeFact({
+    await krimtoWrite(ctx, {
       scope: "user/alice@acme.com",
       title: "Stripe webhooks",
       body: "Verify the signature.",
-      author: "alice@acme.com",
     });
-
-    const provider = new FakeProvider({
-      "database wiped weekly": [1, 0, 0],
-      "Staging reset\nStaging is reset every Sunday.": [1, 0, 0],
-      "Stripe webhooks\nVerify the signature.": [0, 1, 0],
-    });
-    const membership: Membership = { org: { slug: "acme", admins: [] }, teams: [], users: [] };
-    const ctx: ToolContext = {
-      store,
-      membership,
-      requester: { identity: "alice@acme.com", teams: [] },
-      embeddings: provider,
-      embeddingCache: new EmbeddingCache(),
-    };
 
     // Query shares no keywords with either fact; only the vector links it to staging.
     const { results } = await krimtoRecall(ctx, { query: "database wiped weekly" });
