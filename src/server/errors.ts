@@ -19,3 +19,35 @@ export class KrimtoError extends Error {
     this.name = "KrimtoError";
   }
 }
+
+// Gap 16 — error code mappings. JSON-RPC custom server codes (-32000..-32003) for the
+// MCP surface; RFC 7231 statuses for the REST surface.
+const JSON_RPC_CODES: Record<KrimtoErrorCode, number> = {
+  invalid_params: -32602,
+  unauthorized: -32000,
+  forbidden: -32001,
+  rate_limited: -32002,
+  not_found: -32003,
+  internal: -32603,
+};
+
+const HTTP_STATUS: Record<KrimtoErrorCode, number> = {
+  invalid_params: 422,
+  unauthorized: 401,
+  forbidden: 403,
+  rate_limited: 429,
+  not_found: 404,
+  internal: 500,
+};
+
+export function jsonRpcCode(code: KrimtoErrorCode): number {
+  return JSON_RPC_CODES[code];
+}
+
+export function httpStatus(code: KrimtoErrorCode): number {
+  return HTTP_STATUS[code];
+}
+
+export function toJsonRpcError(error: KrimtoError): { code: number; message: string; data?: unknown } {
+  return { code: jsonRpcCode(error.code), message: error.message, data: error.data };
+}
