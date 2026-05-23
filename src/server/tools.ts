@@ -7,6 +7,7 @@ import { FactStore } from "../storage/store";
 import { recall } from "../retrieval/recall";
 import { isValidScope, type Requester } from "../access/scope";
 import { canRead, canWrite, type Membership } from "../access/membership";
+import { vectorScores, type EmbeddingCache, type EmbeddingProvider } from "../index/embeddings";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
@@ -15,6 +16,9 @@ export interface ToolContext {
   requester: Requester;
   /** Org/team/user membership for server-enforced access (Gap 07). */
   membership: Membership;
+  /** Optional embedding provider; absent = lexical-only retrieval (Gap 09). */
+  embeddings?: EmbeddingProvider;
+  embeddingCache?: EmbeddingCache;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -122,10 +126,19 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
     input.scopes && input.scopes.length > 0
       ? readable.filter((f) => input.scopes!.includes(f.frontmatter.scope))
       : readable;
+  let vScores: Map<string, number> | undefined;
+  if (ctx.embeddings) {
+    const docs = facts.map((f) => ({
+      id: f.frontmatter.id,
+      text: `${f.frontmatter.title}\n${f.body}`,
+    }));
+    vScores = await vectorScores(ctx.embeddings, input.query, docs, ctx.embeddingCache);
+  }
   const ranked = recall(input.query, facts, {
     requester: ctx.requester,
     limit: input.limit,
     now: clock(ctx),
+    vectorScores: vScores,
   });
   return {
     results: ranked.map((r) => ({

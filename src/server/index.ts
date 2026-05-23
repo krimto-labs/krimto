@@ -15,6 +15,8 @@ import { z } from "zod";
 
 import { FactStore } from "../storage/store";
 import { loadMembership, requesterFor } from "../access/membership";
+import { EmbeddingCache } from "../index/embeddings";
+import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
 import { KrimtoError } from "./errors";
 import {
   krimtoListScopes,
@@ -165,12 +167,18 @@ export async function main(): Promise<void> {
   const dataDir = resolveDataDir();
   const membership = await loadMembership(dataDir);
   const identity = resolveIdentity();
+  const embeddings = createEmbeddingProvider(embeddingConfigFromEnv());
   const ctx: ToolContext = {
     store: new FactStore(dataDir),
     membership,
     requester: requesterFor(membership, identity),
+    embeddings: embeddings ?? undefined,
+    embeddingCache: new EmbeddingCache(),
   };
   const server = buildServer(ctx);
+  if (embeddings) {
+    process.stderr.write(`Krimto embeddings: ${embeddings.name} (${embeddings.dimensions}d)\n`);
+  }
   await server.connect(new StdioServerTransport());
   process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);
 }
