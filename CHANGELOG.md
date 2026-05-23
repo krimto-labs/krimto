@@ -27,9 +27,10 @@ Memory engine (Tier 1):
 Team layer + operations (Tier 2):
 - Membership + server-enforced access (Gap 07): `.krimto/members.yaml`, four roles,
   `canRead`/`canWrite` — the API server is the access enforcer, not the filesystem.
-- API-key module (Gap 06): `krm_live_`/`krm_test_` key generation + at-rest hashing, implemented as
-  a library. **Not yet wired into the running server** — the stdio entrypoint resolves the requester
-  from `KRIMTO_IDENTITY`; bearer auth lands with the HTTP transport.
+- API-key bearer auth (Gap 06): `krm_live_`/`krm_test_` keys, generated + hashed at rest. Wired into
+  the HTTP transport — each request's `Authorization: Bearer …` is verified against the key store and
+  resolved to the requester's identity + teams (`src/server/tokenVerifier.ts`). The stdio entrypoint
+  remains no-auth (identity from `KRIMTO_IDENTITY`) for local use.
 - Access enforced across every tool: writes to disallowed scopes are forbidden; recall and
   list_scopes only surface readable scopes; read returns not_found for unreadable facts.
 - Pluggable embeddings (Gap 09): lexical-only by default (no key); OpenAI, Voyage, and custom
@@ -46,16 +47,21 @@ Team layer + operations (Tier 2):
   configurable via `KRIMTO_PULL_INTERVAL_MS`) and re-indexes teammates' direct edits — added,
   edited, and deleted facts all show up in search. Pull conflicts are aborted and retried, never
   blocking writes.
+- HTTP transport (Gap 02): with `KRIMTO_HTTP_PORT` set, Krimto serves MCP over Streamable HTTP at
+  `/mcp` (bearer-authenticated) and exposes `GET /health/live` + `GET /health/ready` (returning
+  `{sqlite, index, git_remote}`) — wired in `src/server/http.ts` + `src/server/index.ts`.
+- First-run bootstrap (Gap 06): `KRIMTO_BOOTSTRAP_ADMIN=<email>` issues one admin API key (printed
+  once) and makes that user an org admin in `.krimto/members.yaml`.
 - Structured error codes on the MCP surface: `KrimtoError` maps to JSON-RPC errors in the tool
-  handlers (`src/server/index.ts`). The health-check, rate-limit, and opt-in-telemetry modules
-  (Gaps 17-19) are implemented but **not yet served** — they activate with the HTTP transport.
+  handlers. The rate-limit and opt-in-telemetry modules (Gaps 18-19) are implemented but **not yet
+  served** — they activate next on the HTTP server.
 
 - Persistent SQLite index: FTS5 keyword search + sqlite-vec vector search with an embedding
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 167 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
-access-control suite, and a hybrid keyword-mismatch retrieval.
+Verified by 182 tests, including the v0.1 acceptance flow, MCP round-trips over both stdio and HTTP
+(with bearer auth), an access-control suite, and a hybrid keyword-mismatch retrieval.
 
 _Remaining v0.2 work (minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
 

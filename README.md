@@ -1,6 +1,6 @@
 # Krimto
 
-> **Krimto — the open-source team memory layer for AI coding agents, with user/team/org hierarchy and markdown-files-in-git storage. Apache-2.0. Self-hostable (local MCP server today; HTTP/Docker on the roadmap).**
+> **Krimto — the open-source team memory layer for AI coding agents, with user/team/org hierarchy and markdown-files-in-git storage. Apache-2.0. Self-hostable — local stdio MCP server, or an HTTP server with bearer auth (single-Docker image on the roadmap).**
 
 One shared brain for every agent at your company. Every agent at every team writes facts to one
 place and reads the right slice of it — Alice's preferences override the team's defaults, the team's
@@ -9,9 +9,9 @@ timestamp, reviewer).
 
 > **Where we are:** this is the **v0.2** surface. Here today: the markdown-in-git storage layer, the
 > `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, and the
-> **MCP server over stdio**. Not yet wired: the HTTP transport, single-Docker image, bearer auth, and
-> the web UI — all near-term on the roadmap. We claim the team-memory position now and fulfil it in
-> the open — see [ROADMAP.md](ROADMAP.md).
+> MCP server over **both stdio and HTTP — the HTTP transport has `Bearer` API-key auth and
+> `/health` endpoints**. On the near-term roadmap: a single-Docker image and the web UI. We claim the
+> team-memory position now and fulfil it in the open — see [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -32,21 +32,18 @@ differentiator is the storage *choice within* that pattern — human-readable ma
 
 ## Quick start (self-host)
 
-Krimto v0.2 runs as a local **MCP server over stdio**. (An HTTP transport + single-Docker image are
-the next milestone — see [ROADMAP.md](ROADMAP.md).)
-
 ```bash
 git clone https://github.com/krimto-labs/krimto && cd krimto
 pnpm install
 ```
 
 Facts live as markdown files under `KRIMTO_DATA` (default `~/.krimto/`) — a folder you can open in any
-editor and version with git.
+editor and version with git. A single-Docker image is on the roadmap; today you run it with `pnpm`.
 
-### Connect your agent (MCP)
+### Option A — local, over stdio (no auth)
 
-Add Krimto as a **stdio** MCP server. Claude Code example (Cursor, Codex CLI, Gemini CLI, Copilot,
-OpenClaw, and Cline use the same stdio-command shape):
+For a single developer on one machine. Add Krimto as a **stdio** MCP server (Claude Code shown;
+Cursor, Codex CLI, Gemini CLI, Copilot, OpenClaw, and Cline use the same stdio-command shape):
 
 ```json
 {
@@ -54,19 +51,39 @@ OpenClaw, and Cline use the same stdio-command shape):
     "krimto": {
       "command": "pnpm",
       "args": ["--dir", "/absolute/path/to/krimto", "dev"],
-      "env": {
-        "KRIMTO_DATA": "/Users/you/.krimto",
-        "KRIMTO_IDENTITY": "you@acme.com"
-      }
+      "env": { "KRIMTO_DATA": "/Users/you/.krimto", "KRIMTO_IDENTITY": "you@acme.com" }
     }
   }
 }
 ```
 
-`KRIMTO_IDENTITY` is who the agent writes as (it sets the fact author and the access scope). v0.2 has
-**no network auth yet** — identity comes from this environment variable, so run Krimto locally/trusted
-until bearer auth lands with the HTTP transport. To sync with teammates, set `KRIMTO_GIT_REMOTE` to a
-git remote you can push/pull over SSH.
+`KRIMTO_IDENTITY` is who the agent writes as (fact author + access scope). Stdio mode has **no network
+auth** — run it locally/trusted.
+
+### Option B — over HTTP, with bearer auth (teams)
+
+For a shared/networked deployment. Start the HTTP server; the first run prints an admin API key once:
+
+```bash
+KRIMTO_HTTP_PORT=8080 KRIMTO_BOOTSTRAP_ADMIN=you@acme.com pnpm dev
+# → "issued admin API key for you@acme.com (shown once): krm_live_…"
+# MCP at http://localhost:8080/mcp ; health at http://localhost:8080/health/ready
+```
+
+Then point your agent at it with that key:
+
+```json
+{
+  "mcpServers": {
+    "krimto": {
+      "url": "http://localhost:8080/mcp",
+      "headers": { "Authorization": "Bearer krm_live_..." }
+    }
+  }
+}
+```
+
+To sync with teammates, set `KRIMTO_GIT_REMOTE` to a git remote you can push/pull over SSH.
 
 ## The eight promises (current status)
 
@@ -74,9 +91,9 @@ git remote you can push/pull over SSH.
 |---|---------|--------|
 | 1 | Markdown-first hybrid storage | ✓ v0.2 |
 | 2 | Hierarchical scope (`user`/`team`/`org`) as primary primitive | ✓ v0.2 |
-| 3 | Cross-vendor SDK (MCP server + per-marketplace plugins) | ✓ MCP server (stdio) v0.2; HTTP transport + native plugins planned |
+| 3 | Cross-vendor SDK (MCP server + per-marketplace plugins) | ✓ MCP server over stdio + HTTP v0.2; native plugins planned |
 | 4 | Attribution baked into every fact | ✓ v0.2 |
-| 5 | Self-hostable, single Docker | ⏳ local stdio server today; single-Docker + HTTP transport next |
+| 5 | Self-hostable, single Docker | ⏳ stdio + HTTP server (bearer auth) self-hostable today; single-Docker image next |
 | 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
 | 7 | Web interface for humans, on top of git | ⏳ planned for v0.3 |
 | 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |
