@@ -4,6 +4,7 @@
 
 import type { Database as Db } from "better-sqlite3";
 import type { FactIndex } from "../index/factIndex";
+import type { CommitBatcher } from "../storage/batcher";
 
 export interface CheckResult {
   status: "ok" | "building" | "error";
@@ -53,4 +54,13 @@ export function sqliteHealth(db: Db): CheckResult {
 export function indexHealth(index: FactIndex, building: boolean): CheckResult {
   if (building) return { status: "building" };
   return { status: "ok", fact_count: index.factCount() };
+}
+
+/** Reports the last push status (observability only — never toggles readiness). */
+export function gitRemoteHealth(batcher: CommitBatcher): CheckResult {
+  const status = batcher.lastPushStatus();
+  if (status === "error") return { status: "error", detail: "last push to the remote failed" };
+  const detail =
+    status === "ok" ? "last push ok" : status === "none" ? "no push yet" : "no remote configured";
+  return { status: "ok", detail };
 }

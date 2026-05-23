@@ -197,6 +197,9 @@ export async function main(): Promise<void> {
   const index = new FactIndex(db, embeddingProvider ?? undefined);
   await buildIndexIfNeeded(index, store, db, indexConfig);
   const repo = await GitRepo.open(dataDir);
+  if (process.env.KRIMTO_GIT_REMOTE) {
+    await repo.setRemote(process.env.KRIMTO_GIT_REMOTE);
+  }
   const batcher = new CommitBatcher(repo, batcherConfigFromEnv());
   const ctx: ToolContext = {
     store,
