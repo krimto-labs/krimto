@@ -14,7 +14,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { FactStore } from "../storage/store";
-import { type Requester } from "../access/scope";
+import { loadMembership, requesterFor } from "../access/membership";
 import { KrimtoError } from "./errors";
 import {
   krimtoListScopes,
@@ -31,13 +31,8 @@ export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
 }
 
-export function resolveRequester(): Requester {
-  const identity = process.env.KRIMTO_IDENTITY ?? "user@localhost";
-  const teams = (process.env.KRIMTO_TEAMS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return { identity, teams };
+export function resolveIdentity(): string {
+  return process.env.KRIMTO_IDENTITY ?? "user@localhost";
 }
 
 function ok(data: unknown): CallToolResult {
@@ -167,9 +162,13 @@ export function buildServer(ctx: ToolContext): McpServer {
 }
 
 export async function main(): Promise<void> {
+  const dataDir = resolveDataDir();
+  const membership = await loadMembership(dataDir);
+  const identity = resolveIdentity();
   const ctx: ToolContext = {
-    store: new FactStore(resolveDataDir()),
-    requester: resolveRequester(),
+    store: new FactStore(dataDir),
+    membership,
+    requester: requesterFor(membership, identity),
   };
   const server = buildServer(ctx);
   await server.connect(new StdioServerTransport());

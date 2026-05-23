@@ -21,6 +21,12 @@ beforeEach(async () => {
   ctx = {
     store: new FactStore(root),
     requester: { identity: "alice@acme.com", teams: ["payments"] },
+    // alice is an org admin (writes anywhere) and a payments member.
+    membership: {
+      org: { slug: "acme", admins: ["alice@acme.com"] },
+      teams: [{ slug: "payments", members: ["alice@acme.com"], leads: [] }],
+      users: [],
+    },
   };
 });
 afterEach(async () => {

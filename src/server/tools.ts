@@ -6,12 +6,15 @@ import { MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
 import { FactStore } from "../storage/store";
 import { recall } from "../retrieval/recall";
 import { isValidScope, type Requester } from "../access/scope";
+import { canRead, canWrite, type Membership } from "../access/membership";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
   store: FactStore;
-  /** Resolved from auth (Gap 06); for now supplied by the caller. */
+  /** Resolved from auth (Gap 06). */
   requester: Requester;
+  /** Org/team/user membership for server-enforced access (Gap 07). */
+  membership: Membership;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -91,6 +94,9 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
   if (!input.body) {
     throw new KrimtoError("invalid_params", "body is required", { field: "body" });
   }
+  if (!canWrite(ctx.membership, ctx.requester.identity, input.scope)) {
+    throw new KrimtoError("forbidden", `Not allowed to write to ${input.scope}`, { scope: input.scope });
+  }
   const { fact, path } = await ctx.store.writeFact({
     scope: input.scope,
     title: input.title,
@@ -108,10 +114,14 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
 /** Search across one or more scopes using hybrid retrieval with hierarchical precedence. */
 export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promise<RecallResult> {
   const all = await ctx.store.allFacts();
+  // Only ever consider facts the requester is allowed to read.
+  const readable = all.filter((f) =>
+    canRead(ctx.membership, ctx.requester.identity, f.frontmatter.scope),
+  );
   const facts =
     input.scopes && input.scopes.length > 0
-      ? all.filter((f) => input.scopes!.includes(f.frontmatter.scope))
-      : all;
+      ? readable.filter((f) => input.scopes!.includes(f.frontmatter.scope))
+      : readable;
   const ranked = recall(input.query, facts, {
     requester: ctx.requester,
     limit: input.limit,
@@ -133,7 +143,10 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
 /** Fetch one fact by id, including its full frontmatter (git history lands in Gap 08). */
 export async function krimtoRead(ctx: ToolContext, id: string): Promise<ReadResult> {
   const found = await ctx.store.readFact(id);
-  if (!found) throw new KrimtoError("not_found", `Fact ${id} not found`, { id });
+  // Not-found is returned for unreadable facts too, so existence isn't leaked.
+  if (!found || !canRead(ctx.membership, ctx.requester.identity, found.fact.frontmatter.scope)) {
+    throw new KrimtoError("not_found", `Fact ${id} not found`, { id });
+  }
   const { fact } = found;
   return {
     id: fact.frontmatter.id,
@@ -151,7 +164,12 @@ export async function krimtoSupersede(
   input: SupersedeInput,
 ): Promise<SupersedeResult> {
   const old = await ctx.store.readFact(input.id);
-  if (!old) throw new KrimtoError("not_found", `Fact ${input.id} not found`, { id: input.id });
+  if (!old || !canRead(ctx.membership, ctx.requester.identity, old.fact.frontmatter.scope)) {
+    throw new KrimtoError("not_found", `Fact ${input.id} not found`, { id: input.id });
+  }
+  if (!canWrite(ctx.membership, ctx.requester.identity, old.fact.frontmatter.scope)) {
+    throw new KrimtoError("forbidden", `Not allowed to write to ${old.fact.frontmatter.scope}`);
+  }
   if (!input.new_title || input.new_title.length > MAX_TITLE_LENGTH) {
     throw new KrimtoError("invalid_params", `new_title is required and must be <= ${MAX_TITLE_LENGTH} chars`);
   }
@@ -168,7 +186,9 @@ export async function krimtoSupersede(
 
 /** Discover the scopes that exist and what they contain. */
 export async function krimtoListScopes(ctx: ToolContext): Promise<ListScopesResult> {
-  const scopes = await ctx.store.listScopes();
+  const scopes = (await ctx.store.listScopes()).filter((s) =>
+    canRead(ctx.membership, ctx.requester.identity, s.path),
+  );
   return {
     scopes: scopes.map((s) => ({
       path: s.path,

@@ -30,6 +30,11 @@ beforeEach(async () => {
   const ctx: ToolContext = {
     store: new FactStore(root),
     requester: { identity: "alice@acme.com", teams: ["payments"] },
+    membership: {
+      org: { slug: "acme", admins: ["alice@acme.com"] },
+      teams: [{ slug: "payments", members: ["alice@acme.com"], leads: [] }],
+      users: [],
+    },
   };
   const server = buildServer(ctx);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
