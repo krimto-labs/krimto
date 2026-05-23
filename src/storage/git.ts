@@ -11,6 +11,12 @@ export interface PushResult {
   detail?: string;
 }
 
+export interface PullResult {
+  status: "ok" | "skipped" | "up-to-date" | "conflict" | "error";
+  changedFiles?: string[];
+  detail?: string;
+}
+
 export class GitRepo {
   private constructor(private readonly dir: string) {}
 
@@ -102,6 +108,37 @@ export class GitRepo {
     } catch (e) {
       return { status: "error", detail: e instanceof Error ? e.message : String(e) };
     }
+  }
+
+  /** Files changed between two commits (all tracked files when `before` is null). */
+  private async changedFiles(before: string | null, after: string | null): Promise<string[]> {
+    if (after === null) return [];
+    const args =
+      before === null
+        ? ["-C", this.dir, "ls-tree", "-r", "--name-only", "HEAD"]
+        : ["-C", this.dir, "diff", "--name-only", `${before}..${after}`];
+    const { stdout } = await exec("git", args);
+    return stdout.split("\n").filter((l) => l.length > 0);
+  }
+
+  /** git pull --rebase from origin. Skipped without a remote; conflicts are aborted (local kept). */
+  async pull(): Promise<PullResult> {
+    if (!(await this.hasRemote())) return { status: "skipped" };
+    const before = await this.head();
+    try {
+      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", "HEAD"]);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      try {
+        await exec("git", ["-C", this.dir, "rebase", "--abort"]);
+        return { status: "conflict", detail };
+      } catch {
+        return { status: "error", detail };
+      }
+    }
+    const after = await this.head();
+    if (before === after) return { status: "up-to-date" };
+    return { status: "ok", changedFiles: await this.changedFiles(before, after) };
   }
 }
 

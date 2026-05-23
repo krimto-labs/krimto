@@ -91,3 +91,68 @@ describe("GitRepo remote", () => {
     expect(await repo.hasRemote()).toBe(true);
   });
 });
+
+describe("GitRepo pull", () => {
+  let bare: string;
+  let dir: string;
+  let mate: string;
+  beforeEach(async () => {
+    bare = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-bare-"));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-local-"));
+    mate = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-mate-"));
+    await execFileP("git", ["init", "--bare", "-q", bare]);
+    const repo = await GitRepo.open(dir);
+    const store = new FactStore(dir);
+    const { path: rel } = await store.writeFact({ scope: "org/acme", title: "Seed", body: "seed body", author: "a@x.com" });
+    await repo.stage(rel);
+    await repo.commit("krimto: seed");
+    await repo.setRemote(bare);
+    await repo.push();
+    await execFileP("git", ["clone", "-q", bare, mate]);
+    await execFileP("git", ["-C", mate, "config", "user.email", "mate@x.com"]);
+    await execFileP("git", ["-C", mate, "config", "user.name", "Mate"]);
+  });
+  afterEach(async () => {
+    for (const d of [bare, dir, mate]) await fs.rm(d, { recursive: true, force: true });
+  });
+
+  it("pulls a teammate's new file and lists it as changed", async () => {
+    await fs.mkdir(path.join(mate, "org/acme"), { recursive: true });
+    await fs.writeFile(path.join(mate, "org/acme/mate.md"), "---\nid: x\n---\nmate note\n", "utf8");
+    await execFileP("git", ["-C", mate, "add", "-A"]);
+    await execFileP("git", ["-C", mate, "commit", "-q", "-m", "mate: add"]);
+    await execFileP("git", ["-C", mate, "push", "-q"]);
+
+    const repo = await GitRepo.open(dir);
+    const res = await repo.pull();
+    expect(res.status).toBe("ok");
+    expect(res.changedFiles).toContain("org/acme/mate.md");
+    await expect(fs.access(path.join(dir, "org/acme/mate.md"))).resolves.toBeUndefined();
+  });
+
+  it("returns up-to-date when there is nothing new", async () => {
+    const repo = await GitRepo.open(dir);
+    expect((await repo.pull()).status).toBe("up-to-date");
+  });
+
+  it("returns skipped when no remote is configured", async () => {
+    const solo = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-solo-"));
+    const repo = await GitRepo.open(solo);
+    expect((await repo.pull()).status).toBe("skipped");
+    await fs.rm(solo, { recursive: true, force: true });
+  });
+
+  it("aborts a conflicting rebase and preserves the local commit", async () => {
+    const seedRel = "org/acme/seed.md";
+    await fs.writeFile(path.join(mate, seedRel), "---\nid: s\n---\nteammate version\n", "utf8");
+    await execFileP("git", ["-C", mate, "commit", "-aqm", "mate: edit seed"]);
+    await execFileP("git", ["-C", mate, "push", "-q"]);
+    const repo = await GitRepo.open(dir);
+    await fs.writeFile(path.join(dir, seedRel), "---\nid: s\n---\nkrimto version\n", "utf8");
+    await execFileP("git", ["-C", dir, "commit", "-aqm", "krimto: edit seed"]);
+    const localHead = await repo.head();
+    const res = await repo.pull();
+    expect(res.status).toBe("conflict");
+    expect(await repo.head()).toBe(localHead);
+  });
+});
