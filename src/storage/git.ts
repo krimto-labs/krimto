@@ -1,12 +1,8 @@
-// Gap 08 — Git write coordination. The server is the single writer to git: it stages
-// each fact file and commits with a Krimto-generated message, so git is the audit log.
-//
-// v0.2 commits per write (correct, slightly noisier history). The timed/threshold
-// batcher and push-to-remote are a follow-on tuning step.
+// Gap 08 — low-level git primitives. The server is the single writer to git; CommitBatcher
+// (src/storage/batcher.ts) stages each fact and commits batches on top of these primitives.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { type Fact } from "./fact";
 
 const exec = promisify(execFile);
 
@@ -74,31 +70,3 @@ export class GitRepo {
   }
 }
 
-/** Build the Build Spec commit message for a fact write. */
-export function commitMessage(fact: Fact, serverEmail = "krimto@localhost"): string {
-  const fm = fact.frontmatter;
-  const tags = fm.tags?.length ? fm.tags.join(", ") : "(none)";
-  return [
-    `krimto: write [scope=${fm.scope}] by ${fm.author}`,
-    "",
-    `Title: ${fm.title}`,
-    `Fact ID: ${fm.id}`,
-    `Tags: ${tags}`,
-    "",
-    `Co-authored-by: Krimto-Server <${serverEmail}>`,
-  ].join("\n");
-}
-
-export class GitWriter {
-  constructor(private readonly repo: GitRepo) {}
-
-  static async open(dir: string): Promise<GitWriter> {
-    return new GitWriter(await GitRepo.open(dir));
-  }
-
-  /** Stage a written fact file and commit it. Returns the commit SHA. */
-  async recordWrite(relPath: string, fact: Fact): Promise<string | null> {
-    await this.repo.stage(relPath);
-    return this.repo.commit(commitMessage(fact));
-  }
-}
