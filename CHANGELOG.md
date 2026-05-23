@@ -24,9 +24,24 @@ Memory engine (Tier 1):
 - MCP server (Gap 02): five tools — `krimto_write`, `krimto_recall`, `krimto_read`,
   `krimto_supersede`, `krimto_list_scopes` — served over stdio.
 
-Verified by 68 tests, including the v0.1 acceptance flow and an MCP protocol round-trip.
+Team layer + operations (Tier 2):
+- Membership + server-enforced access (Gap 07): `.krimto/members.yaml`, four roles,
+  `canRead`/`canWrite` — the API server is the access enforcer, not the filesystem.
+- API key authentication (Gap 06): `krm_live_`/`krm_test_` keys hashed at rest, shown once;
+  OAuth providers scaffolded for the web UI.
+- Access enforced across every tool: writes to disallowed scopes are forbidden; recall and
+  list_scopes only surface readable scopes; read returns not_found for unreadable facts.
+- Pluggable embeddings (Gap 09): lexical-only by default (no key); OpenAI, Voyage, and custom
+  OpenAI-compatible adapters; hybrid (vector + lexical) retrieval when a provider is configured.
+- Git write coordination (Gap 08): each write committed with the spec message format; `commit_sha`
+  populated.
+- Operational essentials (Gaps 16-19): error-code mapping, health checks, rate limiting, opt-in
+  (off-by-default) telemetry.
 
-_Remaining v0.2 work (auth, membership/access enforcement, git write coordination, SQLite +
-embeddings index, minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
+Verified by 115 tests, including the v0.1 acceptance flow, an MCP protocol round-trip, an
+access-control suite, and a hybrid keyword-mismatch retrieval.
+
+_Remaining v0.2 work (persistent SQLite + sqlite-vec index, git remote auth/push + commit
+batching, minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main
