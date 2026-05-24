@@ -4,7 +4,10 @@
   "description": "Open-source team memory layer for AI agents (MCP server).",
   "mcpServers": {
     "krimto": {
-      "url": "http://localhost:8080"
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer krm_live_..."
+      }
     }
   }
 }
