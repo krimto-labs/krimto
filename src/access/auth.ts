@@ -1,5 +1,6 @@
 // Gap 06 — Authentication. MCP clients present an API key (bearer token); humans
-// use OAuth (web UI, v0.3). Keys are krm_live_/krm_test_ + 32 random base62 chars,
+// paste an API key into the web UI (/ui), which holds it as a signed-cookie session
+// (real OAuth sign-in is v0.3). Keys are krm_live_/krm_test_ + 32 random base62 chars,
 // shown once, stored only as a hash.
 //
 // Note: API keys are ~190-bit random tokens, not passwords. A fast SHA-256 hash at
