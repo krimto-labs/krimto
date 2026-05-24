@@ -14,6 +14,8 @@ import { requesterFromAuth, type ToolContext } from "./tools";
 import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck } from "./health";
 import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
+import { buildWebRouter } from "../web/router";
+import { sessionConfigFromEnv } from "../web/session";
 
 export interface HttpAppDeps {
   ctx: ToolContext;
@@ -32,6 +34,7 @@ export interface HttpAppDeps {
 export function buildHttpApp(deps: HttpAppDeps): Express {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
 
   app.get("/health/live", (_req: Request, res: Response) => {
     res.json(healthLive(deps.version, (Date.now() - deps.startedAt) / 1000));
@@ -77,6 +80,16 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
   app.get("/mcp", auth, rateLimit, (req, res) => {
     void handleMcp(req, res);
   });
+
+  app.use(
+    "/ui",
+    buildWebRouter({
+      ctx: deps.ctx,
+      keys: deps.keys,
+      membership: deps.membership,
+      sessionSecret: sessionConfigFromEnv().secret,
+    }),
+  );
 
   return app;
 }
