@@ -108,6 +108,17 @@ The container serves MCP at `http://localhost:8080/mcp` (bearer auth) and health
 `/health/ready`; facts persist in the mounted `/data` volume. Point your agent at it with the same
 `"url"` + `Bearer` config as Option B.
 
+**Pulling a published image (no local build):** pushing a `v*` git tag runs
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml), which publishes the
+image to `ghcr.io/krimto-labs/krimto`. After the first release tag you can skip `docker build` and run
+the published image directly:
+
+```bash
+docker run -d --name krimto -p 8080:8080 \
+  -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com -v ~/.krimto:/data \
+  ghcr.io/krimto-labs/krimto:latest
+```
+
 ## The eight promises (current status)
 
 | # | Promise | Status |

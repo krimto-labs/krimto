@@ -1,0 +1,49 @@
+name: docker-publish
+
+# Builds the Docker image and publishes it to GitHub Container Registry (GHCR).
+# Triggers on a version tag (e.g. `v0.2.0`) or a manual run. The image lands at
+# ghcr.io/<owner>/<repo> and is tagged with the semver and `latest`.
+#
+# Requires no extra secrets: GITHUB_TOKEN (with packages:write below) authenticates
+# the push to GHCR. The package is private by default until made public in the repo's
+# Packages settings.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
