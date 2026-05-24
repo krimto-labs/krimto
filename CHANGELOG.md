@@ -66,16 +66,23 @@ Team layer + operations (Tier 2):
   content-free** usage counts (version, a stable install id, and size buckets) — never fact content,
   identities, queries, scope paths, or git remotes. Off by default; best-effort (a failed send is
   logged and ignored, never crashing the server). Wired in `src/server/index.ts` (HTTP mode only).
+- Web UI (`/ui`): a server-rendered surface where humans sign in with an API key (HMAC signed-cookie
+  session), browse/search the facts they can read, view a fact, and list/issue/revoke their own API
+  keys. Reads go through the same access-controlled tool functions as MCP, so a human sees only what
+  they're entitled to; all rendered content is HTML-escaped. Wired in `src/server/http.ts`; pages in
+  `src/web/*`. Set `KRIMTO_SESSION_SECRET` to persist sessions across restarts.
+- Docker image publishing (Gap 10): `.github/workflows/docker-publish.yml` builds and pushes the
+  image to `ghcr.io/krimto-labs/krimto` on a `v*` tag (runs once the repo has a GitHub remote).
 
 - Persistent SQLite index: FTS5 keyword search + sqlite-vec vector search with an embedding
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 188 tests, including the v0.1 acceptance flow, MCP round-trips over both stdio and HTTP
-(with bearer auth), an access-control suite, a hybrid keyword-mismatch retrieval, and an HTTP
-rate-limit (`429`) end-to-end check.
+Verified by 203 tests, including the v0.1 acceptance flow, MCP round-trips over both stdio and HTTP
+(with bearer auth), an access-control suite, a hybrid keyword-mismatch retrieval, an HTTP rate-limit
+(`429`) end-to-end check, and a web-UI flow (login, scoped browse, fact 404, key revoke, XSS escaping).
 
-_Remaining v0.2 work (published pull-image and the minimal web UI) tracked in
-[ROADMAP.md](ROADMAP.md)._
+_The remaining v0.2 item — actually publishing the pull-image — is tracked in
+[ROADMAP.md](ROADMAP.md); the publish workflow is in place and runs once the repo has a remote._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main

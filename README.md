@@ -119,6 +119,15 @@ docker run -d --name krimto -p 8080:8080 \
   ghcr.io/krimto-labs/krimto:latest
 ```
 
+### Web UI (humans)
+
+When the HTTP server is running, open `http://localhost:8080/ui` and **sign in with any Krimto API
+key**. You can browse and search the facts you're allowed to see, open a fact, and manage your own API
+keys (issue / revoke). It reuses the same access control as the MCP tools, so you only ever see facts
+you can read. Set `KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random
+per-boot secret is used). The UI is read-only for facts; editing with a review/approval flow lands in
+v0.3.
+
 ## The eight promises (current status)
 
 | # | Promise | Status |
@@ -129,7 +138,7 @@ docker run -d --name krimto -p 8080:8080 \
 | 4 | Attribution baked into every fact | ✓ v0.2 |
 | 5 | Self-hostable, single Docker | ✓ v0.2 — stdio, HTTP, or **Docker** (`docker build` + `docker run`); a published pull-image is next |
 | 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
-| 7 | Web interface for humans, on top of git | ⏳ planned for v0.3 |
+| 7 | Web interface for humans, on top of git | ✓ minimal v0.2 (`/ui` — login, browse/search, fact detail, API keys); full UI + PR approval in v0.3 |
 | 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |
 
 ## How Krimto compares
