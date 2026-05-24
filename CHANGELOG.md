@@ -57,16 +57,25 @@ Team layer + operations (Tier 2):
   krimto` boots, serves `/health/ready`, and persists facts in the `/data` volume (verified
   end-to-end with a real MCP client over HTTP).
 - Structured error codes on the MCP surface: `KrimtoError` maps to JSON-RPC errors in the tool
-  handlers. The rate-limit and opt-in-telemetry modules (Gaps 18-19) are implemented but **not yet
-  served** — they activate next on the HTTP server.
+  handlers.
+- Rate limiting (Gap 18): set `KRIMTO_RATE_LIMIT_PER_MINUTE` to enforce a per-API-key cap on the
+  HTTP `/mcp` route — every response carries `X-RateLimit-*`, and exceeding the cap returns `429`
+  with `Retry-After`. Off by default; keyed on the authenticated identity. Wired in
+  `src/server/http.ts` + `src/server/index.ts`.
+- Opt-in telemetry (Gap 19): set `KRIMTO_TELEMETRY_ENDPOINT` to periodically POST **bucketed,
+  content-free** usage counts (version, a stable install id, and size buckets) — never fact content,
+  identities, queries, scope paths, or git remotes. Off by default; best-effort (a failed send is
+  logged and ignored, never crashing the server). Wired in `src/server/index.ts` (HTTP mode only).
 
 - Persistent SQLite index: FTS5 keyword search + sqlite-vec vector search with an embedding
   cache, built from the markdown files and rebuilt on startup. Recall, read, and list-scopes
   now serve from the index instead of scanning every file.
 
-Verified by 182 tests, including the v0.1 acceptance flow, MCP round-trips over both stdio and HTTP
-(with bearer auth), an access-control suite, and a hybrid keyword-mismatch retrieval.
+Verified by 188 tests, including the v0.1 acceptance flow, MCP round-trips over both stdio and HTTP
+(with bearer auth), an access-control suite, a hybrid keyword-mismatch retrieval, and an HTTP
+rate-limit (`429`) end-to-end check.
 
-_Remaining v0.2 work (minimal web UI) tracked in [ROADMAP.md](ROADMAP.md)._
+_Remaining v0.2 work (published pull-image and the minimal web UI) tracked in
+[ROADMAP.md](ROADMAP.md)._
 
 [Unreleased]: https://github.com/krimto-labs/krimto/commits/main

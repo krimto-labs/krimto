@@ -85,6 +85,12 @@ Then point your agent at it with that key:
 
 To sync with teammates, set `KRIMTO_GIT_REMOTE` to a git remote you can push/pull over SSH.
 
+Optional HTTP knobs (both **off by default**): set `KRIMTO_RATE_LIMIT_PER_MINUTE=<n>` to rate-limit
+each API key on `/mcp` (responses carry `X-RateLimit-*`; over the limit returns `429` with
+`Retry-After`); set `KRIMTO_TELEMETRY_ENDPOINT=<url>` to send anonymous, **bucketed** usage counts
+(version, install id, and size buckets only — never fact content, identities, queries, scopes, or git
+remotes).
+
 ### Option C — Docker (HTTP + bearer auth, containerized)
 
 Build the image and run it (a published image is coming):

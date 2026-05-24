@@ -17,10 +17,10 @@ bearer auth, or a **Docker** container.
 - **`/health/live` + `/health/ready`** endpoints; first-run admin-key bootstrap (`KRIMTO_BOOTSTRAP_ADMIN`)
 - Server-coordinated batched writes to git; remote push; periodic pull with external-edit re-index
 - **Docker image** (`docker build` + `docker run`) packaging the HTTP server, with a persisted `/data` volume
+- **Per-API-key rate limiting** (`KRIMTO_RATE_LIMIT_PER_MINUTE`) and **opt-in, bucketed telemetry** (`KRIMTO_TELEMETRY_ENDPOINT`) on the HTTP transport — both off by default
 
 **In progress / next up:**
 - Published pull-image (registry) + CI image build, so `docker run <image>` needs no local build
-- Rate limiting + opt-in telemetry (modules built; wire onto the HTTP server)
 - OAuth scaffold (humans) and the minimal web UI (browse, search, fact detail, API keys)
 
 ## v0.3 — Humans on top of git
