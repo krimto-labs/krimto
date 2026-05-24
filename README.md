@@ -38,7 +38,7 @@ pnpm install
 ```
 
 Facts live as markdown files under `KRIMTO_DATA` (default `~/.krimto/`) — a folder you can open in any
-editor and version with git. A single-Docker image is on the roadmap; today you run it with `pnpm`.
+editor and version with git. Run Krimto with `pnpm` (Options A/B) or in **Docker** (Option C).
 
 ### Option A — local, over stdio (no auth)
 
@@ -85,6 +85,23 @@ Then point your agent at it with that key:
 
 To sync with teammates, set `KRIMTO_GIT_REMOTE` to a git remote you can push/pull over SSH.
 
+### Option C — Docker (HTTP + bearer auth, containerized)
+
+Build the image and run it (a published image is coming):
+
+```bash
+docker build -t krimto .
+docker run -d --name krimto -p 8080:8080 \
+  -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com \
+  -v ~/.krimto:/data \
+  krimto
+docker logs krimto | grep "admin API key"   # the key is printed once
+```
+
+The container serves MCP at `http://localhost:8080/mcp` (bearer auth) and health at
+`/health/ready`; facts persist in the mounted `/data` volume. Point your agent at it with the same
+`"url"` + `Bearer` config as Option B.
+
 ## The eight promises (current status)
 
 | # | Promise | Status |
@@ -93,7 +110,7 @@ To sync with teammates, set `KRIMTO_GIT_REMOTE` to a git remote you can push/pul
 | 2 | Hierarchical scope (`user`/`team`/`org`) as primary primitive | ✓ v0.2 |
 | 3 | Cross-vendor SDK (MCP server + per-marketplace plugins) | ✓ MCP server over stdio + HTTP v0.2; native plugins planned |
 | 4 | Attribution baked into every fact | ✓ v0.2 |
-| 5 | Self-hostable, single Docker | ⏳ stdio + HTTP server (bearer auth) self-hostable today; single-Docker image next |
+| 5 | Self-hostable, single Docker | ✓ v0.2 — stdio, HTTP, or **Docker** (`docker build` + `docker run`); a published pull-image is next |
 | 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
 | 7 | Web interface for humans, on top of git | ⏳ planned for v0.3 |
 | 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |

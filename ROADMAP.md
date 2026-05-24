@@ -5,8 +5,8 @@ open — shipping toward it release by release. Each milestone has a tracking is
 
 ## v0.2 — Team memory (first public release)
 
-The memory core, shipped — runnable as a local **stdio** MCP server or an **HTTP** server with
-bearer auth.
+The memory core, shipped — runnable as a local **stdio** MCP server, an **HTTP** server with
+bearer auth, or a **Docker** container.
 
 **Shipped and wired into the running server:**
 - Markdown-in-git storage layer; one file per fact with mandatory frontmatter
@@ -16,9 +16,10 @@ bearer auth.
 - **API-key bearer auth** on the HTTP transport; four-role access model enforced server-side (stdio mode uses `KRIMTO_IDENTITY`)
 - **`/health/live` + `/health/ready`** endpoints; first-run admin-key bootstrap (`KRIMTO_BOOTSTRAP_ADMIN`)
 - Server-coordinated batched writes to git; remote push; periodic pull with external-edit re-index
+- **Docker image** (`docker build` + `docker run`) packaging the HTTP server, with a persisted `/data` volume
 
 **In progress / next up:**
-- Single-Docker image (`docker run`) packaging the HTTP server
+- Published pull-image (registry) + CI image build, so `docker run <image>` needs no local build
 - Rate limiting + opt-in telemetry (modules built; wire onto the HTTP server)
 - OAuth scaffold (humans) and the minimal web UI (browse, search, fact detail, API keys)
 

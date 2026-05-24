@@ -52,6 +52,10 @@ Team layer + operations (Tier 2):
   `{sqlite, index, git_remote}`) — wired in `src/server/http.ts` + `src/server/index.ts`.
 - First-run bootstrap (Gap 06): `KRIMTO_BOOTSTRAP_ADMIN=<email>` issues one admin API key (printed
   once) and makes that user an org admin in `.krimto/members.yaml`.
+- Docker image (Gap 10): a multi-stage `Dockerfile` (node:22-slim, non-root, git + native deps)
+  runs the HTTP server. `docker build -t krimto . && docker run -p 8080:8080 -v ~/.krimto:/data
+  krimto` boots, serves `/health/ready`, and persists facts in the `/data` volume (verified
+  end-to-end with a real MCP client over HTTP).
 - Structured error codes on the MCP surface: `KrimtoError` maps to JSON-RPC errors in the tool
   handlers. The rate-limit and opt-in-telemetry modules (Gaps 18-19) are implemented but **not yet
   served** — they activate next on the HTTP server.
