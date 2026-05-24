@@ -13,6 +13,7 @@ import { buildServer } from "./index";
 import { requesterFromAuth, type ToolContext } from "./tools";
 import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck } from "./health";
 import { KrimtoTokenVerifier } from "./tokenVerifier";
+import { type RateLimiter } from "./ratelimit";
 
 export interface HttpAppDeps {
   ctx: ToolContext;
@@ -24,6 +25,8 @@ export interface HttpAppDeps {
   startedAt: number;
   isBuilding: () => boolean;
   gitRemoteStatus: () => "ok" | "skipped" | "error" | "none";
+  /** When set, per-identity rate limiting is enforced on /mcp. */
+  rateLimiter?: RateLimiter;
 }
 
 export function buildHttpApp(deps: HttpAppDeps): Express {
@@ -53,10 +56,25 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     await mcp.connect(transport);
     await transport.handleRequest(req, res, req.body as unknown);
   };
-  app.post("/mcp", auth, (req, res) => {
+  const limiter = deps.rateLimiter;
+  const rateLimit = (req: Request, res: Response, next: () => void): void => {
+    if (!limiter) {
+      next();
+      return;
+    }
+    const result = limiter.check(req.auth?.clientId ?? "anonymous"); // req.auth set by requireBearerAuth
+    res.set(limiter.headers(result));
+    if (!result.allowed) {
+      if (result.retryAfter !== undefined) res.set("Retry-After", String(result.retryAfter));
+      res.status(429).json({ error: { code: "rate_limited", message: "rate limit exceeded" } });
+      return;
+    }
+    next();
+  };
+  app.post("/mcp", auth, rateLimit, (req, res) => {
     void handleMcp(req, res);
   });
-  app.get("/mcp", auth, (req, res) => {
+  app.get("/mcp", auth, rateLimit, (req, res) => {
     void handleMcp(req, res);
   });
 

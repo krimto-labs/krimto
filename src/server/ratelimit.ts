@@ -65,3 +65,12 @@ export class RateLimiter {
     };
   }
 }
+
+/** Rate-limit config from env. `KRIMTO_RATE_LIMIT_PER_MINUTE` (positive int) enables it; else off. */
+export function rateLimitConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RateLimitConfig {
+  const raw = env.KRIMTO_RATE_LIMIT_PER_MINUTE;
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isInteger(n) && n >= 1
+    ? { enabled: true, perKeyPerMinute: n }
+    : { enabled: false, perKeyPerMinute: 0 };
+}
