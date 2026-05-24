@@ -11,6 +11,9 @@ coverage/
 # Runtime data & derived index (facts live in a git-backed data volume; SQLite index is derived)
 data/
 logs/
+# Server data dir written when KRIMTO_DATA points at the repo: API key store,
+# members.yaml, telemetry id. Never commit these.
+.krimto/
 *.db
 *.sqlite
 *.sqlite3
@@ -25,6 +28,8 @@ logs/
 # OS / editor artifacts
 .DS_Store
 .specstory/
+.vscode/
+.idea/
 
 # Internal documents — MUST NOT be published to the public repo.
 # files/ is the original planning drop; docs/ holds the strategy/spec/explainer
