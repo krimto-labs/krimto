@@ -12,6 +12,8 @@ import { promises as fs } from "node:fs";
 import { ApiKeyStore } from "../access/auth";
 import { bootstrapAdmin } from "./bootstrap";
 import { buildHttpApp } from "./http";
+import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
+import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -261,10 +263,21 @@ export async function main(): Promise<void> {
     sync.start((fn) => ctx.writeQueue.run(fn));
   }
 
+  // Opt-in telemetry (off unless KRIMTO_TELEMETRY_ENDPOINT is set). Built here so the
+  // shutdown handler can stop it; only start()ed in HTTP mode (the long-running server).
+  const installId = await resolveInstallId(dataDir);
+  const telemetry = new TelemetrySender(telemetryConfigFromEnv(process.env, installId), () => ({
+    version: KRIMTO_VERSION,
+    factCount: index.factCount(),
+    teamCount: membership.teams.length,
+    activeUserCount: membership.users.length,
+  }));
+
   let shuttingDown = false;
   const shutdown = (): void => {
     if (shuttingDown) return; // ignore a second SIGINT/SIGTERM
     shuttingDown = true;
+    telemetry.stop();
     sync.stop();
     batcher.stop();
     void ctx.writeQueue.run(() => batcher.flush()).finally(() => process.exit(0));
@@ -274,6 +287,7 @@ export async function main(): Promise<void> {
 
   const httpPort = process.env.KRIMTO_HTTP_PORT ? Number(process.env.KRIMTO_HTTP_PORT) : undefined;
   if (httpPort !== undefined && Number.isInteger(httpPort) && httpPort > 0) {
+    const rlConfig = rateLimitConfigFromEnv();
     const app = buildHttpApp({
       ctx,
       keys,
@@ -284,10 +298,12 @@ export async function main(): Promise<void> {
       startedAt: Date.now(),
       isBuilding: () => false,
       gitRemoteStatus: () => batcher.lastPushStatus(),
+      rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
     });
+    telemetry.start(); // no-op unless KRIMTO_TELEMETRY_ENDPOINT is set
   } else {
     const server = buildServer(ctx);
     await server.connect(new StdioServerTransport());
