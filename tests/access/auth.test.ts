@@ -58,16 +58,28 @@ describe("ApiKeyStore", () => {
     expect(await store.resolveIdentity("krm_live_nope")).toBeNull();
   });
 
-  it("lists keys without exposing the hash", async () => {
+  it("lists keys including the hash (used for revocation)", async () => {
     await store.issue("alice@acme.com", "live", "laptop");
     const listed = await store.list();
     expect(listed[0]).toMatchObject({ identity: "alice@acme.com", prefix: "krm_live_", label: "laptop" });
-    expect(listed[0]).not.toHaveProperty("hash");
+    expect(listed[0]!.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("persists across store instances", async () => {
     const { key } = await store.issue("bob@acme.com");
     const reopened = new ApiKeyStore(path.join(dir, "secrets", "keys.json"));
     expect(await reopened.resolveIdentity(key)).toBe("bob@acme.com");
+  });
+
+  it("revoke removes a key so it no longer resolves, and exposes hash in list()", async () => {
+    const store2 = new ApiKeyStore(path.join(dir, "revoke-keys.json"));
+    const { key } = await store2.issue("alice@x.com");
+    expect(await store2.resolveIdentity(key)).toBe("alice@x.com");
+    const listed = await store2.list();
+    expect(listed[0]!.hash).toBeTruthy();
+    expect(await store2.revoke(listed[0]!.hash)).toBe(true);
+    expect(await store2.resolveIdentity(key)).toBeNull();
+    expect(await store2.list()).toHaveLength(0);
+    expect(await store2.revoke("does-not-exist")).toBe(false);
   });
 });

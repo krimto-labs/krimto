@@ -100,13 +100,23 @@ export class ApiKeyStore {
     return null;
   }
 
-  /** List keys without exposing the hashes. */
-  async list(): Promise<{ identity: string; prefix: string; created: string; label?: string }[]> {
+  /** List keys. Exposes the hash so callers can revoke by id. */
+  async list(): Promise<{ hash: string; identity: string; prefix: string; created: string; label?: string }[]> {
     return (await this.read()).map((r) => ({
+      hash: r.hash,
       identity: r.identity,
       prefix: r.prefix,
       created: r.created,
       label: r.label,
     }));
+  }
+
+  /** Remove the key with this hash. Returns true if one was removed. */
+  async revoke(hash: string): Promise<boolean> {
+    const records = await this.read();
+    const next = records.filter((r) => r.hash !== hash);
+    if (next.length === records.length) return false;
+    await this.write(next);
+    return true;
   }
 }
