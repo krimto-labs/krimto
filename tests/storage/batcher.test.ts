@@ -122,7 +122,7 @@ describe("CommitBatcher remote push", () => {
   beforeEach(async () => {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-batchpush-"));
     remoteDir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-remote-"));
-    await execFileP("git", ["init", "--bare", "-q", remoteDir]);
+    await execFileP("git", ["init", "--bare", "-q", "-b", "main", remoteDir]); // pin main to match the app on a master-default git (CI)
     repo = await GitRepo.open(dir);
     store = new FactStore(dir);
   });

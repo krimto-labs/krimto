@@ -26,7 +26,7 @@ describe("RemoteSync", () => {
     bare = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-bare-"));
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-local-"));
     mate = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-mate-"));
-    await execFileP("git", ["init", "--bare", "-q", bare]);
+    await execFileP("git", ["init", "--bare", "-q", "-b", "main", bare]); // pin main so it matches the app on a master-default git (CI)
     const repo = await GitRepo.open(dir);
     const store = new FactStore(dir);
     const { path: rel } = await store.writeFact({ scope: "org/acme", title: "Seed", body: "seed", author: "a@x.com" });
