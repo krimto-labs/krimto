@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel, connectPanel } from "../../src/web/views";
+import { keysBody, howItWorksPanel, connectPanel, gettingStartedPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -72,5 +72,31 @@ describe("howItWorksPanel", () => {
     expect(h).toContain("Team");
     expect(h).toContain("Org");
     expect(h).toContain("Bring your team");
+  });
+});
+
+describe("gettingStartedPanel", () => {
+  it("explains AI memory, teaches the save/recall loop, and links to the next step", () => {
+    const h = gettingStartedPanel();
+    expect(h).toContain('What "AI memory" means');     // Door 1: for a total beginner
+    expect(h).toContain("forgets everything");
+    expect(h).toContain("Save your first memory");
+    expect(h).toContain("deploys are Tuesdays");      // the say-this sentence
+    expect(h).toContain("data-copy=");                 // copyable
+    expect(h).toContain("new chat");                   // prove it
+    expect(h).toContain("Expect this");                // Door 4: what success looks like
+    expect(h).toContain("Across sessions");
+    expect(h).toContain("Across editors");
+    expect(h).toContain("Across teammates");
+    expect(h).toContain("No AI key");                  // benchmark brag
+    expect(h).toContain('href="/ui/connect"');         // next-step link
+  });
+});
+
+describe("howItWorksPanel team expectations", () => {
+  it("tells the user what to expect when turning on team mode", () => {
+    const h = howItWorksPanel();
+    expect(h).toContain("What to expect when you turn on team mode");
+    expect(h).toContain("Team page");
   });
 });

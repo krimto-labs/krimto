@@ -202,8 +202,43 @@ export function howItWorksPanel(): string {
     `<li><strong>Org</strong> — company-wide rules everyone inherits.</li>` +
     `</ul>` +
     `<p class="muted">More specific wins: your personal note overrides the team's, which overrides the org's.</p>` +
+    `<p class="muted"><strong>What to expect when you turn on team mode:</strong> Krimto starts asking ` +
+    `for a key (so only your team gets in), prints your ready-to-paste config, and unlocks the Team page ` +
+    `to invite people.</p>` +
     `<p><strong>Bring your team:</strong> restart with <code>KRIMTO_BOOTSTRAP_ADMIN=you@acme.com</code> to turn on ` +
     `accounts and invite teammates (hosted Krimto Cloud is on the roadmap).</p>` +
+    `</section>`
+  );
+}
+
+/**
+ * The empty-dashboard guide (friction-log C/E; journey Doors 1 & 4): shown when there are no facts
+ * yet. It first explains AI memory to a total newcomer, then walks them through the first save→recall
+ * loop (with "what to expect"), the value, and the next step.
+ */
+export function gettingStartedPanel(): string {
+  const say = "Use krimto to remember that our deploys are Tuesdays at 10am.";
+  return (
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">New here? What "AI memory" means</h2>` +
+    `<p>Normally your AI forgets everything when you close the chat. Krimto gives it a memory: ` +
+    `you teach it once, and it remembers next time — across chats, across editors, and across your team.</p>` +
+    `</section>` +
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Save your first memory</h2>` +
+    `<p>In your editor, tell your agent:</p>` +
+    `<pre id="say-this">${escapeHtml(say)}</pre><button type="button" data-copy="say-this">Copy</button>` +
+    `<p>Then open a <strong>new chat</strong> and ask: <em>"what do you know about deploys?"</em></p>` +
+    `<p><strong>Expect this:</strong> your AI answers correctly even in a brand-new chat — that's the memory working.</p>` +
+    `<h3>Why this matters</h3>` +
+    `<ul>` +
+    `<li><strong>Across sessions</strong> — your AI stops forgetting every time you start a new chat.</li>` +
+    `<li><strong>Across editors</strong> — Cursor and Claude Code share what you taught them.</li>` +
+    `<li><strong>Across teammates</strong> — your team's conventions live in one place every agent can read.</li>` +
+    `</ul>` +
+    `<p class="muted">No AI key and no database to set up — Krimto works out of the box.</p>` +
+    `<p>Not connected yet? <a href="/ui/connect">Start here →</a> Bring your team: restart with ` +
+    `<code>KRIMTO_BOOTSTRAP_ADMIN=you@acme.com</code>.</p>` +
     `</section>`
   );
 }
