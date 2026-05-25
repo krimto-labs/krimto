@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { connectSnippets, cursorDeeplink } from "../../src/server/connect";
+import { connectSnippets, cursorDeeplink, genericContract, MCP_TOOL_NAMES } from "../../src/server/connect";
 
 describe("connectSnippets", () => {
   it("builds a no-key local config", () => {
@@ -24,5 +24,18 @@ describe("cursorDeeplink", () => {
     const config = new URL(link).searchParams.get("config") ?? "";
     const decoded = JSON.parse(Buffer.from(config, "base64").toString("utf8"));
     expect(decoded).toEqual({ url: "http://localhost:8080/mcp" });
+  });
+});
+
+describe("genericContract", () => {
+  it("returns the URL and the five tool names; header only in team mode", () => {
+    const local = genericContract({ host: "localhost:8080", requireAuth: false });
+    expect(local.url).toBe("http://localhost:8080/mcp");
+    expect(local.tools).toEqual([...MCP_TOOL_NAMES]);
+    expect(local.tools).toHaveLength(5);
+    expect(local.header).toBeUndefined();
+
+    const team = genericContract({ host: "memory.acme.com", requireAuth: true });
+    expect(team.header).toContain("Authorization: Bearer");
   });
 });

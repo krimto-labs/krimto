@@ -22,3 +22,25 @@ export function cursorDeeplink(host: string): string {
   const config = Buffer.from(JSON.stringify({ url: `http://${host}/mcp` }), "utf8").toString("base64");
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=krimto&config=${config}`;
 }
+
+/** The five MCP tools Krimto exposes (kept in lockstep with src/server/index.ts registrations). */
+export const MCP_TOOL_NAMES = [
+  "krimto_write",
+  "krimto_recall",
+  "krimto_read",
+  "krimto_supersede",
+  "krimto_list_scopes",
+] as const;
+
+/** The transport-level contract for wiring up any MCP client we haven't shipped a verified snippet for. */
+export function genericContract(opts: { host: string; requireAuth: boolean }): {
+  url: string;
+  tools: readonly string[];
+  header?: string;
+} {
+  return {
+    url: `http://${opts.host}/mcp`,
+    tools: MCP_TOOL_NAMES,
+    header: opts.requireAuth ? "Authorization: Bearer <your key>" : undefined,
+  };
+}
