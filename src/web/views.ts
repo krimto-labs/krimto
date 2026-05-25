@@ -92,3 +92,35 @@ export function newKeyBody(key: string): string {
     `<pre>${escapeHtml(key)}</pre><p><a href="/ui/keys">← Back to keys</a></p>`
   );
 }
+
+export interface AdminView {
+  isAdmin: boolean;
+  users: { email: string }[];
+  teams: { slug: string; members: string[] }[];
+}
+export function adminBody(v: AdminView): string {
+  if (!v.isAdmin) return `<h1>Admin</h1><p class="muted">Org-admin access required.</p>`;
+  const userRows = v.users.length
+    ? v.users.map((u) => `<tr><td>${escapeHtml(u.email)}</td></tr>`).join("")
+    : `<tr><td class="muted">No users yet.</td></tr>`;
+  const teamRows = v.teams.length
+    ? v.teams
+        .map(
+          (t) =>
+            `<tr><td>${escapeHtml(t.slug)}</td><td class="muted">${t.members.map((m) => escapeHtml(m)).join(", ")}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="2" class="muted">No teams yet.</td></tr>`;
+  return (
+    `<h1>Admin</h1>` +
+    `<h2>Members</h2><table><tbody>${userRows}</tbody></table>` +
+    `<form method="post" action="/ui/admin/members">` +
+    `<input name="email" placeholder="teammate@acme.com" required>` +
+    `<input name="team" placeholder="team slug (optional)">` +
+    `<button type="submit">Add member</button></form>` +
+    `<h2>Issue a key for a member</h2><form method="post" action="/ui/admin/keys">` +
+    `<input name="email" placeholder="teammate@acme.com" required>` +
+    `<input name="label" placeholder="label (optional)"><button type="submit">Issue key</button></form>` +
+    `<h2>Teams</h2><table><tbody>${teamRows}</tbody></table>`
+  );
+}

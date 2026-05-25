@@ -1,12 +1,13 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, type FactView } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, type FactView } from "./views";
 import { type ApiKeyStore } from "../access/auth";
-import { type Membership, requesterFor } from "../access/membership";
+import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
 import { KrimtoError } from "../server/errors";
 import { type AdminContext } from "../server/admin";
+import { addUser } from "../access/membershipStore";
 
 export interface WebRouterDeps {
   ctx: ToolContext;
@@ -137,6 +138,57 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       }
       await deps.keys.revoke(hash);
       res.redirect("/ui/keys");
+    })();
+  });
+
+  const isAdmin = (req: Request): boolean => !!deps.admin && isOrgAdmin(deps.membership(), idOf(req));
+
+  router.get("/admin", (req, res) => {
+    const m = deps.membership();
+    page(
+      res,
+      isAdmin(req) ? 200 : 403,
+      "Admin",
+      adminBody({
+        isAdmin: isAdmin(req),
+        users: m.users.map((u) => ({ email: u.email })),
+        teams: m.teams.map((t) => ({ slug: t.slug, members: t.members })),
+      }),
+      idOf(req),
+    );
+  });
+  router.post("/admin/members", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      const admin = deps.admin;
+      if (!admin || !isOrgAdmin(deps.membership(), identity)) {
+        errorPage(res, 403, "Org admin required", identity);
+        return;
+      }
+      const rawEmail = bodyOf(req).email;
+      const email = typeof rawEmail === "string" ? rawEmail.trim() : "";
+      const rawTeam = bodyOf(req).team;
+      const team = typeof rawTeam === "string" && rawTeam.trim() ? rawTeam.trim() : undefined;
+      if (email) await admin.applyChange(() => addUser(admin.dataDir, email, team ? { team } : {}));
+      res.redirect("/ui/admin");
+    })();
+  });
+  router.post("/admin/keys", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      const admin = deps.admin;
+      if (!admin || !isOrgAdmin(deps.membership(), identity)) {
+        errorPage(res, 403, "Org admin required", identity);
+        return;
+      }
+      const rawEmail = bodyOf(req).email;
+      const email = typeof rawEmail === "string" ? rawEmail.trim() : "";
+      if (!email) {
+        res.redirect("/ui/admin");
+        return;
+      }
+      const { key } = await admin.keys.issue(email, "live", undefined);
+      page(res, 200, "API key", newKeyBody(key), identity);
     })();
   });
 

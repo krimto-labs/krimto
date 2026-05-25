@@ -126,3 +126,54 @@ describe("admin API (/admin)", () => {
     expect(r.status).toBe(403);
   });
 });
+
+async function loginCookie(key: string): Promise<string> {
+  const res = await fetch(`${base()}/ui/login`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ key }).toString(),
+  });
+  return (res.headers.get("set-cookie") ?? "").split(";")[0]!.trim();
+}
+
+describe("/ui/admin", () => {
+  it("non-admin gets 403; admin sees the member list + add form", async () => {
+    const carol = await loginCookie(carolKey);
+    expect((await fetch(`${base()}/ui/admin`, { headers: { cookie: carol } })).status).toBe(403);
+
+    const alice = await loginCookie(aliceKey);
+    const res = await fetch(`${base()}/ui/admin`, { headers: { cookie: alice } });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Add member");
+    expect(body).toContain("carol@x.com");
+  });
+
+  it("admin adds a member via the form", async () => {
+    const alice = await loginCookie(aliceKey);
+    const add = await fetch(`${base()}/ui/admin/members`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: alice, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: "frank@x.com", team: "ops" }).toString(),
+    });
+    expect(add.status).toBe(302);
+    const listed = (await (await fetch(`${base()}/admin/members`, { headers: hdr(aliceKey) })).json()) as {
+      users: { email: string }[];
+    };
+    expect(listed.users.map((u) => u.email)).toContain("frank@x.com");
+  });
+
+  it("escapes member emails on the admin page", async () => {
+    await fetch(`${base()}/admin/members`, {
+      method: "POST",
+      headers: hdr(aliceKey),
+      body: JSON.stringify({ email: "<script>x</script>@x.com" }),
+    });
+    const alice = await loginCookie(aliceKey);
+    const body = await (await fetch(`${base()}/ui/admin`, { headers: { cookie: alice } })).text();
+    expect(body).toContain("&lt;script&gt;");
+    expect(body).not.toContain("<script>x</script>");
+  });
+});
