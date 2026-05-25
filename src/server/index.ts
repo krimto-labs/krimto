@@ -15,7 +15,7 @@ import { buildHttpApp } from "./http";
 import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
 import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
 import { type AdminContext } from "./admin";
-import { connectSnippets } from "./connect";
+import { localModeBanner, teamModeBanner } from "./banner";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -356,26 +356,9 @@ export async function main(): Promise<void> {
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
       if (!requireAuth) {
-        process.stderr.write(
-          `\nKrimto is running WITHOUT authentication (local mode) — local/trusted use only.\n` +
-            `  Connect your agent (one line, no key): {"mcpServers":{"krimto":{"url":"http://localhost:${httpPort}/mcp"}}}\n` +
-            `  Then tell your agent: "remember that ..."  and open http://localhost:${httpPort} to browse.\n` +
-            `  For networked or TEAM use, set KRIMTO_BOOTSTRAP_ADMIN=<email> to require API keys.\n\n`,
-        );
+        process.stderr.write(localModeBanner(httpPort));
       } else {
-        // Team mode: print a ready-to-paste connect config (key included) so nobody has to grep the
-        // log and hand-assemble JSON. The key is already in these logs above.
-        const s = connectSnippets({ host: `localhost:${httpPort}`, key: bootstrapKey ?? "krm_live_…" });
-        const cursor = s.cursorJson
-          .split("\n")
-          .map((l) => `    ${l}`)
-          .join("\n");
-        process.stderr.write(
-          `\nConnect your agent (team mode):\n` +
-            `  Claude Code:  ${s.claude}\n` +
-            `  Cursor (~/.cursor/mcp.json):\n${cursor}\n` +
-            `  Open http://localhost:${httpPort}/ui/connect for copy-paste + an "Add to Cursor" button.\n\n`,
-        );
+        process.stderr.write(teamModeBanner({ host: `localhost:${httpPort}`, key: bootstrapKey }));
       }
     });
     telemetry.start(); // no-op unless KRIMTO_TELEMETRY_ENDPOINT is set
