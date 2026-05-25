@@ -1,4 +1,5 @@
 import { escapeHtml } from "./html";
+import { connectSnippets, cursorDeeplink } from "../server/connect";
 
 export function loginBody(error?: string): string {
   const err = error ? `<p style="color:#b91c1c">${escapeHtml(error)}</p>` : "";
@@ -122,6 +123,34 @@ export function adminBody(v: AdminView): string {
     `<input name="email" placeholder="teammate@acme.com" required>` +
     `<input name="label" placeholder="label (optional)"><button type="submit">Issue key</button></form>` +
     `<h2>Teams</h2><table><tbody>${teamRows}</tbody></table>`
+  );
+}
+
+/**
+ * In-product connect instructions (Claude Code + Cursor), rendered from the request host so the URL
+ * matches whatever the user typed. Local mode shows working no-key snippets and a one-click "Add to
+ * Cursor" button; team mode shows the same shapes with a `krm_live_…` placeholder and points at the
+ * Keys page — no one-click button there, since a link can't carry the user's real key.
+ */
+export function connectPanel(opts: { host: string; requireAuth: boolean }): string {
+  const placeholderKey = opts.requireAuth ? "krm_live_…" : undefined;
+  const { claude, cursorJson } = connectSnippets({ host: opts.host, key: placeholderKey });
+  const button = opts.requireAuth
+    ? ""
+    : `<p><a href="${escapeHtml(cursorDeeplink(opts.host))}">Add to Cursor</a></p>`;
+  const note = opts.requireAuth
+    ? `<p class="muted">Team mode is on. Replace <code>krm_live_…</code> with a key from the ` +
+      `<a href="/ui/keys">Keys</a> page (each key is shown once, when issued).</p>`
+    : `<p class="muted">Local mode — no key needed. To bring your team, restart with ` +
+      `<code>KRIMTO_BOOTSTRAP_ADMIN=you@acme.com</code>.</p>`;
+  return (
+    `<h1>Connect your agent</h1>` +
+    `<p class="muted">Krimto is one MCP server — point any agent at it.</p>` +
+    `<h2>Claude Code</h2><pre>${escapeHtml(claude)}</pre>` +
+    `<h2>Cursor</h2>${button}` +
+    `<p class="muted">…or add to <code>~/.cursor/mcp.json</code> and restart Cursor:</p>` +
+    `<pre>${escapeHtml(cursorJson)}</pre>` +
+    note
   );
 }
 

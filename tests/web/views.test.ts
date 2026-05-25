@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel } from "../../src/web/views";
+import { keysBody, howItWorksPanel, connectPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -32,6 +32,25 @@ describe("keysBody", () => {
     const html = keysBody([k({ label: "<script>x</script>" }), k({ hash: "c".repeat(64) })]);
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>x</script>");
+  });
+});
+
+describe("connectPanel", () => {
+  it("shows the Claude Code command and Cursor JSON for the request host (local: no key, with button)", () => {
+    const h = connectPanel({ host: "localhost:8080", requireAuth: false });
+    expect(h).toContain("claude mcp add --transport http krimto http://localhost:8080/mcp");
+    expect(h).toContain("~/.cursor/mcp.json");
+    expect(h).toContain("http://localhost:8080/mcp");
+    expect(h).toContain("cursor://anysphere.cursor-deeplink/mcp/install"); // one-click button works in local mode
+    expect(h).not.toContain("Authorization"); // no key in local mode
+  });
+
+  it("team mode shows a key placeholder + a Keys-page pointer and omits the keyless one-click button", () => {
+    const h = connectPanel({ host: "memory.acme.com", requireAuth: true });
+    expect(h).toContain("memory.acme.com/mcp");
+    expect(h).toContain("Authorization: Bearer krm_live_");
+    expect(h).toContain('href="/ui/keys"');
+    expect(h).not.toContain("cursor://"); // no one-click install that would 401 without the real key
   });
 });
 

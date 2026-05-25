@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, type FactView } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, connectPanel, type FactView } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -72,6 +72,11 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
   const ctxFor = (req: Request): ToolContext => ({ ...deps.ctx, requester: requesterFor(deps.membership(), idOf(req)) });
 
   router.get("/", (_req, res) => res.redirect("/ui/facts"));
+
+  router.get("/connect", (req, res) => {
+    const host = typeof req.headers.host === "string" ? req.headers.host : "localhost:8080";
+    page(res, 200, "Connect", connectPanel({ host, requireAuth: !deps.localIdentity }), idOf(req));
+  });
 
   router.get("/facts", (req, res) => {
     void (async () => {

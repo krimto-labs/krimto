@@ -18,7 +18,7 @@ input,button{font:inherit;padding:.4rem .6rem}table{border-collapse:collapse;wid
 
 export function layout(title: string, bodyHtml: string, nav?: { identity?: string }): string {
   const navBar = nav?.identity
-    ? `<nav><a href="/ui/facts">Facts</a><a href="/ui/keys">Keys</a>` +
+    ? `<nav><a href="/ui/facts">Facts</a><a href="/ui/connect">Connect</a><a href="/ui/keys">Keys</a>` +
       `<span class="muted" style="margin-left:auto">${escapeHtml(nav.identity)} · <a href="/ui/logout">Logout</a></span></nav>`
     : "";
   return (

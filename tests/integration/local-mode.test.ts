@@ -79,4 +79,14 @@ describe("local mode (no auth)", () => {
     const r = await fetch(`${base()}/admin/members`, { redirect: "manual" });
     expect(r.status).toBe(404);
   });
+
+  it("GET /ui/connect renders copy-paste config for both clients (no login)", async () => {
+    const r = await fetch(`${base()}/ui/connect`, { redirect: "manual" });
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    expect(html).toContain("claude mcp add --transport http krimto");
+    expect(html).toContain("~/.cursor/mcp.json");
+    expect(html).toContain(`localhost:${port}/mcp`); // rendered from the request host
+    expect(html).toContain("cursor://anysphere.cursor-deeplink/mcp/install"); // Add to Cursor button
+  });
 });
