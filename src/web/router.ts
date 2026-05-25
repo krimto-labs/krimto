@@ -187,7 +187,9 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         res.redirect("/ui/admin");
         return;
       }
-      const { key } = await admin.keys.issue(email, "live", undefined);
+      const rawLabel = bodyOf(req).label;
+      const label = typeof rawLabel === "string" && rawLabel.trim() ? rawLabel.trim() : undefined;
+      const { key } = await admin.keys.issue(email, "live", label);
       page(res, 200, "API key", newKeyBody(key), identity);
     })();
   });
