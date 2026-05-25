@@ -128,8 +128,9 @@ OpenClaw, Cline use the same shape):
 ```
 
 The first run downloads dependencies (including `better-sqlite3`, which ships prebuilt binaries), then
-starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`). This is the solo
-path; HTTP/team mode uses Docker (Option C) or the server below.
+starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`; run
+`npx @krimto-labs/krimto where` to print the exact path). This is the solo path; HTTP/team mode uses
+Docker (Option C) or the server below.
 
 **Make your agent actually use Krimto.** By default an editor's agent routes "remember X" to its own
 built-in memory. Run this once in your project so it calls Krimto instead:

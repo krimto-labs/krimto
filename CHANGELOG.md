@@ -4,6 +4,20 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] — 2026-05-25
+
+### Added
+- `npx @krimto-labs/krimto init` — writes the "always use Krimto" standing rule into a project's agent
+  rules files (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules/krimto.mdc`), idempotently and
+  non-destructively. Fixes the discovery problem where an agent routes "remember X" to its own built-in
+  memory instead of Krimto. Surfaced on the connect page and in the README.
+- `npx @krimto-labs/krimto where` — prints the data directory; the startup banner now shows a
+  `💾 Data: <dir>` line, so a stranger isn't surprised about where facts land (they default to
+  `~/.krimto`, not the current folder).
+
+### Fixed
+- `package.json` `repository.url` now carries the `git+` prefix (removes the npm publish warning).
+
 ## [0.2.6] — 2026-05-25
 
 ### Added

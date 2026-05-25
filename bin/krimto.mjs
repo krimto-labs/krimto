@@ -19,6 +19,10 @@ try {
           "Restart your editor so it picks up the rule.\n",
       );
     }
+  } else if (process.argv[2] === "where") {
+    // `krimto where` — print the data directory (honors KRIMTO_DATA), so files aren't a surprise.
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    process.stdout.write(`${resolveDataDir()}\n`);
   } else {
     const mod = await tsImport("../src/server/index.ts", import.meta.url);
     await mod.main();

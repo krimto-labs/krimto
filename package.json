@@ -1,6 +1,6 @@
 {
   "name": "@krimto-labs/krimto",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Open-source team memory layer for AI agents — markdown files in git, user/team/org hierarchy, cross-vendor MCP server.",
   "license": "Apache-2.0",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/krimto-labs/krimto.git"
+    "url": "git+https://github.com/krimto-labs/krimto.git"
   },
   "homepage": "https://krimto.com",
   "bin": {
