@@ -1,5 +1,6 @@
 import { escapeHtml } from "./html";
 import { connectSnippets, cursorDeeplink, genericContract } from "../server/connect";
+import { AGENT_RULE } from "../agentRule";
 
 export function loginBody(error?: string): string {
   const err = error ? `<p style="color:#b91c1c">${escapeHtml(error)}</p>` : "";
@@ -127,14 +128,6 @@ export function adminBody(v: AdminView): string {
   );
 }
 
-// The standing rule a user pastes into their editor's rules file to make memory automatic (Door 3).
-const AUTOMATIC_MEMORY_RULE = `# Krimto memory — always use
-- Before a task, call krimto_recall to load what we already know.
-- When I say "remember", or you learn a durable fact, call krimto_write
-  (user/me = personal, team/<slug> = shared).
-- Respect precedence: user beats team beats org.
-- Don't save secrets or one-off chatter.`;
-
 /**
  * In-product connect instructions (Claude Code + Cursor), rendered from the request host so the URL
  * matches whatever the user typed. Local mode shows working no-key snippets and a one-click "Add to
@@ -175,7 +168,7 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     teamKeyCallout +
     `<h2>3. Make it automatic</h2>` +
     `<p>By default your AI uses memory only when you ask. Paste this rule once so it remembers and recalls on its own:</p>` +
-    `<pre id="auto-rule">${escapeHtml(AUTOMATIC_MEMORY_RULE)}</pre>${copy("auto-rule")}` +
+    `<pre id="auto-rule">${escapeHtml(AGENT_RULE)}</pre>${copy("auto-rule")}` +
     `<p class="muted">Where to paste it: Claude Code → <code>CLAUDE.md</code> · Cursor → ` +
     `<code>.cursor/rules/krimto.mdc</code> · Codex → <code>AGENTS.md</code> · Gemini CLI → <code>GEMINI.md</code>.</p>` +
     `<h2>Any other MCP client</h2>` +
