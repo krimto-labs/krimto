@@ -21,16 +21,17 @@ describe("bootstrapAdmin", () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it("preserves an existing members.yaml and appends the admin", async () => {
+  it("preserves an existing members.yaml and issues a key without elevating a later admin (BUG-6)", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-boot2-"));
     await fs.mkdir(path.join(dir, ".krimto"), { recursive: true });
     await fs.writeFile(path.join(dir, ".krimto", "members.yaml"),
       "org:\n  slug: acme\n  admins:\n    - bob@x.com\nteams:\n  - slug: payments\n    members: [bob@x.com]\n    leads: []\n", "utf8");
     const keys = new ApiKeyStore(path.join(dir, "keys.json"));
-    await bootstrapAdmin("alice@x.com", keys, dir);
+    const res = await bootstrapAdmin("alice@x.com", keys, dir);
+    expect(res.key).toMatch(/^krm_live_/); // alice still gets a key
     const m = await loadMembership(dir);
     expect(m.org.slug).toBe("acme");
-    expect(m.org.admins.sort()).toEqual(["alice@x.com", "bob@x.com"]);
+    expect(m.org.admins).toEqual(["bob@x.com"]); // alice NOT elevated (admins non-empty)
     expect(m.teams).toHaveLength(1); // existing teams preserved
     await fs.rm(dir, { recursive: true, force: true });
   });
@@ -47,6 +48,17 @@ describe("bootstrapAdmin", () => {
     const after = (await keys.list()).filter((k) => k.identity === "alice@x.com").length;
     expect(after).toBe(before + 1); // minted despite an existing record
     expect((await loadMembership(dir)).org.admins).toContain("alice@x.com");
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("does not elevate a new email to org-admin once an admin already exists (BUG-6)", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-boot6-"));
+    const keys = new ApiKeyStore(path.join(dir, "keys.json"));
+    await bootstrapAdmin("alice@x.com", keys, dir); // first admin
+    const res = await bootstrapAdmin("bob@x.com", keys, dir); // second email, admins non-empty
+    expect(res.key).toMatch(/^krm_live_/); // bob still gets a key
+    const m = await loadMembership(dir);
+    expect(m.org.admins).toEqual(["alice@x.com"]); // bob is NOT elevated
     await fs.rm(dir, { recursive: true, force: true });
   });
 

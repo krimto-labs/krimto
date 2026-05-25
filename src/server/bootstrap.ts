@@ -12,7 +12,7 @@ export interface BootstrapResult {
 }
 
 export async function bootstrapAdmin(email: string, keys: ApiKeyStore, dataDir: string): Promise<BootstrapResult> {
-  await ensureOrgAdmin(email, dataDir);
+  await ensureFirstOrgAdmin(email, dataDir);
   // Called once at startup (single process), so the list→issue check needs no lock.
   const hasKey = (await keys.list()).some((k) => k.identity === email);
   if (hasKey) return { key: null };
@@ -26,12 +26,12 @@ export async function bootstrapAdmin(email: string, keys: ApiKeyStore, dataDir: 
  * plaintext). Unlike bootstrapAdmin, this does not check whether a record exists first.
  */
 export async function reissueKey(email: string, keys: ApiKeyStore, dataDir: string): Promise<string> {
-  await ensureOrgAdmin(email, dataDir);
+  await ensureFirstOrgAdmin(email, dataDir);
   const { key } = await keys.issue(email, "live", "reissued");
   return key;
 }
 
-async function ensureOrgAdmin(email: string, dataDir: string): Promise<void> {
+async function ensureFirstOrgAdmin(email: string, dataDir: string): Promise<void> {
   const file = path.join(dataDir, ".krimto", "members.yaml");
   let text: string | null = null;
   try {
@@ -47,7 +47,9 @@ async function ensureOrgAdmin(email: string, dataDir: string): Promise<void> {
   const org = (raw.org ?? {}) as { slug?: string; admins?: string[] };
   org.slug = org.slug ?? "default";
   org.admins = Array.isArray(org.admins) ? org.admins : [];
-  if (!org.admins.includes(email)) org.admins.push(email);
+  // Elevate to org-admin ONLY on first boot (no admins yet). Later, KRIMTO_BOOTSTRAP_ADMIN still
+  // issues a key for any email (non-admins included) but does not auto-promote — use the admin API.
+  if (org.admins.length === 0) org.admins.push(email);
   raw.org = org;
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, stringifyYaml(raw), "utf8");
