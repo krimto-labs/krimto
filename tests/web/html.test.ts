@@ -28,3 +28,15 @@ describe("layout copy-button support", () => {
     expect(html).toContain("getElementById");
   });
 });
+
+describe("layout nav labels", () => {
+  it("uses plain labels and shows Team only for admins", () => {
+    const member = layout("T", "x", { identity: "a@acme.com" });
+    expect(member).toContain(">Memory<");
+    expect(member).toContain("/ui/connect");
+    expect(member).not.toContain(">Team<");
+
+    const admin = layout("T", "x", { identity: "a@acme.com", isAdmin: true });
+    expect(admin).toContain('href="/ui/admin">Team<');
+  });
+});

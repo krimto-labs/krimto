@@ -29,9 +29,10 @@ document.addEventListener('click',function(e){
 });
 </script>`;
 
-export function layout(title: string, bodyHtml: string, nav?: { identity?: string }): string {
+export function layout(title: string, bodyHtml: string, nav?: { identity?: string; isAdmin?: boolean }): string {
   const navBar = nav?.identity
-    ? `<nav><a href="/ui/facts">Facts</a><a href="/ui/connect">Connect</a><a href="/ui/keys">Keys</a>` +
+    ? `<nav><a href="/ui/facts">Memory</a><a href="/ui/connect">Connect</a><a href="/ui/keys">Keys</a>` +
+      (nav.isAdmin ? `<a href="/ui/admin">Team</a>` : "") +
       `<span class="muted" style="margin-left:auto">${escapeHtml(nav.identity)} · <a href="/ui/logout">Logout</a></span></nav>`
     : "";
   return (

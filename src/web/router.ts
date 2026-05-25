@@ -27,7 +27,8 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
   const secret = deps.sessionSecret;
 
   const page = (res: Response, status: number, title: string, body: string, identity?: string): void => {
-    res.status(status).type("html").send(layout(title, body, { identity }));
+    const isAdmin = !!identity && !!deps.admin && isOrgAdmin(deps.membership(), identity);
+    res.status(status).type("html").send(layout(title, body, { identity, isAdmin }));
   };
   const errorPage = (res: Response, status: number, message: string, identity?: string): void => {
     page(res, status, "Error", `<h1>${escapeHtml(message)}</h1><p><a href="/ui/facts">Back</a></p>`, identity);
