@@ -57,7 +57,7 @@ describe("GitRepo remote", () => {
   beforeEach(async () => {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-git-"));
     remoteDir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-remote-"));
-    await execFileP("git", ["init", "--bare", "-q", remoteDir]);
+    await execFileP("git", ["init", "--bare", "-q", "-b", "main", remoteDir]);
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });
@@ -112,7 +112,7 @@ describe("GitRepo pull", () => {
     bare = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-bare-"));
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-local-"));
     mate = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-mate-"));
-    await execFileP("git", ["init", "--bare", "-q", bare]);
+    await execFileP("git", ["init", "--bare", "-q", "-b", "main", bare]);
     const repo = await GitRepo.open(dir);
     const store = new FactStore(dir);
     const { path: rel } = await store.writeFact({ scope: "org/acme", title: "Seed", body: "seed body", author: "a@x.com" });
@@ -169,25 +169,26 @@ describe("GitRepo pull", () => {
   });
 });
 
-describe("GitRepo branch mismatch (BUG-3)", () => {
-  it("syncs when the remote's default branch differs from the local branch", async () => {
-    // Bare remote whose HEAD points at `main`, but the local Krimto repo works on `master`
-    // (a common container default). pull must use the branch name, not the remote HEAD symref.
-    const bareMain = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-baremain-"));
-    await execFileP("git", ["init", "--bare", "-q", "-b", "main", bareMain]);
-    const local = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-master-"));
-    const repo = await GitRepo.open(local);
-    const store = new FactStore(local);
-    const { path: rel } = await store.writeFact({ scope: "org/acme", title: "S", body: "b", author: "a@x.com" });
-    await repo.stage(rel);
-    await repo.commit("seed");
-    await execFileP("git", ["-C", local, "branch", "-M", "master"]); // force local branch to master
-    await repo.setRemote(bareMain);
+describe("GitRepo branch pinning (Test-G fix)", () => {
+  it("normalizes an existing non-main repo to main on open", async () => {
+    const d = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-normalize-"));
+    await execFileP("git", ["-C", d, "init", "-q", "-b", "master"]);
+    await execFileP("git", ["-C", d, "config", "user.email", "a@x.com"]);
+    await execFileP("git", ["-C", d, "config", "user.name", "A"]);
+    await fs.writeFile(path.join(d, "f.txt"), "x", "utf8");
+    await execFileP("git", ["-C", d, "add", "-A"]);
+    await execFileP("git", ["-C", d, "commit", "-qm", "seed"]);
+    await GitRepo.open(d); // should rename master -> main
+    const { stdout } = await execFileP("git", ["-C", d, "rev-parse", "--abbrev-ref", "HEAD"]);
+    expect(stdout.trim()).toBe("main");
+    await fs.rm(d, { recursive: true, force: true });
+  });
 
-    expect((await repo.push()).status).toBe("ok"); // pushes `master` (bare HEAD still → main)
-    expect((await repo.pull()).status).not.toBe("error"); // pulls `master` by name — no HEAD error
-
-    await fs.rm(bareMain, { recursive: true, force: true });
-    await fs.rm(local, { recursive: true, force: true });
+  it("a fresh repo opens on main", async () => {
+    const d = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-fresh-"));
+    await GitRepo.open(d);
+    const { stdout } = await execFileP("git", ["-C", d, "symbolic-ref", "--short", "HEAD"]);
+    expect(stdout.trim()).toBe("main");
+    await fs.rm(d, { recursive: true, force: true });
   });
 });

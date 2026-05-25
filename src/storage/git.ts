@@ -17,16 +17,19 @@ export interface PullResult {
   detail?: string;
 }
 
+const DEFAULT_BRANCH = "main";
+
 export class GitRepo {
   private constructor(private readonly dir: string) {}
 
-  /** Open (initializing if needed) a git repo at dir, ensuring a commit identity. */
+  /** Open (initializing if needed) a git repo at dir on the pinned branch, ensuring a commit identity. */
   static async open(dir: string): Promise<GitRepo> {
     const repo = new GitRepo(dir);
     if (!(await repo.isRepo())) {
-      await exec("git", ["-C", dir, "init", "-q"]);
+      await exec("git", ["-C", dir, "init", "-q", "-b", DEFAULT_BRANCH]);
     }
     await repo.ensureIdentity();
+    await repo.ensureBranch();
     return repo;
   }
 
@@ -110,22 +113,28 @@ export class GitRepo {
     }
   }
 
-  /** The repo's current branch name, or "main" if it can't be determined. */
-  private async currentBranch(): Promise<string> {
+  /** Ensure the repo is on DEFAULT_BRANCH (rename a committed branch; set the ref when unborn). */
+  private async ensureBranch(): Promise<void> {
+    let current = "";
     try {
-      const { stdout } = await exec("git", ["-C", this.dir, "rev-parse", "--abbrev-ref", "HEAD"]);
-      const branch = stdout.trim();
-      return branch && branch !== "HEAD" ? branch : "main";
+      current = (await exec("git", ["-C", this.dir, "rev-parse", "--abbrev-ref", "HEAD"])).stdout.trim();
     } catch {
-      return "main";
+      current = "";
+    }
+    if (current === DEFAULT_BRANCH) return;
+    if (current === "HEAD" || current === "") {
+      // unborn (no commits yet): point HEAD at the default branch
+      await exec("git", ["-C", this.dir, "symbolic-ref", "HEAD", `refs/heads/${DEFAULT_BRANCH}`]);
+    } else {
+      await exec("git", ["-C", this.dir, "branch", "-m", current, DEFAULT_BRANCH]);
     }
   }
 
-  /** Push the current branch to origin. Skipped when no remote; failures are returned, never thrown. */
+  /** Push the pinned branch to origin. Skipped when no remote; failures are returned, never thrown. */
   async push(): Promise<PushResult> {
     if (!(await this.hasRemote())) return { status: "skipped" };
     try {
-      await exec("git", ["-C", this.dir, "push", "origin", await this.currentBranch()]);
+      await exec("git", ["-C", this.dir, "push", "origin", DEFAULT_BRANCH]);
       return { status: "ok" };
     } catch (e) {
       return { status: "error", detail: e instanceof Error ? e.message : String(e) };
@@ -148,9 +157,8 @@ export class GitRepo {
     if (!(await this.hasRemote())) return { status: "skipped" };
     const before = await this.head();
     try {
-      // Pull the branch we push (by name) — never the remote's HEAD symref, which may point at a
-      // branch the remote doesn't actually have (e.g. a bare repo created with a different default).
-      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", await this.currentBranch()]);
+      // Pull our pinned branch by name — never the remote's HEAD symref.
+      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", DEFAULT_BRANCH]);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       try {
