@@ -1,7 +1,7 @@
 // HTTP transport: MCP over Streamable HTTP (stateless: a fresh transport+server per request),
 // guarded by bearer auth; plus unauthenticated /health endpoints. (Gap 02, Gap 06, Gap 17)
 
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type RequestHandler } from "express";
 import type { Database as Db } from "better-sqlite3";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
@@ -34,6 +34,8 @@ export interface HttpAppDeps {
   rateLimiter?: RateLimiter;
   /** When set, mounts the admin-only membership/key API at /admin and enables /ui/admin. */
   admin?: AdminContext;
+  /** True = team mode (auth on /mcp + /ui login + /admin). False = local mode (no auth). */
+  requireAuth: boolean;
 }
 
 export function buildHttpApp(deps: HttpAppDeps): Express {
@@ -54,9 +56,15 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     res.status(ready.http).json(ready.body);
   });
 
+  app.get("/", (_req: Request, res: Response) => {
+    res.redirect("/ui");
+  });
+
   const auth = requireBearerAuth({ verifier: new KrimtoTokenVerifier(deps.keys, deps.membership) });
   const handleMcp = async (req: Request, res: Response): Promise<void> => {
-    const mcp = buildServer(deps.ctx, (extra) => requesterFromAuth(extra.authInfo));
+    const mcp = deps.requireAuth
+      ? buildServer(deps.ctx, (extra) => requesterFromAuth(extra.authInfo))
+      : buildServer(deps.ctx); // local mode: no resolver → uses ctx.requester (the local identity)
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       void transport.close();
@@ -80,14 +88,15 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     }
     next();
   };
-  app.post("/mcp", auth, rateLimit, (req, res) => {
+  const mcpChain: RequestHandler[] = deps.requireAuth ? [auth, rateLimit] : [rateLimit];
+  app.post("/mcp", ...mcpChain, (req, res) => {
     void handleMcp(req, res);
   });
-  app.get("/mcp", auth, rateLimit, (req, res) => {
+  app.get("/mcp", ...mcpChain, (req, res) => {
     void handleMcp(req, res);
   });
 
-  if (deps.admin) app.use("/admin", auth, buildAdminRouter(deps.admin));
+  if (deps.requireAuth && deps.admin) app.use("/admin", auth, buildAdminRouter(deps.admin));
 
   app.use(
     "/ui",
@@ -96,7 +105,8 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       keys: deps.keys,
       membership: deps.membership,
       sessionSecret: sessionConfigFromEnv().secret,
-      admin: deps.admin,
+      admin: deps.requireAuth ? deps.admin : undefined,
+      localIdentity: deps.requireAuth ? undefined : deps.ctx.requester.identity,
     }),
   );
 

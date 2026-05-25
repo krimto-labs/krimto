@@ -16,6 +16,8 @@ export interface WebRouterDeps {
   sessionSecret: string;
   /** When set, enables the admin-only /ui/admin page. */
   admin?: AdminContext;
+  /** When set (local mode), skip login and use this identity for every request. */
+  localIdentity?: string;
 }
 
 type WithIdentity = Request & { identity: string };
@@ -53,6 +55,11 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
   });
 
   router.use((req, res, next) => {
+    if (deps.localIdentity) {
+      (req as WithIdentity).identity = deps.localIdentity; // local mode: no login
+      next();
+      return;
+    }
     const identity = verifySession(parseCookies(req.headers.cookie)[COOKIE_NAME], secret);
     if (!identity) {
       res.redirect("/ui/login");

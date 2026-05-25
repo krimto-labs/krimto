@@ -332,6 +332,8 @@ export async function main(): Promise<void> {
   const httpPort = process.env.KRIMTO_HTTP_PORT ? Number(process.env.KRIMTO_HTTP_PORT) : undefined;
   if (httpPort !== undefined && Number.isInteger(httpPort) && httpPort > 0) {
     const rlConfig = rateLimitConfigFromEnv();
+    // Team mode (auth) when an admin is bootstrapped or auth is explicitly required; else local mode.
+    const requireAuth = Boolean(process.env.KRIMTO_BOOTSTRAP_ADMIN || process.env.KRIMTO_REQUIRE_AUTH === "1");
     const app = buildHttpApp({
       ctx,
       keys,
@@ -345,9 +347,18 @@ export async function main(): Promise<void> {
       gitRemoteStatus: () => batcher.lastPushStatus(),
       rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
       admin,
+      requireAuth,
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
+      if (!requireAuth) {
+        process.stderr.write(
+          `\nKrimto is running WITHOUT authentication (local mode) — local/trusted use only.\n` +
+            `  Connect your agent (one line, no key): {"mcpServers":{"krimto":{"url":"http://localhost:${httpPort}/mcp"}}}\n` +
+            `  Then tell your agent: "remember that ..."  and open http://localhost:${httpPort} to browse.\n` +
+            `  For networked or TEAM use, set KRIMTO_BOOTSTRAP_ADMIN=<email> to require API keys.\n\n`,
+        );
+      }
     });
     telemetry.start(); // no-op unless KRIMTO_TELEMETRY_ENDPOINT is set
   } else {

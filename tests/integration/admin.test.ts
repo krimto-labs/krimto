@@ -60,6 +60,7 @@ beforeEach(async () => {
     startedAt: Date.now(),
     isBuilding: () => false,
     gitRemoteStatus: () => "none",
+    requireAuth: true,
     admin,
   });
   await new Promise<void>((r) => {

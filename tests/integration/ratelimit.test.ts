@@ -29,7 +29,7 @@ beforeEach(async () => {
   };
   const app = buildHttpApp({
     ctx, keys, membership: () => membership, db, index,
-    version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none",
+    version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none", requireAuth: true,
     rateLimiter: new RateLimiter({ enabled: true, perKeyPerMinute: 2 }),
   });
   await new Promise<void>((r) => { server = app.listen(0, () => r()); });
