@@ -19,3 +19,12 @@ describe("layout", () => {
     expect(layout("T", "<p>x</p>")).not.toContain("/ui/logout");
   });
 });
+
+describe("layout copy-button support", () => {
+  it("embeds a copy script that reads data-copy targets", () => {
+    const html = layout("T", "<pre id='x'>hi</pre><button data-copy='x'>Copy</button>");
+    expect(html).toContain("data-copy");
+    expect(html).toContain("navigator.clipboard");
+    expect(html).toContain("getElementById");
+  });
+});
