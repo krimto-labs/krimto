@@ -32,6 +32,34 @@ timestamp, reviewer).
    **team** layer: restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com` to turn on accounts and invite
    teammates.
 
+## Connect your agent
+
+Krimto is one MCP server — point any client at `http://localhost:8080/mcp`. Verified for **Claude Code**
+and **Cursor**:
+
+**Claude Code** (local, no key):
+
+```bash
+claude mcp add --transport http krimto http://localhost:8080/mcp
+```
+
+**Cursor** (local, no key) — add to `~/.cursor/mcp.json` and restart Cursor:
+
+```json
+{ "mcpServers": { "krimto": { "url": "http://localhost:8080/mcp" } } }
+```
+
+…or one-click: open **http://localhost:8080/ui/connect** and click **Add to Cursor**.
+
+**Team mode** (after `KRIMTO_BOOTSTRAP_ADMIN`): connecting needs your API key. The server prints a
+ready-to-paste config (with the key) on boot, and `/ui/connect` shows it too. Add the key as a header:
+
+- Claude Code: append `--header "Authorization: Bearer krm_live_…"`
+- Cursor: add `"headers": { "Authorization": "Bearer krm_live_…" }` to the server block
+
+Other clients (Codex, Gemini CLI, Copilot, Cline) use the same `url` (plus the `Bearer` header in team
+mode); those are best-effort and not yet individually verified.
+
 ## How it works
 
 Three layers, one source of truth:
