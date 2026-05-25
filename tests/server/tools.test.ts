@@ -63,6 +63,38 @@ describe("krimto_write", () => {
       krimtoWrite(ctx, { scope: "org/acme", title: "x".repeat(81), body: "y" }),
     ).rejects.toMatchObject({ code: "invalid_params" });
   });
+
+  it("resolves user/me and user/self to the caller's personal scope (readable back)", async () => {
+    const res = await krimtoWrite(ctx, { scope: "user/me", title: "My note", body: "personal" });
+    expect(res.scope).toBe("user/alice@acme.com");
+    const read = await krimtoRead(ctx, res.id);
+    expect(read.scope).toBe("user/alice@acme.com");
+
+    const res2 = await krimtoWrite(ctx, { scope: "user/self", title: "Another", body: "x" });
+    expect(res2.scope).toBe("user/alice@acme.com");
+  });
+
+  it("refuses a write the author could not read back — no ghost facts, even for an admin", async () => {
+    // alice is an org admin, so canWrite('user/bob@acme.com') is true — but she can't read it back.
+    await expect(
+      krimtoWrite(ctx, { scope: "user/bob@acme.com", title: "ghost", body: "y" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    const scopes = (await krimtoListScopes(ctx)).scopes.map((s) => s.path);
+    expect(scopes).not.toContain("user/bob@acme.com");
+  });
+
+  it("forbidden write errors list the caller's writable scopes so an agent can self-correct", async () => {
+    try {
+      await krimtoWrite(ctx, { scope: "user/bob@acme.com", title: "x", body: "y" });
+      throw new Error("expected krimtoWrite to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(KrimtoError);
+      const data = (e as KrimtoError).data as { writable_scopes?: string[] };
+      expect(data.writable_scopes).toContain("user/alice@acme.com");
+      expect(data.writable_scopes).toContain("team/payments");
+      expect(data.writable_scopes).toContain("org/acme");
+    }
+  });
 });
 
 describe("krimto_recall", () => {

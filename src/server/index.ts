@@ -84,10 +84,13 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
       description:
         "Save a durable, attributable fact to Krimto memory. Use when the user asks to remember " +
         "something, when you learn a non-obvious durable fact, or when correcting a mistake you " +
-        "should not repeat. Default to the user's personal scope unless the fact is clearly shared. " +
-        "Call krimto_recall first to avoid duplicates.",
+        "should not repeat. For the user's personal scope use `user/me` (the server resolves it to " +
+        "their identity) — do not guess an email. The write is rejected (with the list of scopes you " +
+        "may write to) if you target a scope you couldn't read back. Call krimto_recall first to avoid duplicates.",
       inputSchema: {
-        scope: z.string().describe("user/<id>, team/<slug>, or org/<slug>"),
+        scope: z
+          .string()
+          .describe("`user/me` for the caller's own scope, or team/<slug> / org/<slug> for shared facts"),
         title: z.string().describe("descriptive title, <= 80 chars"),
         body: z.string().describe("markdown content"),
         tags: z.array(z.string()).optional(),

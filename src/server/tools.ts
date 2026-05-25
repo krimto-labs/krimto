@@ -6,7 +6,7 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { createFact, MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
 import { FactStore } from "../storage/store";
 import { isValidScope, type Requester } from "../access/scope";
-import { canRead, canWrite, type Membership } from "../access/membership";
+import { canRead, canWrite, isOrgAdmin, type Membership } from "../access/membership";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { rankCandidates } from "../retrieval/pipeline";
@@ -97,9 +97,26 @@ function readableScopesFor(ctx: ToolContext): string[] {
   return ctx.index.allScopes().filter((s) => canRead(ctx.membership, ctx.requester.identity, s));
 }
 
+const PERSONAL_SCOPE_ALIASES = new Set(["me", "self", "user/me", "user/self"]);
+
+/** Rewrite a personal-scope alias (user/me, user/self, me, self) to the caller's own user scope. */
+function resolvePersonalScope(scope: string, identity: string): string {
+  return PERSONAL_SCOPE_ALIASES.has(scope.trim().toLowerCase()) ? `user/${identity}` : scope;
+}
+
+/** Scopes the requester can write to AND read back — surfaced in errors so an agent can self-correct. */
+function writableScopesFor(ctx: ToolContext): string[] {
+  const scopes = [`user/${ctx.requester.identity}`, ...ctx.requester.teams.map((t) => `team/${t}`)];
+  if (isOrgAdmin(ctx.membership, ctx.requester.identity)) scopes.push(`org/${ctx.membership.org.slug}`);
+  return scopes;
+}
+
 /** Create a new fact. Author comes from the requester identity; scope is required. */
 export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<WriteResult> {
-  if (!isValidScope(input.scope)) {
+  // "user/me"/"user/self" (and bare "me"/"self") mean the caller's own personal scope. An agent
+  // can't know the caller's email, so resolve the alias here instead of orphaning the fact.
+  const scope = resolvePersonalScope(input.scope, ctx.requester.identity);
+  if (!isValidScope(scope)) {
     throw new KrimtoError("invalid_params", `Invalid scope: ${input.scope}`, { field: "scope" });
   }
   if (!input.title || input.title.length > MAX_TITLE_LENGTH) {
@@ -110,12 +127,23 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
   if (!input.body) {
     throw new KrimtoError("invalid_params", "body is required", { field: "body" });
   }
-  if (!canWrite(ctx.membership, ctx.requester.identity, input.scope)) {
-    throw new KrimtoError("forbidden", `Not allowed to write to ${input.scope}`, { scope: input.scope });
+  if (!canWrite(ctx.membership, ctx.requester.identity, scope)) {
+    throw new KrimtoError("forbidden", `Not allowed to write to ${scope}`, {
+      scope,
+      writable_scopes: writableScopesFor(ctx),
+    });
+  }
+  // Ghost-fact guard: refuse a write the author couldn't read back (e.g. an org admin writing into
+  // another user's personal scope — permitted by canWrite, but then invisible to them via recall/read).
+  if (!canRead(ctx.membership, ctx.requester.identity, scope)) {
+    throw new KrimtoError("forbidden", `Refusing to write to ${scope}: you would not be able to read it back`, {
+      scope,
+      writable_scopes: writableScopesFor(ctx),
+    });
   }
   return ctx.writeQueue.run(async () => {
     const fact = createFact({
-      scope: input.scope,
+      scope,
       title: input.title,
       body: input.body,
       author: ctx.requester.identity,
