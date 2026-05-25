@@ -4,7 +4,23 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] — 2026-05-25
+
+### Fixed
+
+- Scope ghosting (BUG-4): an agent guessing `user/me` no longer creates a fact invisible to everyone.
+  `user/me`/`user/self` resolve to the caller's own scope, and any write the author couldn't read back
+  is refused with the list of scopes they may write to (`src/server/tools.ts`).
+- Key lockout (BUG-1): the `/ui` revoke handler refuses to remove your only key (409), and
+  `KRIMTO_REISSUE_ADMIN_KEY=<email>` mints a fresh admin key for recovery (`src/web/router.ts`,
+  `src/server/bootstrap.ts`).
+- Revoke clarity (BUG-2): each revoke button has an aria-label naming its key; the sole-key row shows
+  "only key" instead of a revoke button (`src/web/views.ts`).
+- Silent git sync (BUG-3): push/pull use the repo's explicit branch (not the remote `HEAD` symref), so
+  sync no longer fails silently on a branch-name mismatch; the last pull status is surfaced at
+  `/health/ready` as `git_sync` (`src/storage/git.ts`, `src/server/health.ts`).
+
+## [0.2.0]
 
 ### Added
 

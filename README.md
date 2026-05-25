@@ -91,6 +91,16 @@ each API key on `/mcp` (responses carry `X-RateLimit-*`; over the limit returns 
 (version, install id, and size buckets only — never fact content, identities, queries, scopes, or git
 remotes).
 
+**Locked out of the admin account?** Restart with `KRIMTO_REISSUE_ADMIN_KEY=you@acme.com` to mint and
+print a fresh admin key. (The web UI also refuses to revoke your last remaining key.)
+
+**Multi-instance sync:** Krimto pushes and pulls on the repo's current branch, so give every instance
+the same default branch — e.g. `git config --global init.defaultBranch main` before first run. A
+stuck pull is reported at `/health/ready` under `git_sync` (it never blocks readiness).
+
+When an agent saves a personal note, point it at `user/me` — the server resolves that to the caller's
+own scope, so facts never land in an unreadable scope.
+
 ### Option C — Docker (HTTP + bearer auth, containerized)
 
 Build the image and run it (a published image is coming):
