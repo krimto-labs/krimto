@@ -156,3 +156,26 @@ describe("GitRepo pull", () => {
     expect(await repo.head()).toBe(localHead);
   });
 });
+
+describe("GitRepo branch mismatch (BUG-3)", () => {
+  it("syncs when the remote's default branch differs from the local branch", async () => {
+    // Bare remote whose HEAD points at `main`, but the local Krimto repo works on `master`
+    // (a common container default). pull must use the branch name, not the remote HEAD symref.
+    const bareMain = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-baremain-"));
+    await execFileP("git", ["init", "--bare", "-q", "-b", "main", bareMain]);
+    const local = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-master-"));
+    const repo = await GitRepo.open(local);
+    const store = new FactStore(local);
+    const { path: rel } = await store.writeFact({ scope: "org/acme", title: "S", body: "b", author: "a@x.com" });
+    await repo.stage(rel);
+    await repo.commit("seed");
+    await execFileP("git", ["-C", local, "branch", "-M", "master"]); // force local branch to master
+    await repo.setRemote(bareMain);
+
+    expect((await repo.push()).status).toBe("ok"); // pushes `master` (bare HEAD still → main)
+    expect((await repo.pull()).status).not.toBe("error"); // pulls `master` by name — no HEAD error
+
+    await fs.rm(bareMain, { recursive: true, force: true });
+    await fs.rm(local, { recursive: true, force: true });
+  });
+});

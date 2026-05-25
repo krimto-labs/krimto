@@ -15,6 +15,8 @@ export interface ReadyChecks {
   sqlite: CheckResult;
   index: CheckResult;
   git_remote: CheckResult;
+  /** Inbound pull status — surfaced for observability so a stuck sync isn't invisible (BUG-3). */
+  git_sync?: CheckResult;
 }
 
 export interface LiveResponse {
@@ -67,4 +69,21 @@ export function gitRemoteCheck(status: "ok" | "skipped" | "error" | "none"): Che
 /** Reports the last push status (observability only — never toggles readiness). */
 export function gitRemoteHealth(batcher: CommitBatcher): CheckResult {
   return gitRemoteCheck(batcher.lastPushStatus());
+}
+
+/** Maps the last inbound-pull status to a git_sync CheckResult. Visible but never blocks readiness. */
+export function gitSyncCheck(
+  status: "ok" | "skipped" | "up-to-date" | "conflict" | "error" | "none",
+): CheckResult {
+  if (status === "error") return { status: "error", detail: "last pull from the remote failed" };
+  if (status === "conflict") return { status: "error", detail: "last pull hit a conflict (local state kept)" };
+  const detail =
+    status === "ok"
+      ? "last pull ok"
+      : status === "up-to-date"
+        ? "up to date"
+        : status === "none"
+          ? "no pull yet"
+          : "no remote configured";
+  return { status: "ok", detail };
 }

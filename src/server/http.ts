@@ -11,7 +11,7 @@ import { type Membership } from "../access/membership";
 import { type FactIndex } from "../index/factIndex";
 import { buildServer } from "./index";
 import { requesterFromAuth, type ToolContext } from "./tools";
-import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck } from "./health";
+import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck, gitSyncCheck } from "./health";
 import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
 import { buildWebRouter } from "../web/router";
@@ -27,6 +27,8 @@ export interface HttpAppDeps {
   startedAt: number;
   isBuilding: () => boolean;
   gitRemoteStatus: () => "ok" | "skipped" | "error" | "none";
+  /** Optional inbound-pull status for /health/ready observability (BUG-3). */
+  gitSyncStatus?: () => "ok" | "skipped" | "up-to-date" | "conflict" | "error" | "none";
   /** When set, per-identity rate limiting is enforced on /mcp. */
   rateLimiter?: RateLimiter;
 }
@@ -44,6 +46,7 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       sqlite: sqliteHealth(deps.db),
       index: indexHealth(deps.index, deps.isBuilding()),
       git_remote: gitRemoteCheck(deps.gitRemoteStatus()),
+      ...(deps.gitSyncStatus ? { git_sync: gitSyncCheck(deps.gitSyncStatus()) } : {}),
     });
     res.status(ready.http).json(ready.body);
   });

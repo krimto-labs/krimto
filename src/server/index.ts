@@ -307,6 +307,7 @@ export async function main(): Promise<void> {
       version: KRIMTO_VERSION,
       startedAt: Date.now(),
       isBuilding: () => false,
+      gitSyncStatus: () => sync.lastPullStatus(),
       gitRemoteStatus: () => batcher.lastPushStatus(),
       rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
     });

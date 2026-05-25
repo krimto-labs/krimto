@@ -99,11 +99,22 @@ export class GitRepo {
     }
   }
 
-  /** Push HEAD to origin. Skipped when no remote; failures are returned, never thrown. */
+  /** The repo's current branch name, or "main" if it can't be determined. */
+  private async currentBranch(): Promise<string> {
+    try {
+      const { stdout } = await exec("git", ["-C", this.dir, "rev-parse", "--abbrev-ref", "HEAD"]);
+      const branch = stdout.trim();
+      return branch && branch !== "HEAD" ? branch : "main";
+    } catch {
+      return "main";
+    }
+  }
+
+  /** Push the current branch to origin. Skipped when no remote; failures are returned, never thrown. */
   async push(): Promise<PushResult> {
     if (!(await this.hasRemote())) return { status: "skipped" };
     try {
-      await exec("git", ["-C", this.dir, "push", "origin", "HEAD"]);
+      await exec("git", ["-C", this.dir, "push", "origin", await this.currentBranch()]);
       return { status: "ok" };
     } catch (e) {
       return { status: "error", detail: e instanceof Error ? e.message : String(e) };
@@ -126,7 +137,9 @@ export class GitRepo {
     if (!(await this.hasRemote())) return { status: "skipped" };
     const before = await this.head();
     try {
-      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", "HEAD"]);
+      // Pull the branch we push (by name) — never the remote's HEAD symref, which may point at a
+      // branch the remote doesn't actually have (e.g. a bare repo created with a different default).
+      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", await this.currentBranch()]);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       try {

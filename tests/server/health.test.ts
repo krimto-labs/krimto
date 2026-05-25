@@ -7,7 +7,7 @@ import { FactIndex } from "../../src/index/factIndex";
 import { GitRepo } from "../../src/storage/git";
 import { FactStore } from "../../src/storage/store";
 import { CommitBatcher } from "../../src/storage/batcher";
-import { sqliteHealth, indexHealth, healthReady, gitRemoteHealth } from "../../src/server/health";
+import { sqliteHealth, indexHealth, healthReady, gitRemoteHealth, gitSyncCheck } from "../../src/server/health";
 
 describe("health checks reflect real index state", () => {
   it("reports ok sqlite and a fact count once built", () => {
@@ -59,5 +59,27 @@ describe("gitRemoteHealth", () => {
     const ok = { status: "ok" } as const;
     const r = healthReady("0.2.0", { sqlite: ok, index: { status: "ok", fact_count: 1 }, git_remote: { status: "error" } });
     expect(r.http).toBe(200);
+  });
+});
+
+describe("gitSyncCheck (BUG-3 visibility)", () => {
+  it("surfaces pull failures/conflicts as error status, healthy states as ok", () => {
+    expect(gitSyncCheck("error").status).toBe("error");
+    expect(gitSyncCheck("conflict").status).toBe("error");
+    expect(gitSyncCheck("ok").status).toBe("ok");
+    expect(gitSyncCheck("up-to-date").status).toBe("ok");
+    expect(gitSyncCheck("none").status).toBe("ok");
+  });
+
+  it("a failed pull is visible but does not block readiness", () => {
+    const ok = { status: "ok" } as const;
+    const r = healthReady("0.2.0", {
+      sqlite: ok,
+      index: { status: "ok", fact_count: 1 },
+      git_remote: ok,
+      git_sync: gitSyncCheck("error"),
+    });
+    expect(r.http).toBe(200); // visible in body.checks.git_sync, but never 503
+    expect(r.body.checks.git_sync?.status).toBe("error");
   });
 });
