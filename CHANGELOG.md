@@ -4,6 +4,21 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-05-25
+
+### Added
+- Local mode (the default when no auth env is set): a fresh server runs **without authentication** —
+  connect an agent with one line and **no `Authorization` header**, the dashboard opens with **no
+  login**, and `GET /` redirects to it. A startup banner spells out the connect line and warns it's
+  local/trusted-use only. Set `KRIMTO_BOOTSTRAP_ADMIN` (or `KRIMTO_REQUIRE_AUTH=1`) for the unchanged
+  team auth (keys, login, `/admin`).
+- A team-first "How Krimto works" dashboard explainer (personal → team → org) and a two-minute solo
+  quickstart in the README.
+
+### Fixed
+- Git sync pinned to `main` end-to-end (new repos init on `main`; existing repos normalize), fixing the
+  branch-name mismatch that broke multi-instance sync (smoke-test-2 Test G).
+
 ## [0.2.2] — 2026-05-25
 
 ### Added

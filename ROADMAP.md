@@ -5,8 +5,10 @@ open — shipping toward it release by release. Each milestone has a tracking is
 
 ## v0.2 — Team memory (first public release)
 
-The memory core, shipped — runnable as a local **stdio** MCP server, an **HTTP** server with
-bearer auth, or a **Docker** container.
+The memory core, shipped — runnable as a **local, no-auth** HTTP server (one command, one config line,
+no key — the default), or in **team mode** with API keys (`KRIMTO_BOOTSTRAP_ADMIN`), plus a local
+**stdio** server and a **Docker** image. Team adoption at scale (SSO, invite links) routes to Krimto
+Cloud in v1.0.
 
 **Shipped and wired into the running server:**
 - Markdown-in-git storage layer; one file per fact with mandatory frontmatter
