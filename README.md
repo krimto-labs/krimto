@@ -1,6 +1,8 @@
 # Krimto
 
-> **Krimto — the open-source team memory layer for AI coding agents, with user/team/org hierarchy and markdown-files-in-git storage. Apache-2.0. Self-hostable — local stdio MCP server, or an HTTP server with bearer auth (single-Docker image on the roadmap).**
+> **Krimto — open-source team memory for AI coding agents.** Personal, team, and org knowledge your
+> agents share, in plain markdown you own (git-backed, Apache-2.0). **Try it solo in two minutes, then
+> bring your team.**
 
 One shared brain for every agent at your company. Every agent at every team writes facts to one
 place and reads the right slice of it — Alice's preferences override the team's defaults, the team's
@@ -12,6 +14,23 @@ timestamp, reviewer).
 > MCP server over **both stdio and HTTP — the HTTP transport has `Bearer` API-key auth and
 > `/health` endpoints**. On the near-term roadmap: a single-Docker image and the web UI. We claim the
 > team-memory position now and fulfil it in the open — see [ROADMAP.md](ROADMAP.md).
+
+## Try it in 2 minutes (solo, no account)
+
+1. **Run it** (data stays in `~/.krimto`):
+   ```bash
+   docker run -d -p 8080:8080 -v ~/.krimto:/data krimto    # or, from a clone: pnpm dev
+   ```
+2. **Point Claude Code at it — one line, no key:**
+   ```json
+   { "mcpServers": { "krimto": { "url": "http://localhost:8080/mcp" } } }
+   ```
+   (or run `claude mcp add --transport http krimto http://localhost:8080/mcp`)
+3. Tell your agent: **"remember that our staging DB resets every Sunday."** Then ask in a *new* chat:
+   **"what do you know about staging?"** — it remembers.
+4. Open **http://localhost:8080** to browse. That's your *personal* layer — Krimto's point is the
+   **team** layer: restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com` to turn on accounts and invite
+   teammates.
 
 ## How it works
 

@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, type FactView } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, type FactView } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -84,6 +84,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           // RecallHit shape: { id, scope, title, body, score, author, updated }
           body += factResults(results.map((r) => ({ id: r.id, scope: r.scope, title: r.title })));
         } else {
+          body = howItWorksPanel() + body; // team-first explainer on the landing
           const { scopes } = await krimtoListScopes(ctxFor(req));
           // ListScopesResult.scopes shape: { path, fact_count, last_updated }
           // "path" is the scope name field

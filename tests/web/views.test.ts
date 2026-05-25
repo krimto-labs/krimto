@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody } from "../../src/web/views";
+import { keysBody, howItWorksPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -32,5 +32,16 @@ describe("keysBody", () => {
     const html = keysBody([k({ label: "<script>x</script>" }), k({ hash: "c".repeat(64) })]);
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>x</script>");
+  });
+});
+
+describe("howItWorksPanel", () => {
+  it("leads with team memory and names the three layers + a bring-your-team step", () => {
+    const h = howItWorksPanel();
+    expect(h).toContain("Shared memory for your team");
+    expect(h).toContain("Personal");
+    expect(h).toContain("Team");
+    expect(h).toContain("Org");
+    expect(h).toContain("Bring your team");
   });
 });

@@ -124,3 +124,21 @@ export function adminBody(v: AdminView): string {
     `<h2>Teams</h2><table><tbody>${teamRows}</tbody></table>`
   );
 }
+
+/** Team-first explainer for the dashboard landing. The wedge (personal→team→org) is the headline. */
+export function howItWorksPanel(): string {
+  return (
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Shared memory for your team's AI</h2>` +
+    `<p class="muted">Every agent on your team reads and writes the same memory, in three layers:</p>` +
+    `<ul>` +
+    `<li><strong>Personal</strong> — just you (your preferences, your notes).</li>` +
+    `<li><strong>Team</strong> — your squad's shared conventions and facts.</li>` +
+    `<li><strong>Org</strong> — company-wide rules everyone inherits.</li>` +
+    `</ul>` +
+    `<p class="muted">More specific wins: your personal note overrides the team's, which overrides the org's.</p>` +
+    `<p><strong>Bring your team:</strong> restart with <code>KRIMTO_BOOTSTRAP_ADMIN=you@acme.com</code> to turn on ` +
+    `accounts and invite teammates (hosted Krimto Cloud is on the roadmap).</p>` +
+    `</section>`
+  );
+}
