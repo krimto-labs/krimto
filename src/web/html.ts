@@ -22,9 +22,10 @@ const COPY_SCRIPT = `<script>
 document.addEventListener('click',function(e){
   var b=e.target.closest&&e.target.closest('[data-copy]'); if(!b)return;
   var el=document.getElementById(b.getAttribute('data-copy')); if(!el)return;
-  navigator.clipboard.writeText(el.innerText).then(function(){
+  if(!navigator.clipboard)return;
+  navigator.clipboard.writeText(el.textContent).then(function(){
     var prev=b.textContent; b.textContent='Copied'; setTimeout(function(){b.textContent=prev;},1200);
-  });
+  }).catch(function(){});
 });
 </script>`;
 
