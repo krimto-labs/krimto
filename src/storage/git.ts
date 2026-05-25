@@ -125,8 +125,17 @@ export class GitRepo {
     if (current === "HEAD" || current === "") {
       // unborn (no commits yet): point HEAD at the default branch
       await exec("git", ["-C", this.dir, "symbolic-ref", "HEAD", `refs/heads/${DEFAULT_BRANCH}`]);
-    } else {
+      return;
+    }
+    try {
       await exec("git", ["-C", this.dir, "branch", "-m", current, DEFAULT_BRANCH]);
+    } catch {
+      // a `main` already exists — switch to it rather than crash startup over branch naming
+      try {
+        await exec("git", ["-C", this.dir, "checkout", DEFAULT_BRANCH]);
+      } catch {
+        /* leave as-is — never abort startup over a branch name */
+      }
     }
   }
 
