@@ -59,6 +59,7 @@ describe("connectPanel", () => {
     expect(h).toContain("Authorization: Bearer krm_live_");
     expect(h).toContain('href="/ui/keys"');
     expect(h).toContain("Issue a key");
+    expect(h).toContain("&lt;your key&gt;");            // generic-section header rendered (escaped)
     expect(h).not.toContain("cursor://");               // no one-click that would 401
   });
 });

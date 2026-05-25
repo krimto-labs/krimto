@@ -144,7 +144,7 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
   const placeholderKey = opts.requireAuth ? "krm_live_…" : undefined;
   const { claude, cursorJson } = connectSnippets({ host: opts.host, key: placeholderKey });
   const contract = genericContract({ host: opts.host, requireAuth: opts.requireAuth });
-  const copy = (id: string): string => `<button type="button" data-copy="${id}">Copy</button>`;
+  const copy = (id: string): string => `<button type="button" data-copy="${escapeHtml(id)}">Copy</button>`;
 
   const cursorButton = opts.requireAuth
     ? ""
