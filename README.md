@@ -19,7 +19,7 @@ timestamp, reviewer).
 
 1. **Run it** (data stays in `~/.krimto`):
    ```bash
-   docker run -d -p 8080:8080 -v ~/.krimto:/data krimto    # or, from a clone: pnpm dev
+   docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest    # or, from a clone: pnpm dev
    ```
 2. **Point Claude Code at it — one line, no key:**
    ```json
