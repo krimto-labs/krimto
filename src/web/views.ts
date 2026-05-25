@@ -81,7 +81,8 @@ export function keysBody(keys: KeyRow[]): string {
           })
           .join("");
   return (
-    `<h1>API keys</h1><table><thead><tr><th>Label</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<h1>API keys</h1><p class="muted">Issue and revoke the keys your agents use to authenticate.</p>` +
+    `<table><thead><tr><th>Label</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +
     `<h2>Issue a new key</h2><form method="post" action="/ui/keys">` +
     `<input name="label" placeholder="label (optional)"><button type="submit">Issue key</button></form>`
   );
@@ -113,7 +114,7 @@ export function adminBody(v: AdminView): string {
         .join("")
     : `<tr><td colspan="2" class="muted">No teams yet.</td></tr>`;
   return (
-    `<h1>Admin</h1>` +
+    `<h1>Admin</h1><p class="muted">Add teammates and manage teams.</p>` +
     `<h2>Members</h2><table><tbody>${userRows}</tbody></table>` +
     `<form method="post" action="/ui/admin/members">` +
     `<input name="email" placeholder="teammate@acme.com" required>` +

@@ -89,4 +89,12 @@ describe("local mode (no auth)", () => {
     expect(html).toContain(`localhost:${port}/mcp`); // rendered from the request host
     expect(html).toContain("cursor://anysphere.cursor-deeplink/mcp/install"); // Add to Cursor button
   });
+
+  it("GET /ui/facts on an empty store shows the getting-started guide, not a bare list", async () => {
+    const r = await fetch(`${base()}/ui/facts`);
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    expect(html).toContain("Save your first memory");
+    expect(html).toContain("deploys are Tuesdays");
+  });
 });

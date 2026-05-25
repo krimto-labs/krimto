@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel, connectPanel, gettingStartedPanel } from "../../src/web/views";
+import { keysBody, howItWorksPanel, connectPanel, gettingStartedPanel, adminBody } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -98,5 +98,15 @@ describe("howItWorksPanel team expectations", () => {
     const h = howItWorksPanel();
     expect(h).toContain("What to expect when you turn on team mode");
     expect(h).toContain("Team page");
+  });
+});
+
+describe("page purpose lines", () => {
+  it("keysBody states its purpose", () => {
+    expect(keysBody([]).toLowerCase()).toContain("authenticate");
+  });
+  it("adminBody states its purpose for an admin", () => {
+    const h = adminBody({ isAdmin: true, users: [], teams: [] });
+    expect(h.toLowerCase()).toContain("manage teams");
   });
 });

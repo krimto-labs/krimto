@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, connectPanel, type FactView } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, connectPanel, gettingStartedPanel, type FactView } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -84,19 +84,23 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       const identity = idOf(req);
       const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
       try {
-        let body = searchBox(q);
         if (q) {
           const { results } = await krimtoRecall(ctxFor(req), { query: q });
-          // RecallHit shape: { id, scope, title, body, score, author, updated }
-          body += factResults(results.map((r) => ({ id: r.id, scope: r.scope, title: r.title })));
-        } else {
-          body = howItWorksPanel() + body; // team-first explainer on the landing
-          const { scopes } = await krimtoListScopes(ctxFor(req));
-          // ListScopesResult.scopes shape: { path, fact_count, last_updated }
-          // "path" is the scope name field
-          body += scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })));
+          const body = searchBox(q) + factResults(results.map((r) => ({ id: r.id, scope: r.scope, title: r.title })));
+          page(res, 200, "Memory", body, identity);
+          return;
         }
-        page(res, 200, "Facts", body, identity);
+        const { scopes } = await krimtoListScopes(ctxFor(req));
+        const totalFacts = scopes.reduce((n, s) => n + s.fact_count, 0);
+        if (totalFacts === 0) {
+          page(res, 200, "Memory", gettingStartedPanel(), identity); // empty store: teach, don't show a blank list
+          return;
+        }
+        const body =
+          howItWorksPanel() +
+          searchBox(q) +
+          scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })));
+        page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);
       }
