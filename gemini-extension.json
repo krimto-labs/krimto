@@ -1,6 +1,6 @@
 {
   "name": "krimto",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Open-source team memory layer for AI agents (MCP server).",
   "mcpServers": {
     "krimto": {

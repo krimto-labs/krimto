@@ -4,6 +4,17 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-05-25
+
+### Added
+- Connect-your-agent docs + an in-product `/ui/connect` panel with verified copy-paste config for
+  **Claude Code** and **Cursor** (local no-key and team variants), including a one-click **"Add to
+  Cursor"** deeplink (format verified against Cursor's MCP install-links docs). A "Connect" link is now
+  in the dashboard nav.
+- Team-mode startup now prints a ready-to-paste MCP config **with the issued key already in it** — no
+  more grepping the key out of logs and hand-assembling JSON. Snippets for the banner and the panel come
+  from one source (`src/server/connect.ts`) so they can't drift.
+
 ## [0.2.3] — 2026-05-25
 
 ### Added

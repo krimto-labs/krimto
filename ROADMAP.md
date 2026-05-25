@@ -22,9 +22,11 @@ Cloud in v1.0.
 - **Per-API-key rate limiting** (`KRIMTO_RATE_LIMIT_PER_MINUTE`) and **opt-in, bucketed telemetry** (`KRIMTO_TELEMETRY_ENDPOINT`) on the HTTP transport — both off by default
 - **Minimal web UI** at `/ui` — API-key sign-in (signed-cookie session), browse/search, fact detail, and self-service key management (issue/revoke), all under the same access control as MCP
 - **Membership management** — admin-only REST API (`/admin/*`) + `/ui/admin` to add members, manage teams, and issue/revoke keys live; `members.yaml` committed to git; `KRIMTO_BOOTSTRAP_ADMIN` elevates only the first admin
+- **Verified connect for Claude Code + Cursor** — copy-paste/one-click snippets in the README and an in-product `/ui/connect` panel (incl. an "Add to Cursor" deeplink); team mode prints a ready-to-paste config with the key
 
 **In progress / next up:**
 - Publishing the pull-image: the GitHub Actions workflow (`.github/workflows/docker-publish.yml`) is in place; it publishes to `ghcr.io/krimto-labs/krimto` on a `v*` tag once the repo has a remote
+- Onboarding for the rest: verify Codex and Gemini CLI, and an `npx`/stdio package + `curl | sh` installer so connecting needs no Docker build
 
 ## v0.3 — Humans on top of git
 
