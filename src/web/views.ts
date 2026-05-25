@@ -1,5 +1,5 @@
 import { escapeHtml } from "./html";
-import { connectSnippets, cursorDeeplink } from "../server/connect";
+import { connectSnippets, cursorDeeplink, genericContract } from "../server/connect";
 
 export function loginBody(error?: string): string {
   const err = error ? `<p style="color:#b91c1c">${escapeHtml(error)}</p>` : "";
@@ -126,6 +126,14 @@ export function adminBody(v: AdminView): string {
   );
 }
 
+// The standing rule a user pastes into their editor's rules file to make memory automatic (Door 3).
+const AUTOMATIC_MEMORY_RULE = `# Krimto memory — always use
+- Before a task, call krimto_recall to load what we already know.
+- When I say "remember", or you learn a durable fact, call krimto_write
+  (user/me = personal, team/<slug> = shared).
+- Respect precedence: user beats team beats org.
+- Don't save secrets or one-off chatter.`;
+
 /**
  * In-product connect instructions (Claude Code + Cursor), rendered from the request host so the URL
  * matches whatever the user typed. Local mode shows working no-key snippets and a one-click "Add to
@@ -135,22 +143,50 @@ export function adminBody(v: AdminView): string {
 export function connectPanel(opts: { host: string; requireAuth: boolean }): string {
   const placeholderKey = opts.requireAuth ? "krm_live_…" : undefined;
   const { claude, cursorJson } = connectSnippets({ host: opts.host, key: placeholderKey });
-  const button = opts.requireAuth
+  const contract = genericContract({ host: opts.host, requireAuth: opts.requireAuth });
+  const copy = (id: string): string => `<button type="button" data-copy="${id}">Copy</button>`;
+
+  const cursorButton = opts.requireAuth
     ? ""
-    : `<p><a href="${escapeHtml(cursorDeeplink(opts.host))}">Add to Cursor</a></p>`;
-  const note = opts.requireAuth
-    ? `<p class="muted">Team mode is on. Replace <code>krm_live_…</code> with a key from the ` +
-      `<a href="/ui/keys">Keys</a> page (each key is shown once, when issued).</p>`
-    : `<p class="muted">Local mode — no key needed. To bring your team, restart with ` +
-      `<code>KRIMTO_BOOTSTRAP_ADMIN=you@acme.com</code>.</p>`;
+    : `<p><a href="${escapeHtml(cursorDeeplink(opts.host))}">Add to Cursor (one-click)</a></p>`;
+
+  const teamKeyCallout = opts.requireAuth
+    ? `<h2>Get your key (team mode)</h2>` +
+      `<p>Krimto never displays issued keys. <a href="/ui/keys">Issue a key</a>, copy it, then ` +
+      `replace <code>krm_live_…</code> in the config above with it.</p>`
+    : "";
+
+  const headerLine = contract.header
+    ? `<li>Header: <code>${escapeHtml(contract.header)}</code></li>`
+    : "";
+
   return (
     `<h1>Connect your agent</h1>` +
-    `<p class="muted">Krimto is one MCP server — point any agent at it.</p>` +
-    `<h2>Claude Code</h2><pre>${escapeHtml(claude)}</pre>` +
-    `<h2>Cursor</h2>${button}` +
-    `<p class="muted">…or add to <code>~/.cursor/mcp.json</code> and restart Cursor:</p>` +
-    `<pre>${escapeHtml(cursorJson)}</pre>` +
-    note
+    `<p class="muted">Point your editor at Krimto: pick it, copy the config, paste it, then check the connection.</p>` +
+    `<h2>1. Claude Code</h2>` +
+    `<pre id="cc-cmd">${escapeHtml(claude)}</pre>${copy("cc-cmd")}` +
+    `<p class="muted">Run it in your terminal. If Claude Code is already open, restart the session. ` +
+    `Verify: <code>claude mcp list</code> shows <code>krimto</code> as ✓ Connected.</p>` +
+    `<h2>2. Cursor</h2>${cursorButton}` +
+    `<p class="muted">…or add to <code>~/.cursor/mcp.json</code>, then fully quit Cursor (Cmd-Q) and reopen:</p>` +
+    `<pre id="cursor-json">${escapeHtml(cursorJson)}</pre>${copy("cursor-json")}` +
+    `<p class="muted">Verify: Settings → MCP shows a green dot next to <code>krimto</code>.</p>` +
+    teamKeyCallout +
+    `<h2>3. Make it automatic</h2>` +
+    `<p>By default your AI uses memory only when you ask. Paste this rule once so it remembers and recalls on its own:</p>` +
+    `<pre id="auto-rule">${escapeHtml(AUTOMATIC_MEMORY_RULE)}</pre>${copy("auto-rule")}` +
+    `<p class="muted">Where to paste it: Claude Code → <code>CLAUDE.md</code> · Cursor → ` +
+    `<code>.cursor/rules/krimto.mdc</code> · Codex → <code>AGENTS.md</code> · Gemini CLI → <code>GEMINI.md</code>.</p>` +
+    `<h2>Any other MCP client</h2>` +
+    `<p class="muted">Krimto speaks the Model Context Protocol. Configure your client with:</p>` +
+    `<ul>` +
+    `<li>Transport: <strong>Streamable HTTP</strong></li>` +
+    `<li>URL: <code>${escapeHtml(contract.url)}</code></li>` +
+    headerLine +
+    `<li>Tools: <code>${escapeHtml(contract.tools.join(", "))}</code></li>` +
+    `</ul>` +
+    `<p class="muted">See your client's own MCP-server docs for where to paste this.</p>` +
+    `<p><strong>Next:</strong> <a href="/ui/facts">save your first memory →</a></p>`
   );
 }
 
