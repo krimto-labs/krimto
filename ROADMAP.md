@@ -19,6 +19,7 @@ bearer auth, or a **Docker** container.
 - **Docker image** (`docker build` + `docker run`) packaging the HTTP server, with a persisted `/data` volume
 - **Per-API-key rate limiting** (`KRIMTO_RATE_LIMIT_PER_MINUTE`) and **opt-in, bucketed telemetry** (`KRIMTO_TELEMETRY_ENDPOINT`) on the HTTP transport — both off by default
 - **Minimal web UI** at `/ui` — API-key sign-in (signed-cookie session), browse/search, fact detail, and self-service key management (issue/revoke), all under the same access control as MCP
+- **Membership management** — admin-only REST API (`/admin/*`) + `/ui/admin` to add members, manage teams, and issue/revoke keys live; `members.yaml` committed to git; `KRIMTO_BOOTSTRAP_ADMIN` elevates only the first admin
 
 **In progress / next up:**
 - Publishing the pull-image: the GitHub Actions workflow (`.github/workflows/docker-publish.yml`) is in place; it publishes to `ghcr.io/krimto-labs/krimto` on a `v*` tag once the repo has a remote

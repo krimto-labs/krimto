@@ -4,6 +4,21 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-05-25
+
+### Added
+- Membership management (BUG-5): an admin-only REST API (`/admin/members`, `/admin/keys`,
+  `/admin/teams`) and a `/ui/admin` page let org admins add teammates, manage teams, and issue/revoke
+  keys — changes take effect **live** (no restart) and `members.yaml` is committed to git (reviewable).
+  `src/server/admin.ts`, `src/access/membershipStore.ts`; wired via `AdminContext` in `src/server/index.ts`.
+- A data-repo `.gitignore` keeps the key store out of git; the membership commit is path-limited
+  (`GitRepo.commitPath`) so it never sweeps up staged facts. Last-org-admin and last-key revokes are
+  refused (409).
+
+### Fixed
+- Bootstrap (BUG-6): `KRIMTO_BOOTSTRAP_ADMIN` elevates to org-admin only on first boot; afterward it
+  just issues a key (non-admins included).
+
 ## [0.2.1] — 2026-05-25
 
 ### Fixed

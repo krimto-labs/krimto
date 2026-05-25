@@ -101,6 +101,12 @@ stuck pull is reported at `/health/ready` under `git_sync` (it never blocks read
 When an agent saves a personal note, point it at `user/me` — the server resolves that to the caller's
 own scope, so facts never land in an unreadable scope.
 
+**Inviting teammates (org admins).** Open `http://localhost:8080/ui/admin` (or use the
+admin REST API: `POST /admin/members`, `POST /admin/keys`, `POST /admin/teams`,
+`PATCH /admin/teams/:slug`, all bearer-authed and org-admin-only) to add members, manage teams, and
+issue/revoke keys — no file edits or restarts. `KRIMTO_BOOTSTRAP_ADMIN` only makes the **first** admin;
+add later admins/members through the admin surface.
+
 ### Option C — Docker (HTTP + bearer auth, containerized)
 
 Build the image and run it (a published image is coming):

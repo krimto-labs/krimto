@@ -45,7 +45,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.1";
+export const KRIMTO_VERSION = "0.2.2";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
