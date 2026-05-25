@@ -14,6 +14,7 @@ import { bootstrapAdmin, reissueKey } from "./bootstrap";
 import { buildHttpApp } from "./http";
 import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
 import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
+import { type AdminContext } from "./admin";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -200,9 +201,21 @@ export async function buildIndexIfNeeded(
   }
 }
 
+async function ensureDataGitignore(dataDir: string): Promise<void> {
+  const file = path.join(dataDir, ".gitignore");
+  try {
+    await fs.access(file);
+    return; // respect an existing .gitignore
+  } catch {
+    /* absent — write the default below */
+  }
+  await fs.writeFile(file, [".krimto/keys.json", ".krimto/telemetry-id", "index.db", "*.db", ""].join("\n"), "utf8");
+}
+
 export async function main(): Promise<void> {
   const dataDir = resolveDataDir();
   await fs.mkdir(dataDir, { recursive: true });
+  await ensureDataGitignore(dataDir);
 
   // Key store + bootstrap (must happen before membership is finalised so that
   // ensureOrgAdmin's writes to members.yaml are visible in the loaded membership).
@@ -225,7 +238,7 @@ export async function main(): Promise<void> {
   }
 
   // Load membership AFTER bootstrap so the new admin is present.
-  const membership = await loadMembership(dataDir);
+  let membership = await loadMembership(dataDir);
   const identity = resolveIdentity();
   const embedCfg = embeddingConfigFromEnv();
   const embeddingProvider = createEmbeddingProvider(embedCfg);
@@ -260,18 +273,39 @@ export async function main(): Promise<void> {
     process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
   }
 
+  const reloadMembership = async (): Promise<void> => {
+    membership = await loadMembership(dataDir);
+    ctx.membership = membership;
+  };
+
   batcher.start((fn) => ctx.writeQueue.run(fn));
 
   const sync = new RemoteSync(
     repo,
     async () => {
       await index.rebuild(await store.allFacts());
+      await reloadMembership(); // a teammate's git-side membership edit takes effect live
     },
     syncConfigFromEnv(),
   );
   if (process.env.KRIMTO_GIT_REMOTE) {
     sync.start((fn) => ctx.writeQueue.run(fn));
   }
+
+  const applyMembershipChange = async (mutate: () => Promise<void>): Promise<void> => {
+    await ctx.writeQueue.run(async () => {
+      await mutate();
+      await repo.commitPath(".krimto/members.yaml", "chore: update membership");
+      if (process.env.KRIMTO_GIT_REMOTE) await repo.push(); // best-effort
+    });
+    await reloadMembership();
+  };
+  const admin: AdminContext = {
+    dataDir,
+    keys,
+    membership: () => membership,
+    applyChange: applyMembershipChange,
+  };
 
   // Opt-in telemetry (off unless KRIMTO_TELEMETRY_ENDPOINT is set). Built here so the
   // shutdown handler can stop it; only start()ed in HTTP mode (the long-running server).
@@ -310,6 +344,7 @@ export async function main(): Promise<void> {
       gitSyncStatus: () => sync.lastPullStatus(),
       gitRemoteStatus: () => batcher.lastPushStatus(),
       rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
+      admin,
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);

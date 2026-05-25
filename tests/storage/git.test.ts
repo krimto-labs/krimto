@@ -37,6 +37,18 @@ describe("GitRepo", () => {
     const repo = await GitRepo.open(dir);
     expect(await repo.commit("nothing changed")).toBeNull();
   });
+
+  it("commitPath commits only the given path, not other staged files", async () => {
+    const repo = await GitRepo.open(dir);
+    await fs.writeFile(path.join(dir, "a.txt"), "a", "utf8");
+    await fs.writeFile(path.join(dir, "b.txt"), "b", "utf8");
+    await repo.stage("a.txt"); // staged but should NOT be in the commitPath commit
+    const sha = await repo.commitPath("b.txt", "only b");
+    expect(sha).toMatch(/^[0-9a-f]{40}$/);
+    const { stdout } = await execFileP("git", ["-C", dir, "show", "--name-only", "--format=", "HEAD"]);
+    expect(stdout).toContain("b.txt");
+    expect(stdout).not.toContain("a.txt");
+  });
 });
 
 describe("GitRepo remote", () => {

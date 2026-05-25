@@ -71,6 +71,17 @@ export class GitRepo {
     return this.head();
   }
 
+  /** Stage and commit ONLY relPath (path-limited), leaving any other staged files uncommitted. */
+  async commitPath(relPath: string, message: string): Promise<string | null> {
+    await exec("git", ["-C", this.dir, "add", "--", relPath]);
+    try {
+      await exec("git", ["-C", this.dir, "commit", "-q", "-m", message, "--", relPath]);
+    } catch {
+      return null; // nothing to commit for this path
+    }
+    return this.head();
+  }
+
   async head(): Promise<string | null> {
     try {
       const { stdout } = await exec("git", ["-C", this.dir, "rev-parse", "HEAD"]);

@@ -6,12 +6,15 @@ import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
 import { KrimtoError } from "../server/errors";
+import { type AdminContext } from "../server/admin";
 
 export interface WebRouterDeps {
   ctx: ToolContext;
   keys: ApiKeyStore;
   membership: () => Membership;
   sessionSecret: string;
+  /** When set, enables the admin-only /ui/admin page. */
+  admin?: AdminContext;
 }
 
 type WithIdentity = Request & { identity: string };

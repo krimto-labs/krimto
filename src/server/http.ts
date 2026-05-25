@@ -16,6 +16,7 @@ import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
 import { buildWebRouter } from "../web/router";
 import { sessionConfigFromEnv } from "../web/session";
+import { buildAdminRouter, type AdminContext } from "./admin";
 
 export interface HttpAppDeps {
   ctx: ToolContext;
@@ -31,6 +32,8 @@ export interface HttpAppDeps {
   gitSyncStatus?: () => "ok" | "skipped" | "up-to-date" | "conflict" | "error" | "none";
   /** When set, per-identity rate limiting is enforced on /mcp. */
   rateLimiter?: RateLimiter;
+  /** When set, mounts the admin-only membership/key API at /admin and enables /ui/admin. */
+  admin?: AdminContext;
 }
 
 export function buildHttpApp(deps: HttpAppDeps): Express {
@@ -84,6 +87,8 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     void handleMcp(req, res);
   });
 
+  if (deps.admin) app.use("/admin", auth, buildAdminRouter(deps.admin));
+
   app.use(
     "/ui",
     buildWebRouter({
@@ -91,6 +96,7 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       keys: deps.keys,
       membership: deps.membership,
       sessionSecret: sessionConfigFromEnv().secret,
+      admin: deps.admin,
     }),
   );
 
