@@ -6,6 +6,7 @@ export type KrimtoErrorCode =
   | "unauthorized"
   | "forbidden"
   | "not_found"
+  | "conflict"
   | "rate_limited"
   | "internal";
 
@@ -28,6 +29,7 @@ const JSON_RPC_CODES: Record<KrimtoErrorCode, number> = {
   forbidden: -32001,
   rate_limited: -32002,
   not_found: -32003,
+  conflict: -32004,
   internal: -32603,
 };
 
@@ -37,6 +39,7 @@ const HTTP_STATUS: Record<KrimtoErrorCode, number> = {
   forbidden: 403,
   rate_limited: 429,
   not_found: 404,
+  conflict: 409,
   internal: 500,
 };
 
