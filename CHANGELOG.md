@@ -4,7 +4,16 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.4] — 2026-05-25
+## [0.2.5] — 2026-05-25
+
+### Fixed
+- CI: pin the git-sync tests' bare remotes to `main` (`git init --bare -b main`). CI runners default
+  `init.defaultBranch=master`, so the harness's remotes mismatched the app's `main` branch and the
+  sync/pull tests saw no changes. **App behavior is unchanged** — `GitRepo` already pins `main`; this is
+  a test-harness-only fix so the release tag is green on a clean CI runner. (Carries the v0.2.4 feature
+  set below.)
+
+
 
 ### Added
 - Connect-your-agent docs + an in-product `/ui/connect` panel with verified copy-paste config for
