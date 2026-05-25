@@ -26,6 +26,7 @@ Krimto Cloud in v1.0.
 - **Published Docker image** — `ghcr.io/krimto-labs/krimto:latest` (and `:<version>`), built and pushed by `.github/workflows/docker-publish.yml` on every `v*` tag (no local build needed)
 
 **Next (post-v0.2 onboarding polish):**
+- ✅ v0.2.6 — first-run experience: signpost banner, guided Connect page (incl. a "make it automatic" rule and a generic-client contract), empty-dashboard getting-started guide, plain nav + per-page purpose lines, and a multi-arch image.
 - Verify Codex and Gemini CLI, and ship an `npx`/stdio package + `curl | sh` installer so connecting needs no Docker build
 
 ## v0.3 — Humans on top of git

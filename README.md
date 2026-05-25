@@ -60,6 +60,23 @@ ready-to-paste config (with the key) on boot, and `/ui/connect` shows it too. Ad
 Other clients (Codex, Gemini CLI, Copilot, Cline) use the same `url` (plus the `Bearer` header in team
 mode); those are best-effort and not yet individually verified.
 
+### Make it automatic
+
+By default your agent uses Krimto only when you ask. To make it recall and save **on its own**, add a
+standing rule to your agent's rules file — Claude Code: `CLAUDE.md`; Cursor: `.cursor/rules/krimto.mdc`;
+Codex: `AGENTS.md`; Gemini CLI: `GEMINI.md`:
+
+```
+# Krimto memory — always use
+- Before a task, call krimto_recall to load what we already know.
+- When I say "remember", or you learn a durable fact, call krimto_write
+  (user/me = personal, team/<slug> = shared).
+- Respect precedence: user beats team beats org.
+- Don't save secrets or one-off chatter.
+```
+
+The in-product **Connect** page (`/ui/connect`) shows this same rule with a copy button.
+
 ## How it works
 
 Three layers, one source of truth:

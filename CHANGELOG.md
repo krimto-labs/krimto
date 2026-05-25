@@ -4,6 +4,22 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] — 2026-05-25
+
+### Added
+- First-run experience (the pre–North-Star-B zero-friction gate): a signpost startup banner that names
+  `/ui/connect`; a guided Connect page (copy buttons, verify/restart notes, a **"make it automatic"**
+  standing-rule for the editor's rules file, and a generic **"any MCP client"** contract for clients we
+  haven't shipped a verified snippet for); an empty-dashboard **getting-started guide** that explains
+  "AI memory" to a newcomer and walks the first save→recall loop with a "what to expect" line; plain nav
+  labels (Memory / Connect / Keys / Team) with per-page purpose lines.
+- Multi-arch Docker image (`linux/amd64` + `linux/arm64`) — Apple-Silicon users no longer see the
+  platform-mismatch warning.
+
+### Fixed
+- Team-mode startup banner prints reissue guidance (`KRIMTO_REISSUE_ADMIN_KEY`) instead of a misleading
+  `krm_live_…` placeholder when an admin already exists.
+
 ## [0.2.5] — 2026-05-25
 
 ### Fixed
