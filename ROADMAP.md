@@ -3,12 +3,12 @@
 Krimto claims the **team memory layer** position from day one and fulfils it incrementally, in the
 open — shipping toward it release by release. Each milestone has a tracking issue on GitHub.
 
-## v0.2 — Team memory (first public release)
+## v0.2 — Team memory (first public release) — ✅ Shipped (v0.2.5, 2026-05-25)
 
 The memory core, shipped — runnable as a **local, no-auth** HTTP server (one command, one config line,
 no key — the default), or in **team mode** with API keys (`KRIMTO_BOOTSTRAP_ADMIN`), plus a local
-**stdio** server and a **Docker** image. Team adoption at scale (SSO, invite links) routes to Krimto
-Cloud in v1.0.
+**stdio** server and a **published Docker image**. Team adoption at scale (SSO, invite links) routes to
+Krimto Cloud in v1.0.
 
 **Shipped and wired into the running server:**
 - Markdown-in-git storage layer; one file per fact with mandatory frontmatter
@@ -23,10 +23,10 @@ Cloud in v1.0.
 - **Minimal web UI** at `/ui` — API-key sign-in (signed-cookie session), browse/search, fact detail, and self-service key management (issue/revoke), all under the same access control as MCP
 - **Membership management** — admin-only REST API (`/admin/*`) + `/ui/admin` to add members, manage teams, and issue/revoke keys live; `members.yaml` committed to git; `KRIMTO_BOOTSTRAP_ADMIN` elevates only the first admin
 - **Verified connect for Claude Code + Cursor** — copy-paste/one-click snippets in the README and an in-product `/ui/connect` panel (incl. an "Add to Cursor" deeplink); team mode prints a ready-to-paste config with the key
+- **Published Docker image** — `ghcr.io/krimto-labs/krimto:latest` (and `:<version>`), built and pushed by `.github/workflows/docker-publish.yml` on every `v*` tag (no local build needed)
 
-**In progress / next up:**
-- Publishing the pull-image: the GitHub Actions workflow (`.github/workflows/docker-publish.yml`) is in place; it publishes to `ghcr.io/krimto-labs/krimto` on a `v*` tag once the repo has a remote
-- Onboarding for the rest: verify Codex and Gemini CLI, and an `npx`/stdio package + `curl | sh` installer so connecting needs no Docker build
+**Next (post-v0.2 onboarding polish):**
+- Verify Codex and Gemini CLI, and ship an `npx`/stdio package + `curl | sh` installer so connecting needs no Docker build
 
 ## v0.3 — Humans on top of git
 
