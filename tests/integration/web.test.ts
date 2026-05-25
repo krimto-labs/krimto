@@ -240,6 +240,22 @@ describe("/ui web surface", () => {
     expect(resolved).toBeNull();
   });
 
+  // 8. Last-key guard: cannot revoke your only remaining key (BUG-1)
+  it("POST /ui/keys/revoke refuses to revoke the caller's only key", async () => {
+    const cookie = await loginAndGetCookie();
+    const mine = (await keys.list()).filter((k) => k.identity === "alice@x.com");
+    expect(mine.length).toBe(1); // only alice-initial
+    const hash = mine[0]!.hash;
+    const res = await fetch(`${base()}/ui/keys/revoke`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ hash }).toString(),
+    });
+    expect(res.status).toBe(409); // refused, not redirected
+    expect(await keys.resolveIdentity(aliceKey)).toBe("alice@x.com"); // key still works
+  });
+
   // 7. XSS escaping: title with <script>alert(1)</script> is escaped in search results
   it("XSS: fact titles are HTML-escaped and raw script tags never appear in output", async () => {
     const cookie = await loginAndGetCookie();

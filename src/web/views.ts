@@ -56,17 +56,28 @@ export function factDetail(f: FactView): string {
 
 export interface KeyRow { hash: string; prefix: string; created: string; label?: string }
 export function keysBody(keys: KeyRow[]): string {
+  // Never offer to revoke the sole key — that locks the user out (BUG-1). The aria-label and
+  // the visible label+id identify exactly which key a revoke button acts on (BUG-2).
+  const onlyKey = keys.length === 1;
   const rows =
     keys.length === 0
       ? `<tr><td colspan="3" class="muted">No keys yet.</td></tr>`
       : keys
-          .map(
-            (k) =>
-              `<tr><td>${escapeHtml(k.label ?? "(no label)")}</td>` +
-              `<td class="muted">${escapeHtml(k.prefix)}… ${escapeHtml(k.hash.slice(0, 12))} · ${escapeHtml(k.created)}</td>` +
-              `<td><form method="post" action="/ui/keys/revoke" onsubmit="return confirm('Revoke this key?')">` +
-              `<input type="hidden" name="hash" value="${escapeHtml(k.hash)}"><button type="submit">Revoke</button></form></td></tr>`,
-          )
+          .map((k) => {
+            const label = k.label ?? "(no label)";
+            const id = `${label} (${k.prefix}…${k.hash.slice(0, 8)})`;
+            const action = onlyKey
+              ? `<span class="muted" title="Issue another key before you can revoke this one">only key</span>`
+              : `<form method="post" action="/ui/keys/revoke" ` +
+                `onsubmit="return confirm('Revoke this key? You will lose access from it — this cannot be undone.')">` +
+                `<input type="hidden" name="hash" value="${escapeHtml(k.hash)}">` +
+                `<button type="submit" aria-label="Revoke key ${escapeHtml(id)}">Revoke</button></form>`;
+            return (
+              `<tr><td>${escapeHtml(label)}</td>` +
+              `<td class="muted">${escapeHtml(k.prefix)}…${escapeHtml(k.hash.slice(0, 8))} · ${escapeHtml(k.created)}</td>` +
+              `<td>${action}</td></tr>`
+            );
+          })
           .join("");
   return (
     `<h1>API keys</h1><table><thead><tr><th>Label</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +

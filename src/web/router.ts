@@ -122,9 +122,14 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       const identity = idOf(req);
       const rawHash = bodyOf(req).hash;
       const hash = typeof rawHash === "string" ? rawHash : "";
-      const owned = (await deps.keys.list()).some((k) => k.hash === hash && k.identity === identity);
-      if (!owned) {
+      const mine = (await deps.keys.list()).filter((k) => k.identity === identity);
+      if (!mine.some((k) => k.hash === hash)) {
         errorPage(res, 404, "Not found", identity);
+        return;
+      }
+      // Lockout guard (BUG-1): never let someone revoke their last key.
+      if (mine.length <= 1) {
+        errorPage(res, 409, "This is your only key — issue a new key first, or you'll be locked out.", identity);
         return;
       }
       await deps.keys.revoke(hash);

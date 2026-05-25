@@ -10,7 +10,7 @@ import * as path from "node:path";
 import { promises as fs } from "node:fs";
 
 import { ApiKeyStore } from "../access/auth";
-import { bootstrapAdmin } from "./bootstrap";
+import { bootstrapAdmin, reissueKey } from "./bootstrap";
 import { buildHttpApp } from "./http";
 import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
 import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
@@ -215,6 +215,13 @@ export async function main(): Promise<void> {
         `Krimto: issued admin API key for ${process.env.KRIMTO_BOOTSTRAP_ADMIN} (shown once):\n${key}\n`,
       );
     }
+  }
+  // Recovery (BUG-1): mint a fresh key even if a stale record exists, for a locked-out admin.
+  if (process.env.KRIMTO_REISSUE_ADMIN_KEY) {
+    const key = await reissueKey(process.env.KRIMTO_REISSUE_ADMIN_KEY, keys, dataDir);
+    process.stderr.write(
+      `Krimto: reissued admin API key for ${process.env.KRIMTO_REISSUE_ADMIN_KEY} (shown once):\n${key}\n`,
+    );
   }
 
   // Load membership AFTER bootstrap so the new admin is present.

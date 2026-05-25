@@ -20,6 +20,17 @@ export async function bootstrapAdmin(email: string, keys: ApiKeyStore, dataDir: 
   return { key };
 }
 
+/**
+ * Recovery path (BUG-1): always mint and return a fresh key for `email`, ensuring they are an org
+ * admin — even when an unusable key record already exists (e.g. the admin lost their only key's
+ * plaintext). Unlike bootstrapAdmin, this does not check whether a record exists first.
+ */
+export async function reissueKey(email: string, keys: ApiKeyStore, dataDir: string): Promise<string> {
+  await ensureOrgAdmin(email, dataDir);
+  const { key } = await keys.issue(email, "live", "reissued");
+  return key;
+}
+
 async function ensureOrgAdmin(email: string, dataDir: string): Promise<void> {
   const file = path.join(dataDir, ".krimto", "members.yaml");
   let text: string | null = null;

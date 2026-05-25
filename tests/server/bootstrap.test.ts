@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ApiKeyStore } from "../../src/access/auth";
 import { loadMembership } from "../../src/access/membership";
-import { bootstrapAdmin } from "../../src/server/bootstrap";
+import { bootstrapAdmin, reissueKey } from "../../src/server/bootstrap";
 
 describe("bootstrapAdmin", () => {
   it("issues a key for the admin and makes them an org admin; idempotent", async () => {
@@ -32,6 +32,21 @@ describe("bootstrapAdmin", () => {
     expect(m.org.slug).toBe("acme");
     expect(m.org.admins.sort()).toEqual(["alice@x.com", "bob@x.com"]);
     expect(m.teams).toHaveLength(1); // existing teams preserved
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("reissueKey mints a fresh, usable key even when a (stale) record already exists", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-reissue-"));
+    const keys = new ApiKeyStore(path.join(dir, "keys.json"));
+    await bootstrapAdmin("alice@x.com", keys, dir); // alice already has a record
+    const before = (await keys.list()).filter((k) => k.identity === "alice@x.com").length;
+
+    const fresh = await reissueKey("alice@x.com", keys, dir);
+    expect(fresh).toMatch(/^krm_live_/);
+    expect(await keys.resolveIdentity(fresh)).toBe("alice@x.com"); // the new key works
+    const after = (await keys.list()).filter((k) => k.identity === "alice@x.com").length;
+    expect(after).toBe(before + 1); // minted despite an existing record
+    expect((await loadMembership(dir)).org.admins).toContain("alice@x.com");
     await fs.rm(dir, { recursive: true, force: true });
   });
 
