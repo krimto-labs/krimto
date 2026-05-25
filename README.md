@@ -89,8 +89,32 @@ editor and version with git. Run Krimto with `pnpm` (Options A/B) or in **Docker
 
 ### Option A — local, over stdio (no auth)
 
-For a single developer on one machine. Add Krimto as a **stdio** MCP server (Claude Code shown;
-Cursor, Codex CLI, Gemini CLI, Copilot, OpenClaw, and Cline use the same stdio-command shape):
+For a single developer on one machine. **Fastest path — no clone, no Docker** (Claude Code shown):
+
+```bash
+claude mcp add krimto -- npx -y @krimto-labs/krimto
+```
+
+…or the config-file form any stdio MCP client accepts (Cursor, Codex CLI, Gemini CLI, Copilot,
+OpenClaw, Cline use the same shape):
+
+```json
+{
+  "mcpServers": {
+    "krimto": {
+      "command": "npx",
+      "args": ["-y", "@krimto-labs/krimto"],
+      "env": { "KRIMTO_IDENTITY": "you@acme.com" }
+    }
+  }
+}
+```
+
+The first run downloads dependencies (including `better-sqlite3`, which ships prebuilt binaries), then
+starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`). This is the solo
+path; HTTP/team mode uses Docker (Option C) or the server below.
+
+From a clone instead of npm, swap the command for `pnpm`:
 
 ```json
 {

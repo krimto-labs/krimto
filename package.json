@@ -13,6 +13,14 @@
     "url": "https://github.com/krimto-labs/krimto.git"
   },
   "homepage": "https://krimto.com",
+  "bin": {
+    "krimto": "bin/krimto.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "tsconfig.json"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
