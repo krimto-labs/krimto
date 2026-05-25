@@ -49,6 +49,7 @@ describe("connectPanel", () => {
     expect(h).toContain("3. Make it automatic");         // Door 3
     expect(h).toContain("krimto_recall to load");         // the standing rule text
     expect(h).toContain("CLAUDE.md");                     // where to paste the rule
+    expect(h).toContain("@krimto-labs/krimto init");      // one-command make-it-automatic
     expect(h).toContain("save your first memory");        // next-step link
     expect(h).not.toContain("Authorization");           // no key in local mode
   });

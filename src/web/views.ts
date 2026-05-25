@@ -167,7 +167,9 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     `<p class="muted">Verify: Settings → MCP shows a green dot next to <code>krimto</code>.</p>` +
     teamKeyCallout +
     `<h2>3. Make it automatic</h2>` +
-    `<p>By default your AI uses memory only when you ask. Paste this rule once so it remembers and recalls on its own:</p>` +
+    `<p>By default your AI uses memory only when you ask. <strong>Fastest:</strong> run ` +
+    `<code>npx @krimto-labs/krimto init</code> in your project — it writes the rule below into your ` +
+    `agent's rules files for you. Or paste it yourself so the agent remembers and recalls on its own:</p>` +
     `<pre id="auto-rule">${escapeHtml(AGENT_RULE)}</pre>${copy("auto-rule")}` +
     `<p class="muted">Where to paste it: Claude Code → <code>CLAUDE.md</code> · Cursor → ` +
     `<code>.cursor/rules/krimto.mdc</code> · Codex → <code>AGENTS.md</code> · Gemini CLI → <code>GEMINI.md</code>.</p>` +

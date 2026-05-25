@@ -131,6 +131,16 @@ The first run downloads dependencies (including `better-sqlite3`, which ships pr
 starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`). This is the solo
 path; HTTP/team mode uses Docker (Option C) or the server below.
 
+**Make your agent actually use Krimto.** By default an editor's agent routes "remember X" to its own
+built-in memory. Run this once in your project so it calls Krimto instead:
+
+```bash
+npx @krimto-labs/krimto init
+```
+
+It writes an idempotent "always use Krimto" rule into your agent's rules files (`CLAUDE.md`, `AGENTS.md`,
+`GEMINI.md`, `.cursor/rules/krimto.mdc`) — restart your editor afterward.
+
 From a clone instead of npm, swap the command for `pnpm`:
 
 ```json
