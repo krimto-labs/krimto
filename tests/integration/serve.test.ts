@@ -62,7 +62,7 @@ describe("krimto serve (bin dispatch)", () => {
     });
 
     expect(stderr).toContain("/ui/connect");
-    expect(stderr).toContain("Local mode");
+    expect(stderr).toContain("Mode:  Local");
 
     const res = await fetch(`http://localhost:${port}/health/live`);
     expect(res.status).toBe(200);

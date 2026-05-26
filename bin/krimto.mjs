@@ -22,39 +22,36 @@ try {
     const { runInit } = await tsImport("../src/cli/init.ts", import.meta.url);
     const res = await runInit(process.cwd(), { all });
     if (res.written.length === 0) {
-      const why = res.detected
-        ? ` (detected: ${res.considered.join(", ")}). Re-run with --all to also write the others.`
-        : "";
+      const detected = res.detected ? res.considered.join(", ") : "(no editor signals)";
       process.stderr.write(
-        `krimto: agent rules already up to date — nothing to change.${why}\n` +
+        "\n✅ Already in AUTO MODE — no changes needed\n" +
           "\n" +
-          "To remove the rule entirely: run `npx @krimto-labs/krimto uninit`\n" +
-          "  (cleanly strips the rule block; deletes files that held only it).\n",
+          `   Rule detected in: ${detected}\n` +
+          "\n" +
+          "To undo:  $ npx @krimto-labs/krimto uninit\n" +
+          "Other:    --all writes to every supported rule file\n\n",
       );
     } else {
-      const detectionLine = res.detected
-        ? `Detected editor signals in this project — writing only the matching rule files.\n` +
-          `(Run with --all to write all 4 supported rule files instead.)\n\n`
+      const detectedLine = res.detected
+        ? `   Detected editor signals — wrote only matching files.\n   (--all writes to all 4 supported files instead.)\n\n`
         : !all
-          ? `No editor signals found — writing all supported rule files. Re-run with --all to\n` +
-            `keep this behavior explicitly, or remove any you don't need with \`krimto uninit\`.\n\n`
+          ? `   No editor signals found — wrote all supported files.\n   (Re-run with --all to force, or 'uninit' to remove what you don't need.)\n\n`
           : "";
       process.stderr.write(
-        detectionLine +
-          `krimto: wrote the always-use-Krimto rule to:\n  ${res.written.join("\n  ")}\n` +
+        "\n✅ AUTO MODE on — rule written to " + res.written.length + " file" +
+          (res.written.length === 1 ? "" : "s") + "\n" +
           "\n" +
-          "What changed: a short marker-delimited block was added to each file telling your\n" +
-          "agent to call krimto_recall before tasks and krimto_write when you say \"remember\".\n" +
-          "Existing content was preserved; running `init` again is a no-op.\n" +
+          res.written.map((f) => `   ${f}`).join("\n") + "\n" +
           "\n" +
-          "To remove the rule later: run `npx @krimto-labs/krimto uninit`\n" +
-          "  (cleanly strips the marker-delimited block from each file above, and deletes\n" +
-          "   files that held only our rule; idempotent — safe to run more than once).\n" +
+          detectedLine +
+          "━━ Next steps ━━\n" +
           "\n" +
-          "Manual alternative: delete the block between <!-- krimto:start --> and\n" +
-          "<!-- krimto:end --> in each file above. Nothing else will be affected.\n" +
+          "  1. Restart your editor (so it loads the new rule)\n" +
+          "  2. Test in chat: \"Remember that we use pnpm in this repo\"\n" +
+          "  3. Verify it landed: $ npx @krimto-labs/krimto verify-connection\n" +
           "\n" +
-          "Restart your editor so the rule takes effect.\n",
+          "To undo:  $ npx @krimto-labs/krimto uninit\n" +
+          "Manual:   delete the block between <!-- krimto:start --> and <!-- krimto:end -->\n\n",
       );
     }
   } else if (cmd === "uninit") {
@@ -63,16 +60,24 @@ try {
     const { runUninit } = await tsImport("../src/cli/uninit.ts", import.meta.url);
     const res = await runUninit(process.cwd());
     if (res.cleaned.length === 0) {
-      process.stderr.write("krimto: no Krimto rule found — nothing to remove.\n");
+      process.stderr.write("\n✅ No Krimto rule found — nothing to remove.\n\n");
     } else {
       const rewritten = res.cleaned.filter((f) => !res.deleted.includes(f));
-      const lines = ["krimto: removed the always-use-Krimto rule."];
-      if (rewritten.length > 0) lines.push("Rule block stripped (file kept):", ...rewritten.map((f) => `  ${f}`));
-      if (res.deleted.length > 0) lines.push("File deleted (it held only our rule):", ...res.deleted.map((f) => `  ${f}`));
-      lines.push("", "Your project is back in DEFAULT MODE: Krimto tools are still wired up, but");
-      lines.push("your agent will only call them when you explicitly ask.");
-      lines.push("Restart your editor so it picks up the change.");
-      process.stderr.write(lines.join("\n") + "\n");
+      let body = "\n✅ Switched back to DEFAULT MODE — rule removed\n\n";
+      if (rewritten.length > 0) {
+        body += "   Rule block stripped (files kept, your other content preserved):\n";
+        body += rewritten.map((f) => `     ${f}`).join("\n") + "\n";
+      }
+      if (res.deleted.length > 0) {
+        body += "   Files deleted (they held only our rule):\n";
+        body += res.deleted.map((f) => `     ${f}`).join("\n") + "\n";
+      }
+      body += "\n━━ What this means ━━\n\n";
+      body += "  Krimto tools are still available to your agent, but it will only\n";
+      body += "  call them when you explicitly say \"use krimto to ...\".\n";
+      body += "  Run `krimto init` to switch back to AUTO MODE.\n";
+      body += "\n  Restart your editor so it picks up the change.\n\n";
+      process.stderr.write(body);
     }
   } else if (cmd === "where") {
     // `krimto where` — print the data directory (honors KRIMTO_DATA), so files aren't a surprise.

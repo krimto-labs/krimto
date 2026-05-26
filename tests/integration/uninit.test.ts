@@ -68,13 +68,13 @@ describe("krimto uninit (bin dispatch)", () => {
   it("`node bin/krimto.mjs uninit` removes the rule and prints the DEFAULT MODE explanation", async () => {
     await exec(process.execPath, [BIN, "init"], { cwd: dir });
     const { stderr } = await exec(process.execPath, [BIN, "uninit"], { cwd: dir });
-    expect(stderr).toContain("removed the always-use-Krimto rule");
-    expect(stderr).toContain("DEFAULT MODE");
+    expect(stderr).toContain("Switched back to DEFAULT MODE");
+    expect(stderr).toContain("rule removed");
     expect(await exists("AGENTS.md")).toBe(false);
   }, 30000);
 
   it("prints a clear no-op message when there is nothing to remove", async () => {
     const { stderr } = await exec(process.execPath, [BIN, "uninit"], { cwd: dir });
-    expect(stderr).toContain("nothing to remove");
+    expect(stderr).toContain("No Krimto rule found");
   }, 30000);
 });

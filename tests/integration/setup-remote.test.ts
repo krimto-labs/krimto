@@ -36,7 +36,7 @@ describe("runSetupRemote", () => {
   it("rejects an obviously invalid URL with a helpful message", async () => {
     const r = await runSetupRemote(dataDir, "not a url");
     expect(r.status).toBe("invalid_url");
-    expect(r.message).toContain("doesn't look like a git remote");
+    expect(r.message).toContain("Invalid URL");
   });
 
   it("configures the remote and pushes the existing commit when the remote is empty", async () => {

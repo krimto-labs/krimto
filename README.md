@@ -9,7 +9,7 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2.13** surface. Here today: the markdown-in-git storage layer, the
+> **Where we are:** this is the **v0.2.14** surface. Here today: the markdown-in-git storage layer, the
 > `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, the MCP
 > server over **stdio + HTTP** (Bearer API-key auth on HTTP), a **published multi-arch Docker image**
 > (`ghcr.io/krimto-labs/krimto`), a **web UI** with browse/search/admin/diagnostics, and a complete
@@ -94,21 +94,40 @@ The in-product **Connect** page (`/ui/connect`) shows this same rule with a copy
 
 ### The CLI surface
 
-Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the full list. Briefly:
+Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the full list. All
+commands print clean, sectioned output with ✅ / ⚠️ / 🟢 status indicators and copy-paste shell
+commands. Grouped by purpose:
+
+**Get connected**
+
+| Command | What it does |
+|---|---|
+| `serve` | Start the HTTP server (port 8080) + browser `/ui` dashboard |
+| `connect` | Print copy-paste config for Claude Code & Cursor |
+| `init [--all]` | Switch this project to AUTO MODE (auto-detects editor; `--all` writes every file) |
+| `uninit` | Switch back to DEFAULT MODE — cleanly removes the rule |
+
+**Learn**
+
+| Command | What it does |
+|---|---|
+| `usage` | Show the five `krimto_*` tools with chat examples for both modes |
+| `storage` | Explain where Krimto keeps your data (markdown / git / index) |
+| `where` | Print the Krimto data directory |
+
+**Diagnose**
+
+| Command | What it does |
+|---|---|
+| `verify-connection` | Is my agent actually calling Krimto? (live status + last 5 calls) |
+| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push |
+| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config |
+
+**Other**
 
 | Command | What it does |
 |---|---|
 | (no args) | Start the stdio MCP server (default; for MCP clients to launch) |
-| `serve` | Start the HTTP server (port 8080) — `/ui` dashboard, no clone, no Docker |
-| `connect` | Print copy-paste Claude Code + Cursor config snippets |
-| `init [--all]` | Switch this project to AUTO MODE — write the always-use rule (auto-detects editor; `--all` writes every file) |
-| `uninit` | Switch back to DEFAULT MODE — remove the rule, delete files it created |
-| `usage` | Show the five `krimto_*` tools with chat examples for both modes |
-| `storage` | Explain where Krimto keeps your data (markdown / git / index), how to verify, optional add-ons |
-| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push |
-| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config |
-| `verify-connection` | Diagnose "is my agent calling Krimto?" (lock status + last 5 calls) |
-| `where` | Print the data directory |
 | `--help`, `-h` | Show the full CLI surface |
 
 The stdio entrypoint enforces a **single-writer lock** on the data dir (`.krimto/lock.json`) — two

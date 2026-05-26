@@ -111,25 +111,24 @@ describe("krimto init (bin dispatch)", () => {
     expect(await read("AGENTS.md")).toContain("krimto_recall");
   }, 30000);
 
-  it("prints what changed AND how to remove the rule", async () => {
+  it("prints the AUTO MODE confirmation + next steps + how to undo", async () => {
     const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
-    expect(stderr).toContain("What changed");
-    expect(stderr).toContain("To remove the rule");
+    expect(stderr).toContain("AUTO MODE on");
+    expect(stderr).toContain("Next steps");
+    expect(stderr).toContain("To undo:");
     expect(stderr).toContain("<!-- krimto:start -->");
-    expect(stderr).toContain("<!-- krimto:end -->");
   }, 30000);
 
   it("surfaces `krimto uninit` prominently on success", async () => {
     const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
     expect(stderr).toContain("npx @krimto-labs/krimto uninit");
-    expect(stderr).toContain("Manual alternative");
   }, 30000);
 
   it("mentions `krimto uninit` on the no-op path too (so a re-run discovers it)", async () => {
     // First run writes the rule. Second run is a no-op.
     await exec(process.execPath, [BIN, "init"], { cwd: dir });
     const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
-    expect(stderr).toContain("already up to date");
+    expect(stderr).toContain("Already in AUTO MODE");
     expect(stderr).toContain("npx @krimto-labs/krimto uninit");
   }, 30000);
 });

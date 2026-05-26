@@ -23,12 +23,12 @@ describe("formatConnect", () => {
 
   it("explains what `connect` alone gives the user vs. what `init` adds", () => {
     const out = formatConnect();
-    // The "tools are available but on-demand" half of the story:
-    expect(out).toContain("only calls them when YOU explicitly ask");
+    // The "tools are available but on-demand" half (text spans 2 lines, match key phrases):
+    expect(out).toMatch(/only uses them[\s\S]+use krimto to/);
     // The "init makes it automatic" half of the story:
-    expect(out).toContain("AUTOMATICALLY");
-    // And: init is presented as optional, not required.
-    expect(out).toContain("Skip `init`");
+    expect(out).toContain("AUTOMATIC");
+    // And: init is presented as the second of three numbered steps.
+    expect(out).toContain("npx @krimto-labs/krimto init");
   });
 
   it("threads through a caller-provided identity", () => {
@@ -46,13 +46,13 @@ describe("formatConnect", () => {
     expect(out).toContain("krimto setup-embeddings");
   });
 
-  it("ends with the 'Connected? Do these three things' verification loop (Gap #5b)", () => {
+  it("walks through the connect → init → test → verify loop (Gap #5b)", () => {
     const out = formatConnect();
-    expect(out).toContain("CONNECTED? DO THESE THREE THINGS");
     expect(out).toContain("npx @krimto-labs/krimto init");
     expect(out).toContain("Remember that we use pnpm in this repo");
     expect(out).toContain("What do you know about this repo?");
     expect(out).toContain("verify-connection");
+    expect(out).toContain("Test the loop");
   });
 });
 

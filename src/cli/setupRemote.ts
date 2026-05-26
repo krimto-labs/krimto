@@ -28,7 +28,11 @@ export async function runSetupRemote(dataDir: string, url: string): Promise<Setu
     return {
       status: "invalid_url",
       url,
-      message: `"${url}" doesn't look like a git remote URL. Examples:\n  git@github.com:acme/krimto-data.git\n  https://github.com/acme/krimto-data.git`,
+      message:
+        `\n🔴 Invalid URL: "${url}"\n` +
+        `\n   Expected something like:\n` +
+        `     git@github.com:acme/krimto-data.git\n` +
+        `     https://github.com/acme/krimto-data.git\n`,
     };
   }
   const repo = await GitRepo.open(dataDir);
@@ -39,25 +43,26 @@ export async function runSetupRemote(dataDir: string, url: string): Promise<Setu
       status: "ok",
       url,
       message:
-        `✅ Remote configured and initial push succeeded.\n\n` +
-        `Krimto's batcher will auto-push every commit from now on. To also auto-pull\n` +
-        `teammates' edits (every 60s), make sure Krimto restarts with this in its env:\n` +
-        `  KRIMTO_GIT_REMOTE=${url}\n`,
+        `\n✅ Remote configured and initial push succeeded.\n` +
+        `\n   ${url}\n` +
+        `\n━━ Next ━━\n` +
+        `\n   To also auto-pull teammates' edits (every 60s), set on next boot:\n` +
+        `     $ export KRIMTO_GIT_REMOTE=${url}\n` +
+        `\n   The batcher will auto-push every commit from now on regardless.\n`,
     };
   }
   return {
     status: "push_failed",
     url,
     message:
-      `⚠️  Remote was added locally, but the initial push failed.\n` +
-      `\n` +
-      `Git said:\n  ${push.detail ?? "(no detail)"}\n` +
-      `\n` +
-      `Common causes:\n` +
-      `  • The remote repo isn't empty (it has a README or initial commit).\n` +
-      `    Fix: delete the README on the remote, then re-run setup-remote.\n` +
-      `  • Your SSH key isn't set up for ${url.startsWith("git@") ? "this host" : "the remote"}.\n` +
-      `    Fix: see your git host's "Add SSH key" docs.\n` +
-      `  • The URL is wrong, or you don't have write access.\n`,
+      `\n⚠️  Remote added locally — initial push failed\n` +
+      `\n   ${url}\n` +
+      `\n   Git said: ${push.detail ?? "(no detail)"}\n` +
+      `\n━━ Common causes ━━\n` +
+      `\n   • The remote repo isn't empty (has a README or initial commit).\n` +
+      `     Fix: delete the README on the remote, then re-run setup-remote.\n` +
+      `\n   • Your SSH key isn't set up for ${url.startsWith("git@") ? "this host" : "the remote"}.\n` +
+      `     Fix: see your git host's "Add SSH key" docs.\n` +
+      `\n   • Wrong URL, or you don't have write access.\n`,
   };
 }

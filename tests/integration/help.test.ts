@@ -51,7 +51,7 @@ describe("krimto --help (bin dispatch)", () => {
     expect(longFlag.stdout).toContain("connect");
     expect(longFlag.stdout).toContain("init");
     expect(longFlag.stdout).toContain("where");
-    expect(longFlag.stdout).toContain("Usage:");
+    expect(longFlag.stdout).toContain("Usage");
     expect(shortFlag.stdout).toBe(longFlag.stdout);
     expect(bareWord.stdout).toBe(longFlag.stdout);
   }, 30000);

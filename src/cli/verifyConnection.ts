@@ -57,55 +57,68 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
   if (lock && isProcessAlive(lock.pid)) {
     status = "running";
     header =
-      `🟢 Krimto is running (PID ${lock.pid}, mode ${lock.mode}, started ${humanAgo(lock.started, now)}).\n` +
-      `   Data: ${dataDir}\n`;
+      `\n🟢 Krimto running\n` +
+      `   PID:     ${lock.pid}\n` +
+      `   Mode:    ${lock.mode}\n` +
+      `   Started: ${humanAgo(lock.started, now)}\n` +
+      `   Data:    ${dataDir}\n`;
   } else if (lock) {
     status = "stale";
     header =
-      `⚠️  Found a stale lock file (PID ${lock.pid} is no longer running). A previous Krimto\n` +
-      `   crashed without releasing it. The next \`serve\` / stdio launch will auto-replace it.\n` +
+      `\n⚠️  Stale lock — Krimto crashed without cleanup\n` +
+      `   Holder PID ${lock.pid} is gone. Next \`serve\` / stdio start will\n` +
+      `   auto-replace the lock — nothing for you to do.\n` +
       `   Data: ${dataDir}\n`;
   } else {
     status = "none";
     header =
-      `🔴 No Krimto process running on this data dir.${lockMalformed ? " (Lock file present but malformed.)" : ""}\n` +
+      `\n🔴 No Krimto running on this data dir${lockMalformed ? " (lock file present but malformed)" : ""}\n` +
       `   Data: ${dataDir}\n` +
-      `   Start one: \`npx @krimto-labs/krimto serve\` (or launch via your MCP client).\n`;
+      `\n` +
+      `   Start one: $ npx @krimto-labs/krimto serve\n` +
+      `   (Or launch via your MCP client — that boots the stdio server.)\n`;
   }
 
   let activitySection: string;
   if (recent.length === 0) {
     activitySection =
-      `\nRecent activity: nothing yet.\n` +
+      `\n━━ Recent activity ━━\n` +
       `\n` +
-      `Likely causes:\n` +
-      `  • Your agent hasn't called Krimto at all.\n` +
-      `  • DEFAULT mode: you must say "use krimto to ..." for the tools to fire.\n` +
-      `  • Try a test in your editor: "Use krimto to list the scopes I can see."\n` +
-      `    Then re-run \`krimto verify-connection\` — that call should appear.\n`;
+      `   Nothing yet.\n` +
+      `\n` +
+      `   Likely causes:\n` +
+      `   • Your agent hasn't called Krimto at all.\n` +
+      `   • DEFAULT mode: you must say "use krimto to ..." for the tools to fire.\n` +
+      `\n` +
+      `   Try this in your editor:\n` +
+      `     "Use krimto to list the scopes I can see."\n` +
+      `   Then re-run this command — the call should appear here.\n`;
   } else {
     const rows = [...recent]
-      .reverse() // newest first for display
-      .map((e) => `  ${humanAgo(e.timestamp, now).padEnd(10)} ${e.tool.padEnd(20)} ${e.detail ?? "—"}   [${e.identity}]`)
+      .reverse() // newest first
+      .map((e) => `   ${humanAgo(e.timestamp, now).padEnd(10)} ${e.tool.padEnd(20)} ${e.detail ?? "—"}`)
       .join("\n");
-    activitySection = `\nRecent activity (newest first):\n${rows}\n`;
+    activitySection = `\n━━ Recent activity (newest first) ━━\n\n${rows}\n`;
   }
 
-  // Gap #5 — recall-without-write warning. Same threshold as the /ui panel.
+  // Gap #5 — recall-without-write warning.
   let hijackSection = "";
   if (stats.recalls >= 3 && stats.writes === 0) {
     hijackSection =
-      `\n⚠️  HIJACK SUSPECTED — ${stats.recalls} recalls, 0 writes in the last 5 min.\n` +
-      `   Your agent has been querying Krimto but never writing to it. That usually\n` +
-      `   means another memory system is intercepting "remember X" — most often\n` +
-      `   Claude Code's per-session auto-memory at ~/.claude/projects/<slug>/memory/,\n` +
-      `   which is invisible to teammates and to your other editors.\n` +
+      `\n━━ ⚠️  Hijack suspected ━━\n` +
       `\n` +
-      `   Fix: in your project root, run\n` +
-      `     npx @krimto-labs/krimto init\n` +
-      `   to refresh the always-use-Krimto rule with stronger primacy language.\n` +
-      `   Restart your editor afterward, then try "remember" again.\n`;
+      `   ${stats.recalls} recalls, 0 writes in the last 5 min.\n` +
+      `\n` +
+      `   Your agent is querying Krimto but never writing to it. Most likely\n` +
+      `   cause: another memory system is intercepting "remember X" — usually\n` +
+      `   Claude Code's per-session auto-memory at\n` +
+      `   ~/.claude/projects/<slug>/memory/ — invisible to teammates.\n` +
+      `\n` +
+      `   Fix:\n` +
+      `     $ cd <your project>\n` +
+      `     $ npx @krimto-labs/krimto init      # refresh the always-use rule\n` +
+      `     Then restart your editor.\n`;
   }
 
-  return { status, message: header + activitySection + hijackSection, recent };
+  return { status, message: header + activitySection + hijackSection + "\n", recent };
 }

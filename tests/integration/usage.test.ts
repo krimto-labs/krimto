@@ -28,7 +28,7 @@ describe("formatUsage", () => {
     // A DEFAULT-mode example (explicit "Use krimto" prefix):
     expect(out).toContain('"Use krimto to remember');
     // An AUTO-mode example (natural phrasing, no Krimto prefix):
-    expect(out).toContain('"Remember that');
+    expect(out).toContain('"Remember our');
     // Scope guidance (user > team > org):
     expect(out).toContain("user/me");
     expect(out).toContain("team/<slug>");
@@ -47,7 +47,7 @@ describe("formatUsage", () => {
 describe("krimto usage (bin dispatch)", () => {
   it("`node bin/krimto.mjs usage` prints the guide to stdout", async () => {
     const { stdout } = await exec(process.execPath, [BIN, "usage"]);
-    expect(stdout).toContain("THE FIVE TOOLS");
+    expect(stdout).toContain("The 5 tools");
     expect(stdout).toContain("krimto_write");
     expect(stdout).toContain("krimto_recall");
     expect(stdout).toContain("DEFAULT MODE");

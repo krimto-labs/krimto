@@ -4,6 +4,21 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.14] — 2026-05-26
+
+### Fixed
+- **All CLI outputs reformatted for clarity.** Previously each command piled on prose (multiple
+  sub-sections, ALL-CAPS headers, dense paragraphs). New visual style across every command:
+  - Leads with a single ✅ / ⚠️ / 🟢 / 🔴 status headline.
+  - `━━ Section name ━━` dividers replace ALL-CAPS shouting headers.
+  - 2-space indent for details; copy-pasteable commands prefixed with `$`.
+  - Whitespace between sections; lines under ~70 chars where possible.
+
+  Affected commands: `init`, `uninit`, `serve` banner, `connect`, `storage`, `usage`,
+  `verify-connection`, `setup-remote`, `setup-embeddings`, `--help` (grouped by purpose:
+  Get connected / Learn / Diagnose). Same information, easier to scan. README's CLI table
+  now reflects the same grouping.
+
 ## [0.2.13] — 2026-05-26
 
 ### Fixed

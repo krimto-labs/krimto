@@ -23,16 +23,16 @@ export async function runSetupEmbeddings(
     return {
       status: "no_config",
       message:
-        `No embedding provider configured. To verify a config, set the env vars and re-run:\n` +
-        `  KRIMTO_EMBED_PROVIDER=openai      (or "voyage" / "custom")\n` +
-        `  KRIMTO_EMBED_API_KEY=sk-...\n` +
-        `\n` +
-        `Optional:\n` +
-        `  KRIMTO_EMBED_MODEL=text-embedding-3-small\n` +
-        `  KRIMTO_EMBED_BASE_URL=https://api.openai.com/v1\n` +
-        `\n` +
-        `Without these, Krimto uses keyword search (BM25) — recall still works,\n` +
-        `it just won't match paraphrases.\n`,
+        `\n🔴 No embedding provider configured\n` +
+        `\n━━ How to set one up ━━\n` +
+        `\n   Set these env vars and re-run this command:\n` +
+        `     $ export KRIMTO_EMBED_PROVIDER=openai      # or "voyage" / "custom"\n` +
+        `     $ export KRIMTO_EMBED_API_KEY=sk-...\n` +
+        `\n   Optional:\n` +
+        `     $ export KRIMTO_EMBED_MODEL=text-embedding-3-small\n` +
+        `     $ export KRIMTO_EMBED_BASE_URL=https://api.openai.com/v1\n` +
+        `\n   Without these, Krimto uses keyword search (BM25) — recall still\n` +
+        `   works, it just won't match paraphrases.\n`,
     };
   }
 
@@ -51,39 +51,44 @@ export async function runSetupEmbeddings(
     if (vec.length === 0) {
       return {
         status: "request_failed",
-        message: `Provider returned an empty embedding vector — that usually means the request shape is wrong for ${cfg.provider}.`,
+        message:
+          `\n🔴 Provider returned an empty embedding vector\n` +
+          `\n   That usually means the request shape is wrong for ${cfg.provider}.\n`,
       };
     }
     return {
       status: "ok",
       message:
-        `✅ Embeddings provider works.\n` +
-        `   Provider:   ${cfg.provider}\n` +
+        `\n✅ Embeddings provider works\n` +
+        `\n   Provider:   ${cfg.provider}\n` +
         `   Model:      ${cfg.model ?? "(provider default)"}\n` +
         `   Dimensions: ${vec.length}\n` +
-        `\n` +
-        `To turn this on permanently, restart Krimto with these env vars set\n` +
-        `(see \`krimto storage\` for the three places to put them). On first boot\n` +
-        `with embeddings enabled, Krimto rebuilds index.db once to embed every fact.\n`,
+        `\n━━ Next ━━\n` +
+        `\n   Restart Krimto with these env vars set. On first boot, Krimto\n` +
+        `   rebuilds index.db once to embed every existing fact.\n` +
+        `\n   See \`krimto storage\` for the 3 places to put them.\n`,
     };
   } catch (e) {
-    // Distinguish missing-required-field (config error) from network/HTTP failures.
     const msg = e instanceof Error ? e.message : String(e);
     if (/is required/.test(msg)) {
       return {
         status: "config_error",
-        message: `❌ Config error: ${msg}\nMake sure KRIMTO_EMBED_API_KEY (and KRIMTO_EMBED_MODEL/BASE_URL for "custom") are set.`,
+        message:
+          `\n🔴 Config error: ${msg}\n` +
+          `\n   Make sure KRIMTO_EMBED_API_KEY (and KRIMTO_EMBED_MODEL /\n` +
+          `   KRIMTO_EMBED_BASE_URL for "custom" provider) are set.\n`,
       };
     }
     return {
       status: "request_failed",
       message:
-        `❌ Embedding test request failed: ${msg}\n` +
-        `\n` +
-        `Common causes:\n` +
-        `  • Wrong or expired API key.\n` +
-        `  • Wrong KRIMTO_EMBED_BASE_URL (e.g. typo, missing /v1).\n` +
-        `  • Model name not supported by your provider (try the default — unset KRIMTO_EMBED_MODEL).\n`,
+        `\n🔴 Embedding test request failed\n` +
+        `\n   ${msg}\n` +
+        `\n━━ Common causes ━━\n` +
+        `\n   • Wrong or expired API key.\n` +
+        `   • Wrong KRIMTO_EMBED_BASE_URL (typo, missing /v1).\n` +
+        `   • Model name not supported by the provider.\n` +
+        `     Fix: unset KRIMTO_EMBED_MODEL to use the default.\n`,
     };
   }
 }

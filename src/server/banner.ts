@@ -16,9 +16,9 @@ export const DEFAULT_IDENTITY = "user@localhost";
 export function identityWarning(identity: string): string {
   if (identity !== DEFAULT_IDENTITY) return "";
   return (
-    `  ⚠️  Identity = ${DEFAULT_IDENTITY} (KRIMTO_IDENTITY is unset). If your editor's MCP\n` +
-    `     config sets a different KRIMTO_IDENTITY, you'll see different scopes between\n` +
-    `     surfaces. Set KRIMTO_IDENTITY in your shell to match for a consistent view.\n`
+    `⚠️  Identity = ${DEFAULT_IDENTITY} (KRIMTO_IDENTITY is unset).\n` +
+    `   If your editor sets a different KRIMTO_IDENTITY, you'll see\n` +
+    `   different scopes between surfaces. Set KRIMTO_IDENTITY to match.\n`
   );
 }
 
@@ -28,43 +28,47 @@ export function identityWarning(identity: string): string {
  * there) can discover the CLI surface without hunting for the README.
  */
 export function stdioStartupBanner(version: string, dataDir: string, identity = DEFAULT_IDENTITY): string {
+  const warn = identityWarning(identity);
   return (
-    `\nKrimto ${version} — stdio MCP server ready (data: ${dataDir})\n` +
-    `  This process speaks MCP over stdin/stdout. Point an MCP client at it.\n` +
-    `  CLI: krimto serve · connect · init · uninit · usage · storage · setup-remote · setup-embeddings · verify-connection · where · --help\n` +
-    identityWarning(identity) +
+    `\n✅ Krimto v${version} — stdio MCP server ready\n` +
+    `   Data: ${dataDir}\n` +
+    `\n` +
+    `   This process speaks MCP over stdin/stdout. Point an MCP client at it.\n` +
+    `   Other commands: serve · connect · init · uninit · usage · storage\n` +
+    `                   setup-remote · setup-embeddings · verify-connection\n` +
+    `                   where · --help\n` +
+    (warn ? `\n${warn}` : "") +
     `\n`
   );
 }
 
-/** Local mode (no auth): the explicit 2-command recipe, the data location, plus the team upgrade hint. */
+/** Local mode (no auth): clean visual hierarchy — headline, recipe, then context. */
 export function localModeBanner(port: number, dataDir: string, identity = DEFAULT_IDENTITY): string {
+  const warn = identityWarning(identity);
   return (
-    `\nKrimto is running → http://localhost:${port}\n` +
+    `\n✅ Krimto running → http://localhost:${port}\n` +
     `\n` +
-    `┌─ To connect your editor — BOTH commands are required ─────────────────┐\n` +
-    `│                                                                       │\n` +
-    `│  1. Tell your editor about Krimto:                                    │\n` +
-    `│       claude mcp add --transport http krimto http://localhost:${port}/mcp\n` +
-    `│       (Cursor / other editors: http://localhost:${port}/ui/connect)\n` +
-    `│                                                                       │\n` +
-    `│  2. In your PROJECT root, make the agent auto-use Krimto:             │\n` +
-    `│       cd <your project> && npx @krimto-labs/krimto init               │\n` +
-    `│       ↑ Without step 2, your agent uses its own memory and ignores    │\n` +
-    `│         Krimto. The agent never calls krimto_recall / krimto_write.   │\n` +
-    `│                                                                       │\n` +
-    `│  3. Test it in your AI chat:                                          │\n` +
-    `│       "Remember that we use pnpm in this repo (not npm)."             │\n` +
-    `│     Then in a NEW chat: "What do you use for installing deps?"        │\n` +
-    `│                                                                       │\n` +
-    `└───────────────────────────────────────────────────────────────────────┘\n` +
+    `━━ Connect your editor (BOTH steps required) ━━\n` +
     `\n` +
-    `  💾 Data: ${dataDir}  (run \`npx @krimto-labs/krimto where\` to find it later)\n` +
-    `  📝 Your facts are plain markdown files — open any .md in that folder to read them.\n` +
-    `  🔌 Already connected via stdio (the npx path)? Keep that config — this HTTP server is\n` +
-    `     just for the browser dashboard, not a second MCP connection.\n` +
-    `  🔒 Local mode (no auth — local/trusted use only). For teams: set KRIMTO_BOOTSTRAP_ADMIN=<email>.\n` +
-    identityWarning(identity) +
+    `  1. Tell your editor about Krimto:\n` +
+    `     $ claude mcp add --transport http krimto http://localhost:${port}/mcp\n` +
+    `     (Cursor / other editors: http://localhost:${port}/ui/connect)\n` +
+    `\n` +
+    `  2. In your PROJECT dir, make the agent auto-use Krimto:\n` +
+    `     $ npx @krimto-labs/krimto init\n` +
+    `     ↑ without this, your agent uses its own memory and ignores Krimto.\n` +
+    `\n` +
+    `  Test: in chat → "Remember we use pnpm" → new chat → "What do we use?"\n` +
+    `\n` +
+    `━━ Where things live ━━\n` +
+    `\n` +
+    `  Data:  ${dataDir}\n` +
+    `  Files: plain markdown — open any .md in that folder to read it.\n` +
+    `  Mode:  Local (no auth). Teams: set KRIMTO_BOOTSTRAP_ADMIN=<email>.\n` +
+    `\n` +
+    `  Already connected via stdio (the npx path)? Keep that config —\n` +
+    `  this HTTP server is just for the browser dashboard.\n` +
+    (warn ? `\n${warn}` : "") +
     `\n`
   );
 }

@@ -17,29 +17,29 @@ describe("formatStorage", () => {
   it("names every layer (markdown / git / index) and explains the role of each", () => {
     const out = formatStorage("/tmp/k-data");
     expect(out).toContain("/tmp/k-data");
-    expect(out).toContain("MARKDOWN FILES");
-    expect(out).toContain("GIT REPO");
-    expect(out).toContain("INDEX.DB");
-    expect(out).toContain("source of truth");
+    expect(out).toContain("Markdown files");
+    expect(out).toContain("Git repo");
+    expect(out).toContain("index.db");
+    expect(out).toContain("the real data");
     expect(out).toContain("audit log");
   });
 
   it("tells the user what they can and shouldn't do by hand", () => {
     const out = formatStorage("/tmp/k-data");
-    expect(out).toContain("WHAT YOU CAN DO BY HAND");
-    expect(out).toContain("WHAT YOU SHOULDN'T DO");
-    expect(out).toContain("Don't edit index.db");
+    expect(out).toContain("Things you CAN do by hand");
+    expect(out).toContain("Don't touch");
+    expect(out).toContain("index.db");
   });
 
-  it("leads with 'already set up — no setup needed' so Maria doesn't think she has to install anything", () => {
+  it("leads with 'already set up — no action needed' so Maria doesn't think she has to install anything", () => {
     const out = formatStorage("/tmp/k-data");
-    expect(out).toContain("ALREADY SET UP");
-    expect(out).toContain("created automatically");
+    expect(out).toContain("already set up");
+    expect(out).toContain("no action needed");
   });
 
   it("shows how to verify each layer is working (cd + git log + ls index.db)", () => {
     const out = formatStorage("/tmp/k-data");
-    expect(out).toContain("HOW TO CHECK IT'S WORKING");
+    expect(out).toContain("Verify it's working");
     expect(out).toContain("cd /tmp/k-data");
     expect(out).toContain("git log");
     expect(out).toContain("ls index.db");
@@ -47,13 +47,13 @@ describe("formatStorage", () => {
 
   it("warns about the 30-second batch-commit lag so 'git log shows nothing' isn't mistaken for a bug (G8)", () => {
     const out = formatStorage("/tmp/k-data");
-    expect(out).toMatch(/batched every 30 seconds/i); // matches "BATCHED" too
-    expect(out).toContain("written immediately"); // ".md file is written immediately"
+    expect(out).toContain("batched");
+    expect(out).toContain("immediately"); // ".md file is written immediately"
   });
 
   it("documents the only two optional add-ons with the exact env vars", () => {
     const out = formatStorage("/tmp/k-data");
-    expect(out).toContain("OPTIONAL: SHARE & UPGRADE");
+    expect(out).toContain("Optional: share");
     expect(out).toContain("KRIMTO_GIT_REMOTE");
     expect(out).toContain("KRIMTO_EMBED_PROVIDER");
     expect(out).toContain("KRIMTO_EMBED_API_KEY");
@@ -66,7 +66,7 @@ describe("krimto storage (bin dispatch)", () => {
       env: { ...process.env, KRIMTO_DATA: "/tmp/k-test-data" },
     });
     expect(stdout).toContain("/tmp/k-test-data");
-    expect(stdout).toContain("MARKDOWN FILES");
-    expect(stdout).toContain("GIT REPO");
+    expect(stdout).toContain("Markdown files");
+    expect(stdout).toContain("Git repo");
   }, 30000);
 });

@@ -23,7 +23,7 @@ describe("runVerifyConnection", () => {
   it("reports 'none' with a hint to start Krimto when no lock file exists", async () => {
     const r = await runVerifyConnection(dir);
     expect(r.status).toBe("none");
-    expect(r.message).toContain("No Krimto process running");
+    expect(r.message).toContain("No Krimto running");
     expect(r.message).toContain("krimto serve");
   });
 
@@ -36,8 +36,8 @@ describe("runVerifyConnection", () => {
     const r = await runVerifyConnection(dir);
     expect(r.status).toBe("running");
     expect(r.message).toContain("🟢");
-    expect(r.message).toContain(`PID ${process.pid}`);
-    expect(r.message).toContain("mode stdio");
+    expect(r.message).toContain(`PID:     ${process.pid}`);
+    expect(r.message).toContain("Mode:    stdio");
   });
 
   it("reports 'stale' when the lock PID is dead", async () => {
@@ -49,7 +49,7 @@ describe("runVerifyConnection", () => {
     );
     const r = await runVerifyConnection(dir);
     expect(r.status).toBe("stale");
-    expect(r.message).toContain("stale lock");
+    expect(r.message).toContain("Stale lock");
     expect(r.message).toContain("auto-replace");
   });
 
@@ -69,7 +69,7 @@ describe("runVerifyConnection", () => {
 
   it("shows the try-this prompt when there is no activity yet", async () => {
     const r = await runVerifyConnection(dir);
-    expect(r.message).toContain("nothing yet");
+    expect(r.message).toContain("Nothing yet");
     expect(r.message).toContain('Use krimto to list');
   });
 
@@ -80,11 +80,11 @@ describe("runVerifyConnection", () => {
     expect(r.status).toBe("none");
   });
 
-  it("flags HIJACK SUSPECTED when many recalls landed with no writes (Gap #5)", async () => {
+  it("flags 'Hijack suspected' when many recalls landed with no writes (Gap #5)", async () => {
     const log = new ActivityLog(dir);
     for (let i = 0; i < 5; i++) await log.record("krimto_recall", "maria@acme.com", `try ${i}`);
     const r = await runVerifyConnection(dir);
-    expect(r.message).toContain("HIJACK SUSPECTED");
+    expect(r.message).toContain("Hijack suspected");
     expect(r.message).toContain("5 recalls, 0 writes");
     expect(r.message).toContain("npx @krimto-labs/krimto init");
   });
@@ -94,6 +94,6 @@ describe("runVerifyConnection", () => {
     for (let i = 0; i < 5; i++) await log.record("krimto_recall", "maria@acme.com", `try ${i}`);
     await log.record("krimto_write", "maria@acme.com", "user/me: a fact");
     const r = await runVerifyConnection(dir);
-    expect(r.message).not.toContain("HIJACK SUSPECTED");
+    expect(r.message).not.toContain("Hijack suspected");
   });
 });

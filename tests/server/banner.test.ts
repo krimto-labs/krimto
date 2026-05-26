@@ -39,13 +39,13 @@ describe("localModeBanner", () => {
     const b = localModeBanner(8080, "/tmp/k-data");
     expect(b).toContain("http://localhost:8080");
     expect(b).toContain("/ui/connect");
-    expect(b).toContain("Data: /tmp/k-data");
+    expect(b).toContain("/tmp/k-data");
     expect(b).toContain("KRIMTO_BOOTSTRAP_ADMIN");
   });
 
   it("teaches that facts are plain markdown files in that folder", () => {
     const b = localModeBanner(8080, "/tmp/k-data");
-    expect(b).toContain("plain markdown files");
+    expect(b).toContain("plain markdown");
   });
 
   it("appends the identity warning when identity is the placeholder default", () => {
@@ -71,11 +71,11 @@ describe("localModeBanner", () => {
     expect(b).toContain("claude mcp add --transport http krimto http://localhost:8080/mcp");
     expect(b).toContain("npx @krimto-labs/krimto init");
     // The required-vs-optional callout:
-    expect(b).toContain("BOTH commands are required");
-    expect(b).toContain("Without step 2");
+    expect(b).toContain("BOTH steps required");
+    expect(b).toContain("without this");
     // The verify prompt so they know what success looks like:
-    expect(b).toContain("Remember that we use pnpm");
-    expect(b).toContain("What do you use");
+    expect(b).toContain("Remember we use pnpm");
+    expect(b).toContain("What do we use");
   });
 });
 
