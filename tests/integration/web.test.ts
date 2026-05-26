@@ -193,6 +193,43 @@ describe("/ui web surface", () => {
     expect(unreadableRes.status).toBe(404);
   });
 
+  // 5b. Fact detail shows a Delete button when the viewer canWrite to that scope
+  it("GET /ui/facts/:id renders a Delete button when the viewer can delete", async () => {
+    const cookie = await loginAndGetCookie();
+    const res = await fetch(`${base()}/ui/facts/${readableId}`, { headers: { cookie } });
+    const body = await res.text();
+    // Alice owns user/alice@x.com — she can delete
+    expect(body).toContain("Delete this fact");
+    expect(body).toContain(`action="/ui/facts/${readableId}/delete"`);
+  });
+
+  // 5c. POST /ui/facts/:id/delete actually deletes the fact and redirects to /ui/facts
+  it("POST /ui/facts/:id/delete deletes the fact and redirects", async () => {
+    const cookie = await loginAndGetCookie();
+    const del = await fetch(`${base()}/ui/facts/${readableId}/delete`, {
+      method: "POST",
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(del.status).toBe(302);
+    expect(del.headers.get("location")).toBe("/ui/facts");
+    // Subsequent GET should now 404
+    const after = await fetch(`${base()}/ui/facts/${readableId}`, { headers: { cookie } });
+    expect(after.status).toBe(404);
+  });
+
+  // 5d. POST /ui/facts/:id/delete refuses when the viewer can't write to that scope
+  it("POST /ui/facts/:id/delete returns 404 when the fact is unreadable to the viewer", async () => {
+    const cookie = await loginAndGetCookie();
+    // alice can't see bob's team/beta — same not_found path used by krimtoRead
+    const del = await fetch(`${base()}/ui/facts/${unreadableId}/delete`, {
+      method: "POST",
+      headers: { cookie },
+      redirect: "manual",
+    });
+    expect(del.status).toBe(404);
+  });
+
   // 6. Key management: issue, revoke
   it("POST /ui/keys issues a new key shown once; POST /ui/keys/revoke revokes it", async () => {
     const cookie = await loginAndGetCookie();

@@ -4,6 +4,31 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.15] — 2026-05-26
+
+### Added
+- **`/ui/facts` shows a flat list of every readable fact** (newest-first, capped at 50 with a
+  count indicator) so a user can browse without typing a search query first. Each row links to
+  `/ui/facts/:id` where the new Delete button lives. Powered by a new `FactIndex.listFacts()`
+  method that excludes superseded + expired entries (same rules as recall).
+- **`npx @krimto-labs/krimto rm <id>`** (alias: `delete`) — hard-delete a fact end-to-end. Removes
+  the `.md` file, drops the SQLite index entry, and records the deletion as a git commit (old
+  content stays in `git log`). Refuses while a Krimto server is running on the data dir (would
+  race on the .git/ index); the user must stop the server first. Goes through the write
+  Serializer + respects `canWrite` access control. Cleanly handles orphan cases:
+  index-only orphan (file already gone) and file-only orphan (index entry missing).
+- **`npx @krimto-labs/krimto reindex`** — rebuild `index.db` from the markdown source of truth on
+  disk. Closes the user's reported gap: *"I deleted a `.md` file by hand and the index still has
+  the old entry."* Prints the delta (`+N added` / `-N orphans dropped`). Also useful for
+  embedding-space upgrades and index-corruption recovery. Refuses while a server holds the lock.
+- **`/ui/facts/:id` Delete button** — a red 🗑️ "Delete this fact" form on the fact detail page,
+  with a `confirm()` prompt and a one-line explanation that old content stays in `git log`. Only
+  shown when the viewer can write to that scope (server-checked via `canWrite`). The POST handler
+  also requires the viewer to be able to *read* the fact (so org-admins can't delete facts they
+  can't see — closes a real semantic gap exposed by tests).
+- **`ActivityLog.stats()` counts `krimto_delete` as a write** — keeps the hijack-detection
+  warning accurate (a delete is real activity, not a recall-without-write signature).
+
 ## [0.2.14] — 2026-05-26
 
 ### Fixed

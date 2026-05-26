@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel, behindTheScenesPanel, connectPanel, factDetail, gettingStartedPanel, adminBody, statusPanel, activityPanel, hijackWarningPanel } from "../../src/web/views";
+import { keysBody, howItWorksPanel, behindTheScenesPanel, connectPanel, factDetail, factsList, gettingStartedPanel, adminBody, statusPanel, activityPanel, hijackWarningPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -139,6 +139,19 @@ describe("factDetail source path", () => {
     expect(h).not.toContain("Source file");
   });
 
+  it("renders the Delete button when canDelete is true", () => {
+    const h = factDetail({ ...fact, canDelete: true });
+    expect(h).toContain("Delete this fact");
+    expect(h).toContain(`action="/ui/facts/${fact.id}/delete"`);
+    expect(h).toContain('method="post"');
+    expect(h).toContain("confirm(");
+  });
+
+  it("omits the Delete button when canDelete is false / undefined", () => {
+    expect(factDetail({ ...fact, canDelete: false })).not.toContain("Delete this fact");
+    expect(factDetail(fact)).not.toContain("Delete this fact");
+  });
+
   it("escapes a hostile source path (no XSS)", () => {
     const h = factDetail({ ...fact, sourcePath: "/tmp/<script>alert(1)</script>.md" });
     expect(h).not.toContain("<script>alert(1)</script>");
@@ -174,6 +187,49 @@ describe("activityPanel (G5)", () => {
     const h = activityPanel([
       { timestamp: "2026-05-26T09:59:55Z", tool: "krimto_recall", identity: "x@y.z", detail: '<script>alert(1)</script>' },
     ]);
+    expect(h).not.toContain("<script>alert(1)</script>");
+    expect(h).toContain("&lt;script&gt;");
+  });
+});
+
+describe("factsList", () => {
+  it("renders rows with title, scope, author and a link to the detail page", () => {
+    const h = factsList(
+      [
+        { id: "fct_01ABC", scope: "user/me", title: "Deploys are Tuesdays", author: "maria@acme.com", updated: new Date().toISOString() },
+        { id: "fct_02DEF", scope: "team/backend", title: "We use pnpm", author: "ben@acme.com", updated: new Date().toISOString() },
+      ],
+      2,
+    );
+    expect(h).toContain('href="/ui/facts/fct_01ABC"');
+    expect(h).toContain("Deploys are Tuesdays");
+    expect(h).toContain("user/me");
+    expect(h).toContain("team/backend");
+    expect(h).toContain("maria@acme.com");
+    expect(h).toContain("(2 total)");
+  });
+
+  it("returns empty string when there are no facts", () => {
+    expect(factsList([], 0)).toBe("");
+  });
+
+  it("shows the 'more available' count line when capped", () => {
+    const facts = Array.from({ length: 5 }, (_, i) => ({
+      id: `fct_${i}`,
+      scope: "user/me",
+      title: `Fact ${i}`,
+      author: "x@y.z",
+      updated: new Date().toISOString(),
+    }));
+    const h = factsList(facts, 200);
+    expect(h).toContain("Showing 5 of 200 facts");
+  });
+
+  it("escapes a hostile title (no XSS)", () => {
+    const h = factsList(
+      [{ id: "fct_x", scope: "user/me", title: "<script>alert(1)</script>", updated: new Date().toISOString() }],
+      1,
+    );
     expect(h).not.toContain("<script>alert(1)</script>");
     expect(h).toContain("&lt;script&gt;");
   });

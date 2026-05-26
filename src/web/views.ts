@@ -33,6 +33,56 @@ export function factResults(results: RecallRow[]): string {
   return `<table><thead><tr><th>Title</th><th>Scope</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+export interface FactListRow {
+  id: string;
+  scope: string;
+  title: string;
+  author?: string;
+  updated?: string;
+}
+
+/**
+ * Flat list of every fact the viewer can read, newest-first. Renders below the per-scope summary
+ * on /ui/facts so a user can browse without typing a search query first.
+ */
+export function factsList(facts: FactListRow[], totalAvailable: number): string {
+  if (facts.length === 0) return "";
+  const ago = (iso?: string): string => {
+    if (!iso) return "—";
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return iso;
+    const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  };
+  const rows = facts
+    .map(
+      (f) =>
+        `<tr>` +
+        `<td><a href="/ui/facts/${encodeURIComponent(f.id)}">${escapeHtml(f.title)}</a></td>` +
+        `<td class="muted">${escapeHtml(f.scope)}</td>` +
+        `<td class="muted" style="white-space:nowrap">${escapeHtml(ago(f.updated))}</td>` +
+        `<td class="muted">${escapeHtml(f.author ?? "—")}</td>` +
+        `</tr>`,
+    )
+    .join("");
+  const moreLine =
+    totalAvailable > facts.length
+      ? `<p class="muted" style="margin-top:8px">Showing ${facts.length} of ${totalAvailable} facts. ` +
+        `Use the search box above to find a specific one.</p>`
+      : "";
+  return (
+    `<h2 style="margin-top:2rem">All facts <span class="muted" style="font-weight:normal;font-size:0.7em">(${totalAvailable} total)</span></h2>` +
+    `<table><thead><tr><th>Title</th><th>Scope</th><th>Updated</th><th>Author</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>` +
+    moreLine
+  );
+}
+
 export interface ScopeRow { scope: string; factCount: number }
 export function scopeList(scopes: ScopeRow[]): string {
   if (scopes.length === 0) return `<p class="muted">No readable scopes yet.</p>`;
@@ -47,6 +97,8 @@ export interface FactView {
   author?: string; source?: string; created?: string; tags?: string[];
   /** Absolute path to the markdown file on disk. Surfaced so users learn "this is just a file." */
   sourcePath?: string;
+  /** When true, render the Delete form (caller decides based on canWrite for the fact's scope). */
+  canDelete?: boolean;
 }
 export function factDetail(f: FactView): string {
   const tags = f.tags && f.tags.length ? f.tags.map((t) => escapeHtml(t)).join(", ") : "—";
@@ -54,12 +106,24 @@ export function factDetail(f: FactView): string {
     ? `<p class="muted" style="margin-top:0.5rem">📝 Source file: <code>${escapeHtml(f.sourcePath)}</code> ` +
       `<span style="opacity:0.7">— open it in any editor to see exactly what was stored.</span></p>`
     : "";
+  // Delete is opt-in (canDelete) — the route handler checks canWrite and only sets it when allowed.
+  const deleteForm = f.canDelete
+    ? `<form method="post" action="/ui/facts/${encodeURIComponent(f.id)}/delete" ` +
+      `style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #ddd" ` +
+      `onsubmit="return confirm('Permanently delete this fact? The .md file will be removed and the deletion committed to git (old content stays in git log).');">` +
+      `<button type="submit" style="background:#a82c1c;color:#fff;border:0;padding:6px 14px;border-radius:3px;cursor:pointer">` +
+      `🗑️ Delete this fact</button>` +
+      `<span class="muted" style="margin-left:10px">Hard-delete: file is unlinked + git records the removal. ` +
+      `Old content stays in <code>git log</code>.</span>` +
+      `</form>`
+    : "";
   return (
     `<p><a href="/ui/facts">← Facts</a></p><h1>${escapeHtml(f.title)}</h1>` +
     `<p class="muted">${escapeHtml(f.scope)} · ${escapeHtml(f.author ?? "unknown")} · ${escapeHtml(f.created ?? "")}</p>` +
     `<pre>${escapeHtml(f.body)}</pre>` +
     `<p class="muted">id: ${escapeHtml(f.id)} · source: ${escapeHtml(f.source ?? "—")} · tags: ${tags}</p>` +
-    sourceLine
+    sourceLine +
+    deleteForm
   );
 }
 

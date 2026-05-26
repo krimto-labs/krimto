@@ -52,6 +52,63 @@ describe("FactIndex.searchCandidates (lexical-only)", () => {
   });
 });
 
+describe("FactIndex.listFacts (flat browse)", () => {
+  it("returns readable facts newest-first, capped at the limit", async () => {
+    const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
+    const idx = new FactIndex(db);
+    // Insert in reverse-time order so the updated-DESC sort is meaningful.
+    const older = createFact({ scope: "user/a@x.com", title: "Older", body: "x", author: "a@x.com" });
+    older.frontmatter.updated = "2026-01-01T00:00:00Z";
+    older.frontmatter.created = "2026-01-01T00:00:00Z";
+    const newer = createFact({ scope: "user/a@x.com", title: "Newer", body: "y", author: "a@x.com" });
+    newer.frontmatter.updated = "2026-05-01T00:00:00Z";
+    newer.frontmatter.created = "2026-05-01T00:00:00Z";
+    await idx.upsertFact(older);
+    await idx.upsertFact(newer);
+
+    const list = idx.listFacts(["user/a@x.com"], 50);
+    expect(list.map((f) => f.title)).toEqual(["Newer", "Older"]);
+
+    const capped = idx.listFacts(["user/a@x.com"], 1);
+    expect(capped).toHaveLength(1);
+    expect(capped[0]!.title).toBe("Newer");
+    db.close();
+  });
+
+  it("respects scope filtering — unreadable scopes don't appear", async () => {
+    const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
+    const idx = new FactIndex(db);
+    await idx.upsertFact(createFact({ scope: "user/a@x.com", title: "Mine", body: "x", author: "a@x.com" }));
+    await idx.upsertFact(createFact({ scope: "user/other@x.com", title: "Theirs", body: "y", author: "other@x.com" }));
+    const list = idx.listFacts(["user/a@x.com"], 50);
+    expect(list.map((f) => f.title)).toEqual(["Mine"]);
+    db.close();
+  });
+
+  it("excludes superseded and expired facts (same rules as recall)", async () => {
+    const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
+    const idx = new FactIndex(db);
+    const old = createFact({ scope: "user/a@x.com", title: "old", body: "x", author: "a@x.com" });
+    await idx.upsertFact(old);
+    const replacement = createFact({ scope: "user/a@x.com", title: "new", body: "x", author: "a@x.com", supersedes: [old.frontmatter.id] });
+    await idx.upsertFact(replacement);
+    const expired = createFact({ scope: "user/a@x.com", title: "expired", body: "x", author: "a@x.com" });
+    expired.frontmatter.expires = new Date(Date.now() - 86_400_000).toISOString();
+    await idx.upsertFact(expired);
+
+    const titles = idx.listFacts(["user/a@x.com"], 50).map((f) => f.title);
+    expect(titles).toEqual(["new"]); // old superseded, expired excluded
+    db.close();
+  });
+
+  it("returns [] for empty readableScopes", () => {
+    const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });
+    const idx = new FactIndex(db);
+    expect(idx.listFacts([], 50)).toEqual([]);
+    db.close();
+  });
+});
+
 describe("FactIndex.searchCandidates (guards)", () => {
   it("returns [] for empty readableScopes", async () => {
     const db = openIndexDb(":memory:", { provider: "none", dimensions: 0 });

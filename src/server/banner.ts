@@ -34,7 +34,7 @@ export function stdioStartupBanner(version: string, dataDir: string, identity = 
     `   Data: ${dataDir}\n` +
     `\n` +
     `   This process speaks MCP over stdin/stdout. Point an MCP client at it.\n` +
-    `   Other commands: serve · connect · init · uninit · usage · storage\n` +
+    `   Other commands: serve · connect · init · uninit · usage · storage · rm · reindex\n` +
     `                   setup-remote · setup-embeddings · verify-connection\n` +
     `                   where · --help\n` +
     (warn ? `\n${warn}` : "") +

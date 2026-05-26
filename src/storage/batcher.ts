@@ -74,6 +74,28 @@ export class CommitBatcher {
     }
   }
 
+  /**
+   * Stage a DELETION and commit immediately (not batched). Deletes are rare events and the user
+   * expects them to land in git right away — not 30s later. Pushes to the remote if configured.
+   */
+  async commitDeletion(relPath: string, fact: Fact): Promise<string | null> {
+    // `git add -- <path>` stages a deletion when the file is gone (modern git default behaviour).
+    await this.repo.stage(relPath);
+    const fm = fact.frontmatter;
+    const msg = `krimto: delete fact (${fm.id})\n\n- [${fm.scope}] ${fm.title} (${fm.id}) by ${fm.author}\n\nCo-authored-by: Krimto-Server <krimto@localhost>`;
+    const sha = await this.repo.commit(msg);
+    if (sha === null) {
+      process.stderr.write(`krimto: delete commit failed; deletion remains staged\n`);
+      return null;
+    }
+    const push = await this.repo.push();
+    this.lastPush = push.status;
+    if (push.status === "error") {
+      process.stderr.write(`krimto: push of deletion failed: ${push.detail ?? ""}\n`);
+    }
+    return sha;
+  }
+
   /** Commit all pending facts as one commit, then push to the remote (if any). */
   async flush(): Promise<string | null> {
     if (this.pending.length === 0) return null;

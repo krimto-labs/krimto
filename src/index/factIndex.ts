@@ -165,6 +165,32 @@ export class FactIndex {
       .all(...readableScopes) as { path: string; factCount: number; lastUpdated: string | null }[];
   }
 
+  /**
+   * Flat list of facts the requester can read, newest-first, capped at `limit`. Used by the
+   * `/ui/facts` overview that shows every readable fact (not just scope counts).
+   * Excludes superseded entries — same as recall.
+   */
+  listFacts(
+    readableScopes: string[],
+    limit = 50,
+  ): { id: string; scope: string; title: string; author: string; updated: string }[] {
+    if (readableScopes.length === 0) return [];
+    const placeholders = readableScopes.map(() => "?").join(",");
+    const superseded = this.supersededIds();
+    const rows = this.db
+      .prepare(
+        `SELECT id, scope, title, author, updated FROM facts
+          WHERE scope IN (${placeholders})
+            AND (expires IS NULL OR expires > ?)
+          ORDER BY updated DESC
+          LIMIT ?`,
+      )
+      .all(...readableScopes, new Date().toISOString(), limit) as {
+      id: string; scope: string; title: string; author: string; updated: string;
+    }[];
+    return rows.filter((r) => !superseded.has(r.id));
+  }
+
   /** All distinct scopes present in the index. */
   allScopes(): string[] {
     return (this.db.prepare("select distinct scope from facts order by scope").all() as { scope: string }[]).map(

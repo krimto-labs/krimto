@@ -72,7 +72,7 @@ export class ActivityLog {
         if (Number.isNaN(t) || t < since) continue;
         total++;
         if (entry.tool === "krimto_recall") recalls++;
-        else if (entry.tool === "krimto_write" || entry.tool === "krimto_supersede") writes++;
+        else if (entry.tool === "krimto_write" || entry.tool === "krimto_supersede" || entry.tool === "krimto_delete") writes++;
       }
     } catch {
       /* no file yet */

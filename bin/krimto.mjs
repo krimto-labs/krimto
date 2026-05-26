@@ -104,6 +104,27 @@ try {
     const result = await runVerifyConnection(resolveDataDir());
     process.stdout.write(result.message);
     if (result.status === "none") process.exitCode = 1;
+  } else if (cmd === "rm" || cmd === "delete") {
+    // `krimto rm <id>` — hard delete a fact (file + index + git deletion commit).
+    // Refuses if a Krimto server is running on this data dir (would race on .git/ index).
+    const id = process.argv[3];
+    if (!id) {
+      process.stderr.write("Usage: krimto rm <fact-id>\n  e.g. krimto rm fct_01HF7K9XYZ...\n");
+      process.exit(2);
+    }
+    const { runDeleteFact } = await tsImport("../src/cli/deleteFact.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runDeleteFact(resolveDataDir(), resolveIdentity(), id);
+    process.stdout.write(result.message);
+    if (result.status !== "ok") process.exitCode = 1;
+  } else if (cmd === "reindex") {
+    // `krimto reindex` — rebuild index.db from the markdown source-of-truth on disk. Use case:
+    // user manually deleted a .md file; the index has an orphan. Also recovers from corruption.
+    const { runReindex } = await tsImport("../src/cli/reindex.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runReindex(resolveDataDir());
+    process.stdout.write(result.message);
+    if (result.status !== "ok") process.exitCode = 1;
   } else if (cmd === "setup-embeddings") {
     // `krimto setup-embeddings` — verify KRIMTO_EMBED_* config by sending one real test embedding,
     // so the user finds out about a bad key now, not after they've turned embeddings on.

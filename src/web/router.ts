@@ -1,10 +1,12 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, hijackWarningPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, hijackWarningPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
+import { deleteFact } from "../server/deleteFact";
+import { canRead, canWrite } from "../access/membership";
 import { KrimtoError } from "../server/errors";
 import { type AdminContext } from "../server/admin";
 import { addUser } from "../access/membershipStore";
@@ -102,6 +104,12 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         const recent = deps.ctx.activity ? await deps.ctx.activity.tail(5) : [];
         // Gap #5 — detect the recall-without-write hijack pattern (Claude Code's auto-memory winning).
         const stats = deps.ctx.activity ? await deps.ctx.activity.stats() : { recalls: 0, writes: 0, total: 0 };
+        // Flat list of every readable fact (newest-first, capped at 50). Caller scope-filters
+        // via canRead — we compute the readable-scope set the same way recall does.
+        const readableScopes = deps.ctx.index
+          .allScopes()
+          .filter((s) => canRead(deps.membership(), identity, s));
+        const allFacts = deps.ctx.index.listFacts(readableScopes, 50);
         const body =
           howItWorksPanel() +
           behindTheScenesPanel(deps.ctx.store.dataDir()) +
@@ -109,7 +117,8 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           (deps.status ? statusPanel(deps.status()) : "") +
           activityPanel(recent) +
           searchBox(q) +
-          scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })));
+          scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count }))) +
+          factsList(allFacts, totalFacts);
         page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);
@@ -126,13 +135,41 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         // Best-effort: a missing entry (concurrent delete, sync race) just hides the line.
         const stored = await deps.ctx.store.readFact(req.params.id).catch(() => null);
         const sourcePath = stored ? `${deps.ctx.store.dataDir()}/${stored.path}` : undefined;
-        page(res, 200, "Fact", factDetail(toFactView(fact, sourcePath)), identity);
+        // The Delete button is gated by canWrite — same access control as `krimto rm`.
+        const factScope = (fact as { scope?: string }).scope ?? "";
+        const canDelete = canWrite(deps.membership(), identity, factScope);
+        page(res, 200, "Fact", factDetail(toFactView(fact, sourcePath, canDelete)), identity);
       } catch (e) {
         if (e instanceof KrimtoError) {
           errorPage(res, 404, "Not found", identity);
           return;
         }
         errorPage(res, 500, "Something went wrong", identity);
+      }
+    })();
+  });
+
+  router.post("/facts/:id/delete", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      try {
+        // "Can't act on what you can't see": confirm the user can read this fact before deleting.
+        // krimtoRead surfaces not_found for unreadable facts (no existence leak); we mirror that.
+        await krimtoRead(ctxFor(req), req.params.id);
+        await deleteFact(ctxFor(req), req.params.id);
+        res.redirect("/ui/facts");
+      } catch (e) {
+        if (e instanceof KrimtoError) {
+          if (e.code === "not_found") {
+            errorPage(res, 404, "Fact not found (already deleted?)", identity);
+            return;
+          }
+          if (e.code === "forbidden") {
+            errorPage(res, 403, "You don't have permission to delete this fact.", identity);
+            return;
+          }
+        }
+        errorPage(res, 500, "Delete failed — see server logs", identity);
       }
     })();
   });
@@ -232,7 +269,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
 // ReadResult shape: { id, scope, title, body, frontmatter: FactFrontmatter, history }
 // FactFrontmatter has: author, created, updated, tags?, source?
 // Top-level id, scope, title, body are promoted; the rest live under frontmatter.
-function toFactView(fact: unknown, sourcePath?: string): FactView {
+function toFactView(fact: unknown, sourcePath?: string, canDelete?: boolean): FactView {
   const f = fact as Record<string, unknown>;
   const fm = (typeof f.frontmatter === "object" && f.frontmatter !== null ? f.frontmatter : {}) as Record<string, unknown>;
   const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -247,5 +284,6 @@ function toFactView(fact: unknown, sourcePath?: string): FactView {
     created: str(fm.created),
     tags,
     sourcePath,
+    canDelete,
   };
 }

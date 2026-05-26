@@ -9,7 +9,7 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2.14** surface. Here today: the markdown-in-git storage layer, the
+> **Where we are:** this is the **v0.2.15** surface. Here today: the markdown-in-git storage layer, the
 > `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, the MCP
 > server over **stdio + HTTP** (Bearer API-key auth on HTTP), a **published multi-arch Docker image**
 > (`ghcr.io/krimto-labs/krimto`), a **web UI** with browse/search/admin/diagnostics, and a complete
@@ -114,6 +114,13 @@ commands. Grouped by purpose:
 | `usage` | Show the five `krimto_*` tools with chat examples for both modes |
 | `storage` | Explain where Krimto keeps your data (markdown / git / index) |
 | `where` | Print the Krimto data directory |
+
+**Manage facts**
+
+| Command | What it does |
+|---|---|
+| `rm <id>` | Delete a fact (file + index + git deletion commit). Refuses while a server is running on the data dir |
+| `reindex` | Rebuild `index.db` from the markdown files (fixes orphans left by manual `rm` of .md files) |
 
 **Diagnose**
 
