@@ -118,12 +118,23 @@ export async function writeMcpConfig(
       snippet: `${env.mcpWire.command} ${cliArgs.join(" ")}`,
     };
   }
+  // v0.2.19 — reconfigure-safe idempotency. `claude mcp add krimto` errors with "MCP server
+  // krimto already exists in local config" on the second + Nth runs (per project scope), which
+  // breaks every `krimto init` rerun the user might do. The CLI surface has no `add-or-update`
+  // verb, so we remove the prior entry first and ignore the "not found" case from fresh setups.
+  const removeArgs = env.mcpWire.baseArgs.map((a) => (a === "add" ? "remove" : a));
+  try {
+    await exec(env.mcpWire.command, removeArgs);
+  } catch {
+    // "MCP server krimto not found" on a fresh setup — expected, ignore. Any other failure
+    // here (e.g. claude not on PATH) will resurface as a real error on the add call below.
+  }
   try {
     await exec(env.mcpWire.command, cliArgs);
     return { action: "cli-executed" };
   } catch (e) {
-    // Claude CLI may fail if `claude` isn't on PATH or if the entry already exists. Surface the
-    // error so the wizard can show the user what to do next (often: "run this command yourself").
+    // Claude CLI may fail if `claude` isn't on PATH or for other reasons. Surface the error so
+    // the wizard can show the user what to do next (often: "run this command yourself").
     throw new Error(
       `Failed to register Krimto with ${env.editor} via \`${env.mcpWire.command}\`: ` +
         `${e instanceof Error ? e.message : String(e)}`,

@@ -223,6 +223,61 @@ describe("writeMcpConfig — CLI wire method (Claude Code, dry-run)", () => {
   });
 });
 
+describe("writeMcpConfig — CLI wire method (re-run safety)", () => {
+  // v0.2.19 regression: `claude mcp add krimto` errors on the second invocation in the same
+  // project scope with "MCP server krimto already exists in local config". The fix is to run
+  // `claude mcp remove krimto` first (ignoring not-found), so reconfigure is idempotent. This
+  // test simulates Claude Code with a tiny shell script and verifies a second add succeeds.
+  it("calls `mcp remove` before `mcp add` and re-runs successfully even when an entry exists", async () => {
+    const fakeClaude = path.join(dir, "fake-claude.sh");
+    const stateFile = path.join(dir, ".fake-claude-state");
+    await fs.writeFile(
+      fakeClaude,
+      `#!/bin/bash
+sub="$1 $2"   # e.g. "mcp add" or "mcp remove"
+case "$sub" in
+  "mcp add")
+    if [ -f "${stateFile}" ]; then
+      echo "MCP server krimto already exists in local config" >&2
+      exit 1
+    fi
+    echo "registered" > "${stateFile}"
+    ;;
+  "mcp remove")
+    if [ -f "${stateFile}" ]; then
+      rm "${stateFile}"
+    else
+      echo "MCP server krimto not found" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+`,
+      "utf8",
+    );
+    await fs.chmod(fakeClaude, 0o755);
+
+    // Synthesize an env that uses the fake claude script.
+    const claudeEnv = await envFor("claude-code");
+    claudeEnv.mcpWire = { method: "cli", command: fakeClaude, baseArgs: ["mcp", "add", "krimto"] };
+
+    // First call: state file doesn't exist → add succeeds. The "remove first" step errors
+    // ("not found") but is swallowed.
+    const first = await writeMcpConfig(claudeEnv, stdioEntry);
+    expect(first.action).toBe("cli-executed");
+    await expect(fs.access(stateFile)).resolves.toBeUndefined();
+
+    // Second call: state file exists. Pre-v0.2.19 this would crash with "already exists".
+    // With the fix, `mcp remove` runs first, the state file is cleared, then `mcp add` succeeds.
+    const second = await writeMcpConfig(claudeEnv, stdioEntry);
+    expect(second.action).toBe("cli-executed");
+    await expect(fs.access(stateFile)).resolves.toBeUndefined();
+  });
+});
+
 describe("writeMcpConfig — manual (null mcpWire)", () => {
   it("Gemini CLI returns a manual snippet, no file is touched", async () => {
     const env = await envFor("gemini-cli");

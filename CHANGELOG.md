@@ -4,6 +4,27 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.19] — 2026-05-27
+
+### Fixed
+
+- **`krimto init` reconfigure was broken on Claude Code projects.** Re-running
+  `krimto init` (or `krimto editors`, or the wizard's "Change settings" path) in any project
+  that had previously registered Krimto with Claude Code failed with:
+
+      Failed to register Krimto with claude-code via `claude`:
+      Command failed: claude mcp add krimto -- npx -y @krimto-labs/krimto
+      MCP server krimto already exists in local config
+
+  Claude Code's `mcp add` is strict — it refuses to overwrite an existing entry, and there's
+  no `add-or-update` verb. The fix is in `writeMcpConfig` (`src/cli/mcpConfig.ts`): when the
+  wire method is `cli`, we now run `claude mcp remove krimto` first, silently swallowing the
+  "not found" case from fresh setups. Reported by smoke-testing in a second project scope.
+  Verified by a new test that mocks Claude Code with a tiny shell script and re-runs
+  `writeMcpConfig` twice in a row — both succeed.
+
+Total suite: **544 passing**.
+
 ## [0.2.18] — 2026-05-26
 
 Consolidated npm release of the entire v0.2.17 development series — the prerelease tags
