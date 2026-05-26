@@ -53,6 +53,11 @@ describe("detectEditorTargets (G4)", () => {
     expect(await detectEditorTargets(dir)).toEqual(["CLAUDE.md"]);
   });
 
+  it("returns CLAUDE.md when .specstory/ exists (Claude Code's transcript dir)", async () => {
+    await fs.mkdir(path.join(dir, ".specstory"));
+    expect(await detectEditorTargets(dir)).toEqual(["CLAUDE.md"]);
+  });
+
   it("returns the cursor target when .cursor/ exists", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
     const targets = await detectEditorTargets(dir);
@@ -78,30 +83,45 @@ describe("detectEditorTargets (G4)", () => {
   });
 });
 
-describe("runInit auto-detection (G4)", () => {
-  it("writes only the matching file when one editor signal is present", async () => {
+describe("runInit auto-detection (G4 + v0.2.16 safer default)", () => {
+  it("DEFAULT writes all 4 files even when only `.cursor/` is present — safer than guessing", async () => {
+    // This is the smoke-5 failure mode: user has `.cursor/` but is actually using Claude Code.
+    // Default behavior must write CLAUDE.md too so the rule reaches the active editor.
     await fs.mkdir(path.join(dir, ".cursor"));
-    const res = await runInit(dir);
-    expect(res.detected).toBe(true);
-    expect(res.written).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
-    expect(res.considered).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
-    // Other targets must NOT exist
-    await expect(fs.access(path.join(dir, "CLAUDE.md"))).rejects.toThrow();
-    await expect(fs.access(path.join(dir, "AGENTS.md"))).rejects.toThrow();
-    await expect(fs.access(path.join(dir, "GEMINI.md"))).rejects.toThrow();
-  });
-
-  it("writes everything when no signals are present (safe default)", async () => {
     const res = await runInit(dir);
     expect(res.detected).toBe(false);
     expect(res.written.sort()).toEqual([...INIT_TARGETS].sort());
   });
 
-  it("writes everything when --all is forced even if signals are present", async () => {
+  it("--minimal honors editor signals and writes only matching files", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const res = await runInit(dir, { minimal: true });
+    expect(res.detected).toBe(true);
+    expect(res.written).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
+    await expect(fs.access(path.join(dir, "CLAUDE.md"))).rejects.toThrow();
+  });
+
+  it("--minimal still writes everything when there are no signals (safe fallback)", async () => {
+    const res = await runInit(dir, { minimal: true });
+    expect(res.detected).toBe(false);
+    expect(res.written.sort()).toEqual([...INIT_TARGETS].sort());
+  });
+
+  it("--all (legacy flag, still supported) writes everything", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
     const res = await runInit(dir, { all: true });
-    expect(res.detected).toBe(false); // legacy mode, not detection
     expect(res.written.sort()).toEqual([...INIT_TARGETS].sort());
+  });
+
+  it("`.specstory/` is detected as a Claude Code signal (fixes the smoke-5 false-negative)", async () => {
+    // Project has BOTH .cursor/ and .specstory/ — the smoke-5 scenario where Claude Code is the
+    // active editor. With --minimal, BOTH editor files must be written.
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await fs.mkdir(path.join(dir, ".specstory"));
+    const res = await runInit(dir, { minimal: true });
+    expect(res.detected).toBe(true);
+    expect(res.written).toContain("CLAUDE.md"); // ← .specstory/ → Claude Code signal
+    expect(res.written).toContain(path.join(".cursor", "rules", "krimto.mdc"));
   });
 });
 

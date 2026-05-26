@@ -46,8 +46,16 @@ async function exists(p: string): Promise<boolean> {
 export async function detectEditorTargets(cwd: string): Promise<string[]> {
   const matches: string[] = [];
 
-  // CLAUDE.md — Claude Code
-  if ((await exists(path.join(cwd, "CLAUDE.md"))) || (await exists(path.join(cwd, ".claude"))) || (await exists(path.join(cwd, ".claude-plugin")))) {
+  // CLAUDE.md — Claude Code. `.specstory/` is Claude Code's SpecStory transcript directory and
+  // is a reliable "this project has been used with Claude Code" signal even when no CLAUDE.md
+  // exists yet (added to fix the smoke-5 false-negative where `.cursor/` existed but the user
+  // was actually using Claude Code).
+  if (
+    (await exists(path.join(cwd, "CLAUDE.md"))) ||
+    (await exists(path.join(cwd, ".claude"))) ||
+    (await exists(path.join(cwd, ".claude-plugin"))) ||
+    (await exists(path.join(cwd, ".specstory")))
+  ) {
     matches.push("CLAUDE.md");
   }
   // AGENTS.md — Codex CLI / generic
@@ -67,9 +75,15 @@ export async function detectEditorTargets(cwd: string): Promise<string[]> {
 }
 
 export interface RunInitOptions {
-  /** Force writing all four files regardless of detection (the legacy behavior). */
+  /** Force writing all four files (the v0.2.16+ default — opt out via `minimal: true`). */
   all?: boolean;
-  /** Override the target list directly (tests; takes precedence over `all` + detection). */
+  /**
+   * Opt in to "write only files for editors actually present in this project" behavior. Default
+   * since v0.2.16 is "write all four" to avoid silent failures when detection misses the active
+   * editor (e.g. `.cursor/` exists from an earlier session but the user has switched to Claude Code).
+   */
+  minimal?: boolean;
+  /** Override the target list directly (tests; takes precedence over flags). */
   targets?: string[];
 }
 
@@ -79,16 +93,19 @@ export async function runInit(cwd: string, opts: RunInitOptions = {}): Promise<I
   let detected = false;
   if (opts.targets) {
     targets = opts.targets;
-  } else if (opts.all) {
-    targets = INIT_TARGETS;
-  } else {
+  } else if (opts.minimal) {
     const auto = await detectEditorTargets(cwd);
     if (auto.length > 0) {
       targets = auto;
       detected = true;
     } else {
+      // `--minimal` but nothing matched → still need to write something. Fall back to all four.
       targets = INIT_TARGETS;
     }
+  } else {
+    // v0.2.16+ default: write to all supported editors. `--all` is now redundant but kept for
+    // backwards compatibility with users who scripted it.
+    targets = INIT_TARGETS;
   }
 
   const written: string[] = [];

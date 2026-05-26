@@ -25,7 +25,7 @@ export function formatHelp(version: string): string {
     "  Get connected:",
     "    serve              Start the HTTP server (port 8080) + browser /ui dashboard",
     "    connect            Print copy-paste config for Claude Code & Cursor",
-    "    init [--all]       Switch project to AUTO MODE (auto-detects editor)",
+    "    init [--minimal]   Switch project to AUTO MODE — write the rule (default: all 4 files)",
     "    uninit             Switch back to DEFAULT MODE",
     "",
     "  Learn:",

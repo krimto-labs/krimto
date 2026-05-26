@@ -4,6 +4,21 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.16] — 2026-05-26
+
+### Fixed
+- **`krimto init` was silently writing only `.cursor/rules/krimto.mdc` when `.cursor/` existed** in
+  the project, even when the user was actually using Claude Code (which reads `CLAUDE.md`).
+  Symptom: AUTO MODE appeared broken — Claude Code Sonnet kept routing "remember X" to its built-in
+  auto-memory because no rule landed in `CLAUDE.md`. Two fixes:
+  - **Default behavior reverted to "write all 4 rule files."** Previous default (write only
+    detected editors) failed silently when detection missed the active editor — a near-invisible
+    UX bug. The detection-only behavior is now opt-in via `--minimal`. Legacy `--all` still works.
+  - **Detection now recognizes `.specstory/` as a Claude Code signal.** SpecStory is Claude Code's
+    bundled transcript directory and is a reliable "this project is being used with Claude Code"
+    indicator even when no `CLAUDE.md` exists yet. The smoke-5 false-negative (had `.specstory/`
+    but only `.cursor/` was detected) is now caught — `--minimal` writes both files.
+
 ## [0.2.15] — 2026-05-26
 
 ### Added

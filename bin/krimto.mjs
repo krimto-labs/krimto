@@ -16,11 +16,14 @@ try {
     process.stdout.write(formatHelp(KRIMTO_VERSION));
   } else if (cmd === "init") {
     // `krimto init` — drop the always-use-Krimto rule into this project's agent rules files.
-    // By default, auto-detects the editor (.cursor/, CLAUDE.md, etc.) and writes only matching
-    // files. Pass `--all` to write to every supported rules file regardless of signals.
-    const all = process.argv.slice(3).includes("--all");
+    // v0.2.16+: default writes to all four supported rule files (safer — silent detection
+    // failures were trapping Claude Code users). Pass `--minimal` to write only files matching
+    // editor signals in this project. `--all` is the legacy flag (still works, same as default).
+    const flags = process.argv.slice(3);
+    const all = flags.includes("--all");
+    const minimal = flags.includes("--minimal");
     const { runInit } = await tsImport("../src/cli/init.ts", import.meta.url);
-    const res = await runInit(process.cwd(), { all });
+    const res = await runInit(process.cwd(), { all, minimal });
     if (res.written.length === 0) {
       const detected = res.detected ? res.considered.join(", ") : "(no editor signals)";
       process.stderr.write(
@@ -33,9 +36,9 @@ try {
       );
     } else {
       const detectedLine = res.detected
-        ? `   Detected editor signals — wrote only matching files.\n   (--all writes to all 4 supported files instead.)\n\n`
-        : !all
-          ? `   No editor signals found — wrote all supported files.\n   (Re-run with --all to force, or 'uninit' to remove what you don't need.)\n\n`
+        ? `   --minimal — wrote only files matching detected editor signals.\n   (Default: write all 4 supported files. Use 'uninit' to clean up unwanted ones.)\n\n`
+        : !minimal
+          ? `   Default: wrote all 4 supported rule files (safer than detecting one editor and\n   missing the actual one). Pass --minimal to write only matched editors next time.\n\n`
           : "";
       process.stderr.write(
         "\n✅ AUTO MODE on — rule written to " + res.written.length + " file" +
