@@ -4,6 +4,36 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17-5] — 2026-05-26
+
+### Added
+
+Phase E.4 of the v0.2.17 plan (deferred from v0.2.17-3) — the `/ui/settings` consolidation.
+`/ui/facts` becomes notes-focused; the engineering panels move to a dedicated page reachable
+from the nav.
+
+- **`/ui/settings`** — new route that composes the engineering panels in one place:
+  - "Shared memory for your team's AI" explainer (How Krimto works)
+  - "Behind the scenes — your data, your files" (markdown / git / index storage explainer)
+  - Status panel (git remote + embeddings — green/gold/red dots)
+  - Recent activity (full tail — last 50 MCP calls)
+  - Quick links to API keys, Connect, and Team admin (when admin)
+  Source: `settingsBody` in `src/web/views.ts`; route handler in `src/web/router.ts`.
+- **`/ui/facts` slimmed to notes-only**. The five engineering panels are gone. What's left:
+  the hijack warning (kept — it's an urgent diagnostic), the search box, the scope cards,
+  the flat notes list, plus a one-line "Last MCP calls" blurb that links to `/ui/settings`
+  for the full activity feed. The empty-store path still renders `gettingStartedPanel`.
+- **Nav** — `Settings` link added between `Keys` and `Team` (`src/web/html.ts`).
+
+### Tests
+
+- `tests/integration/web.test.ts` — extended with three new tests:
+  - `/ui/settings` renders the moved panels + the quick-links section.
+  - `/ui/facts` no longer renders the heavy panels (regression-locking the move).
+  - The Settings link appears in the nav on every authenticated page.
+
+Total suite: **543 passing**. `pnpm typecheck` + `pnpm lint` clean.
+
 ## [0.2.17-4] — 2026-05-26
 
 ### Added

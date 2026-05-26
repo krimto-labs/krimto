@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, hijackWarningPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, type FactView, type StatusPanelOpts } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -86,6 +86,29 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
     page(res, 200, "Connect", connectPanel({ host, requireAuth: !deps.localIdentity }), idOf(req));
   });
 
+  router.get("/settings", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      // Read the full activity log (cap matches the panel's tail; no truncation here so the
+      // dedicated Settings page is the full record).
+      const activity = deps.ctx.activity ? await deps.ctx.activity.tail(50) : [];
+      const m = deps.membership();
+      const isAdmin = !!deps.admin && isOrgAdmin(m, identity);
+      page(
+        res,
+        200,
+        "Settings",
+        settingsBody({
+          dataDir: deps.ctx.store.dataDir(),
+          status: deps.status ? deps.status() : undefined,
+          activity,
+          isAdmin,
+        }),
+        identity,
+      );
+    })();
+  });
+
   router.get("/facts", (req, res) => {
     void (async () => {
       const identity = idOf(req);
@@ -103,29 +126,36 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           page(res, 200, "Memory", gettingStartedPanel(), identity); // empty store: teach, don't show a blank list
           return;
         }
-        // Pull recent activity (best-effort — empty list when no log file yet).
-        const recent = deps.ctx.activity ? await deps.ctx.activity.tail(5) : [];
-        // Gap #5 — detect the recall-without-write hijack pattern (Claude Code's auto-memory winning).
+        // v0.2.17-5: the engineering panels (How-it-works, Behind-the-scenes, Status, full
+        // Activity feed) moved to /ui/settings. /ui/facts is now notes-focused. We keep the
+        // hijack warning HERE because it's an urgent diagnostic the user must see immediately,
+        // plus a 3-line activity tail so "did my agent call?" is one glance away.
+        const recent = deps.ctx.activity ? await deps.ctx.activity.tail(3) : [];
         const stats = deps.ctx.activity ? await deps.ctx.activity.stats() : { recalls: 0, writes: 0, total: 0 };
-        // Flat list of every readable fact (newest-first, capped at 50). Caller scope-filters
-        // via canRead — we compute the readable-scope set the same way recall does.
         const readableScopes = deps.ctx.index
           .allScopes()
           .filter((s) => canRead(deps.membership(), identity, s));
         const allFacts = deps.ctx.index.listFacts(readableScopes, 50);
+        const recentBlurb =
+          recent.length > 0
+            ? `<p class="muted" style="margin:0 0 1rem">Last MCP calls: ` +
+              recent
+                .slice()
+                .reverse()
+                .map((e) => `<code>${e.tool}</code>`)
+                .join(", ") +
+              ` · <a href="/ui/settings">see full activity →</a></p>`
+            : "";
         const body =
-          howItWorksPanel() +
-          behindTheScenesPanel(deps.ctx.store.dataDir()) +
-          hijackWarningPanel(stats) + // shown ONLY when threshold met; "" otherwise
-          (deps.status ? statusPanel(deps.status()) : "") +
-          activityPanel(recent) +
+          hijackWarningPanel(stats) +
           searchBox(q) +
           scopeList(
             scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })),
             deps.membership(),
             identity,
           ) +
-          factsList(allFacts, totalFacts, deps.membership(), identity);
+          factsList(allFacts, totalFacts, deps.membership(), identity) +
+          recentBlurb;
         page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);

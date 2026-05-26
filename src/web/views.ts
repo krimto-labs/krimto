@@ -521,6 +521,38 @@ export function statusPanel(opts: StatusPanelOpts): string {
   );
 }
 
+/**
+ * The v0.2.17-5 /ui/settings page. Composes the engineering-y panels that used to live on
+ * /ui/facts so the Memory page stays focused on the notes themselves. Settings is the home
+ * for: how it works, where data lives, status of the optional add-ons, full activity log,
+ * pointers to keys + team admin pages.
+ */
+export function settingsBody(opts: {
+  dataDir: string;
+  status?: StatusPanelOpts;
+  activity: ActivityRow[];
+  isAdmin?: boolean;
+}): string {
+  const adminLinkRow = opts.isAdmin
+    ? `<li><strong>Team admin</strong> — invite members, manage teams, issue keys: <a href="/ui/admin">/ui/admin</a></li>`
+    : "";
+  return (
+    `<h1>Settings</h1>` +
+    `<p class="muted">How Krimto works, where your data lives, what's configured, and recent agent activity.</p>` +
+    howItWorksPanel() +
+    behindTheScenesPanel(opts.dataDir) +
+    (opts.status ? statusPanel(opts.status) : "") +
+    activityPanel(opts.activity) +
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Other settings</h2>` +
+    `<ul>` +
+    `<li><strong>API keys</strong> — issue or revoke your own keys: <a href="/ui/keys">/ui/keys</a></li>` +
+    `<li><strong>Connect a new editor</strong> — copy-paste config + standing rule: <a href="/ui/connect">/ui/connect</a></li>` +
+    adminLinkRow +
+    `</ul></section>`
+  );
+}
+
 /** Team-first explainer for the dashboard landing. The wedge (personal→team→org) is the headline. */
 export function howItWorksPanel(): string {
   return (

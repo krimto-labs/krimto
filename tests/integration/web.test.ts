@@ -382,6 +382,48 @@ describe("/ui web surface", () => {
     expect(res.status).toBe(404); // existence not leaked, Edit form irrelevant
   });
 
+  // v0.2.17-5: /ui/settings consolidation
+  it("GET /ui/settings renders the engineering panels in one place", async () => {
+    const cookie = await loginAndGetCookie();
+    const res = await fetch(`${base()}/ui/settings`, { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Settings");
+    // How-it-works panel moved here
+    expect(body).toContain("Shared memory for your team");
+    // Behind-the-scenes moved here
+    expect(body).toContain("Behind the scenes");
+    expect(body).toContain("Markdown files");
+    // Recent activity moved here
+    expect(body).toContain("Recent activity");
+    // Pointers to keys + admin
+    expect(body).toContain('href="/ui/keys"');
+    expect(body).toContain('href="/ui/connect"');
+    // Admin link is gated by deps.admin (AdminContext), which this fixture doesn't set.
+    // The admin-side rendering is covered in tests/integration/admin.test.ts.
+  });
+
+  it("GET /ui/facts no longer renders the heavy engineering panels (moved to /ui/settings)", async () => {
+    const cookie = await loginAndGetCookie();
+    const res = await fetch(`${base()}/ui/facts`, { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // The "How Krimto works" and "Behind the scenes" explainers moved out.
+    expect(body).not.toContain("Shared memory for your team");
+    expect(body).not.toContain("Behind the scenes");
+    // The notes themselves are still here.
+    expect(body).toContain("Zephyr deploy process");
+    // And the Settings link is in the nav.
+    expect(body).toContain('href="/ui/settings"');
+  });
+
+  it("nav includes the Settings link for authenticated users", async () => {
+    const cookie = await loginAndGetCookie();
+    const res = await fetch(`${base()}/ui/keys`, { headers: { cookie } });
+    const body = await res.text();
+    expect(body).toContain('<a href="/ui/settings">Settings</a>');
+  });
+
   // 7. XSS escaping: title with <script>alert(1)</script> is escaped in search results
   it("XSS: fact titles are HTML-escaped and raw script tags never appear in output", async () => {
     const cookie = await loginAndGetCookie();
