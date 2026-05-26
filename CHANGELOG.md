@@ -4,6 +4,31 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] — 2026-05-26
+
+### Added
+- **Eight new CLI subcommands**, all discoverable via `npx @krimto-labs/krimto --help`:
+  - `serve` — boot the HTTP server (`/ui`, `/ui/connect`) without cloning the repo or installing Docker.
+  - `connect` — print copy-paste Claude Code + Cursor stdio snippets straight to the terminal.
+  - `uninit` — clean inverse of `init`: strips the marker-delimited rule block, deletes files that held only the rule.
+  - `usage` — long-form guide of the five `krimto_*` tools with copy-paste chat examples for DEFAULT and AUTO modes.
+  - `storage` — plain-English explainer of the markdown/git/index storage model, with verify commands and the only two optional env vars to set.
+  - `setup-remote <url>` — wire the data dir to a git remote and verify the initial push, with "Common causes" hints on failure.
+  - `setup-embeddings` — send a real test embedding to verify a `KRIMTO_EMBED_*` config before turning it on.
+  - `verify-connection` — diagnose "is my agent calling Krimto?" by reading the lockfile + activity log (works from any terminal, regardless of how Krimto was launched).
+- **`--help` (and `-h` / `help`)** — full CLI surface listed, leading with "TWO WAYS TO USE KRIMTO" (DEFAULT vs AUTO).
+- **Three new `/ui/facts` panels** — "Behind the scenes — your data, your files" (markdown/git/index explainer), "Status" (green/gold/red dots for git remote + embeddings), and "Recent activity" (last 5 MCP tool calls with relative timestamps). The fact detail page now shows the absolute source-file path.
+- **Data-dir lockfile** — `.krimto/lock.json` records the running Krimto's PID/mode; a second `serve`/stdio launch on the same data dir is refused with a precise error (stop the holder, or `KRIMTO_DATA=<other path>`). Stale locks (dead PID) are auto-replaced; release is automatic on graceful shutdown.
+- **Activity log** — every MCP tool call is appended to `.krimto/activity.jsonl` (capped at 200 lines). Powers the `/ui` panel and the `verify-connection` CLI; writes are best-effort and never break a tool call.
+- **Auto-detected `init` targets** — `krimto init` now detects the editor (`.cursor/`, `.claude/`, existing `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`, `gemini-extension.json`) and writes only matching rules files instead of all four. `--all` keeps the legacy behavior. No more four random files appearing in a Cursor-only project.
+- **`krimto_write` / `krimto_supersede` response fields** — added `absolute_path` and `hint` so the agent can teach the user "this is just a markdown file you can open in any editor." The first save in any process gets an expanded `hint` naming the data dir, git auto-commit cadence, and `krimto --help` pointer.
+
+### Fixed
+- **Identity-mismatch warning** — when `KRIMTO_IDENTITY` is unset and the server falls back to the placeholder `user@localhost`, both startup banners now print a ⚠️ block warning that other Krimto processes with a different identity will see different scopes (the silent "/ui is empty even though I saved facts" trap).
+- **stdio-vs-HTTP guidance** — the local-mode banner and `/ui/connect` page tell a user who's already connected via stdio not to double-configure with HTTP; the HTTP server is just for the browser dashboard.
+- **Self-explanatory `connect` + `init` output** — `connect` now states what `connect` alone gives (tools-on-demand) vs. what `init` adds (automatic recall+save), and explicitly marks `init` as optional. `init` explains what changed in each file and how to remove the rule (delete the marker-delimited block, or use `uninit`).
+- **30-second batch-commit lag surfaced** — `krimto storage`'s "HOW TO CHECK IT'S WORKING" section warns explicitly that commits are batched every 30s, so a just-saved fact may not appear in `git log` for ~30s (the `.md` file itself is written immediately).
+
 ## [0.2.7] — 2026-05-25
 
 ### Added
