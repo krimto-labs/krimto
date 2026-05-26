@@ -9,32 +9,56 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2.16** surface. Here today: the markdown-in-git storage layer, the
-> `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, the MCP
-> server over **stdio + HTTP** (Bearer API-key auth on HTTP), a **published multi-arch Docker image**
-> (`ghcr.io/krimto-labs/krimto`), a **web UI** with browse/search/admin/diagnostics, and a complete
-> **CLI** (`serve`, `connect`, `init`, `usage`, `storage`, `setup-remote`, `setup-embeddings`,
-> `verify-connection`, `uninit`, `where`, `--help`). We claim the team-memory position now and fulfil
-> it in the open — see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) for what each release adds.
+> **Where we are:** this is the **v0.2.17** surface. The whole v0.2.16 feature set (markdown-in-git
+> storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git
+> sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI) is still here — plus
+> the new **one-command interactive setup wizard** that absorbs `connect`, `init`, `setup-remote`,
+> and `setup-embeddings` into a single flow with preselected defaults and inline explanations. See
+> [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and
+> [docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for what each
+> release adds.
 
-## Try it in 2 minutes (solo, no account)
+## Try it in 90 seconds (solo, no account)
 
-1. **Run it** — one command, no clone, no Docker (data stays in `~/.krimto`):
-   ```bash
-   npx @krimto-labs/krimto serve
-   ```
-   *Prefer Docker?* `docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest`
-2. **Point Claude Code at it — one line, no key:**
-   ```json
-   { "mcpServers": { "krimto": { "url": "http://localhost:8080/mcp" } } }
-   ```
-   (or run `claude mcp add --transport http krimto http://localhost:8080/mcp`)
-3. Tell your agent: **"remember that our staging DB resets every Sunday."** Then ask in a *new* chat:
-   **"what do you know about staging?"** — it remembers.
-4. Open **http://localhost:8080** to browse. The dashboard shows your facts, a *Status* row (git
-   remote + embeddings health), and a *Recent activity* feed (so you can see your agent calling
-   Krimto in real time). That's the *personal* layer — Krimto's point is the **team** layer:
-   restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com` to turn on accounts and invite teammates.
+```bash
+npx @krimto-labs/krimto init
+```
+
+That's it. The wizard scans your machine, then walks you through 5 questions — each one has a
+preselected default and a plain-English explanation. Hit Enter five times if our defaults look
+right and your AI has a memory.
+
+What you'll be asked:
+
+| Question | Default | What it means |
+|---|---|---|
+| Which editors? | (detected ones) | Cursor / Claude Code / Codex / Gemini CLI — toggle which ones get Krimto wired in. |
+| How should Krimto run? | As needed | Editor launches it on demand. Pick "Always running" to install a launchd/systemd service. |
+| Who's this for? | Just me | Solo mode (no auth). You can flip to team mode any time — facts you save now will stay. |
+| Smarter search? | Keyword (free) | Pick OpenAI to enable semantic search. Same key you'd use for GPT. |
+| Apply? | Yes | Wizard writes the editor's MCP config + the standing rule, then prints what changed. |
+
+After the wizard finishes:
+
+```bash
+"Remember that our staging DB resets every Sunday."   # in any chat
+# new chat:
+"What do you know about staging?"                     # → it remembers
+```
+
+Look at what was saved with **`krimto notes`** or **`krimto ui`** (opens `http://localhost:8080`).
+Diagnose with **`krimto status`** — one screen tells you what's wired, what's configured, and
+what your agent has been calling.
+
+**Want a server with the browser dashboard?**
+`npx @krimto-labs/krimto serve` (defaults to port 8080), or Docker:
+`docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest`.
+
+**Want to bring teammates in?** `krimto team init` (Phase C of v0.2.17, ships in v0.2.17.2),
+or stick with the v0.2.16 path: restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com`.
+
+**Power-user / CI:** `npx @krimto-labs/krimto init --yes` skips all prompts and applies
+defaults non-interactively. `--all` and `--minimal` keep their v0.2.16 meaning.
 
 ## Connect your agent
 

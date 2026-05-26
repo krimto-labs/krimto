@@ -9,7 +9,16 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { detectEditorTargets, runInit, INIT_TARGETS } from "../../src/cli/init";
+import {
+  applyWizardAnswers,
+  defaultIdentity,
+  detectEditorEnvironments,
+  detectEditorTargets,
+  detectExistingSetup,
+  runInit,
+  INIT_TARGETS,
+  type WizardAnswers,
+} from "../../src/cli/init";
 
 const exec = promisify(execFile);
 const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../bin/krimto.mjs");
@@ -83,6 +92,87 @@ describe("detectEditorTargets (G4)", () => {
   });
 });
 
+describe("detectEditorEnvironments (v0.2.17 — adds MCP-wire info to detection)", () => {
+  it("returns all four editors in a clean dir, all present=false", async () => {
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    expect(envs.map((e) => e.editor).sort()).toEqual([
+      "claude-code",
+      "codex",
+      "cursor",
+      "gemini-cli",
+    ]);
+    expect(envs.every((e) => e.present === false)).toBe(true);
+  });
+
+  it("marks Cursor present when .cursor/ exists, with a json mcpWire pointing at ~/.cursor/mcp.json", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    const cursor = envs.find((e) => e.editor === "cursor")!;
+    expect(cursor.present).toBe(true);
+    expect(cursor.rulesPath).toBe(path.join(".cursor", "rules", "krimto.mdc"));
+    expect(cursor.mcpWire).toEqual({
+      method: "json",
+      path: path.join("/home/test", ".cursor", "mcp.json"),
+      key: "mcpServers",
+    });
+  });
+
+  it("marks Claude Code present via CLAUDE.md, with a cli mcpWire (`claude mcp add krimto`)", async () => {
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "");
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    const cc = envs.find((e) => e.editor === "claude-code")!;
+    expect(cc.present).toBe(true);
+    expect(cc.rulesPath).toBe("CLAUDE.md");
+    expect(cc.mcpWire).toEqual({
+      method: "cli",
+      command: "claude",
+      baseArgs: ["mcp", "add", "krimto"],
+    });
+  });
+
+  it("marks Claude Code present via .specstory/ alone (the smoke-5 signal)", async () => {
+    await fs.mkdir(path.join(dir, ".specstory"));
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    expect(envs.find((e) => e.editor === "claude-code")!.present).toBe(true);
+  });
+
+  it("marks Gemini CLI present via gemini-extension.json (mcpWire null — TOML/manual for now)", async () => {
+    await fs.writeFile(path.join(dir, "gemini-extension.json"), "{}");
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    const gemini = envs.find((e) => e.editor === "gemini-cli")!;
+    expect(gemini.present).toBe(true);
+    expect(gemini.rulesPath).toBe("GEMINI.md");
+    expect(gemini.mcpWire).toBeNull();
+  });
+
+  it("marks Codex present via AGENTS.md (mcpWire null — TOML deferred)", async () => {
+    await fs.writeFile(path.join(dir, "AGENTS.md"), "");
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    const codex = envs.find((e) => e.editor === "codex")!;
+    expect(codex.present).toBe(true);
+    expect(codex.rulesPath).toBe("AGENTS.md");
+    expect(codex.mcpWire).toBeNull();
+  });
+
+  it("defaults homeDir to os.homedir() when omitted", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const envs = await detectEditorEnvironments(dir);
+    const cursor = envs.find((e) => e.editor === "cursor")!;
+    expect(cursor.mcpWire).toMatchObject({
+      method: "json",
+      path: path.join(os.homedir(), ".cursor", "mcp.json"),
+    });
+  });
+
+  it("multiple signals → multiple present=true entries", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "");
+    const envs = await detectEditorEnvironments(dir, "/home/test");
+    const presentEditors = envs.filter((e) => e.present).map((e) => e.editor).sort();
+    expect(presentEditors).toEqual(["claude-code", "cursor"]);
+  });
+});
+
 describe("runInit auto-detection (G4 + v0.2.16 safer default)", () => {
   it("DEFAULT writes all 4 files even when only `.cursor/` is present — safer than guessing", async () => {
     // This is the smoke-5 failure mode: user has `.cursor/` but is actually using Claude Code.
@@ -122,6 +212,179 @@ describe("runInit auto-detection (G4 + v0.2.16 safer default)", () => {
     expect(res.detected).toBe(true);
     expect(res.written).toContain("CLAUDE.md"); // ← .specstory/ → Claude Code signal
     expect(res.written).toContain(path.join(".cursor", "rules", "krimto.mdc"));
+  });
+});
+
+describe("applyWizardAnswers — pure apply step (v0.2.17 wizard)", () => {
+  let home: string;
+  beforeEach(async () => {
+    home = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-apply-home-"));
+  });
+  afterEach(async () => {
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
+  const baseAnswers = (over: Partial<WizardAnswers> = {}): WizardAnswers => ({
+    selectedEditors: ["cursor"],
+    runMode: "as-needed",
+    whoFor: "just-me",
+    search: { provider: "keyword" },
+    identity: "alice@acme.com",
+    ...over,
+  });
+
+  it("writes Cursor's MCP config + standing rule when 'cursor' is selected (as-needed mode)", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const res = await applyWizardAnswers(dir, baseAnswers(), { homeDir: home });
+
+    const cursorOutcome = res.editorOutcomes.find((o) => o.editor === "cursor")!;
+    expect(cursorOutcome.mcpAction).toBe("created");
+    expect(cursorOutcome.ruleWritten).toBe(true);
+    expect(cursorOutcome.rulePath).toBe(path.join(".cursor", "rules", "krimto.mdc"));
+
+    const cursorMcp = JSON.parse(
+      await fs.readFile(path.join(home, ".cursor", "mcp.json"), "utf8"),
+    ) as { mcpServers: { krimto: { command: string; env: Record<string, string> } } };
+    expect(cursorMcp.mcpServers.krimto.command).toBe("npx");
+    expect(cursorMcp.mcpServers.krimto.env.KRIMTO_IDENTITY).toBe("alice@acme.com");
+
+    const rule = await fs.readFile(path.join(dir, ".cursor", "rules", "krimto.mdc"), "utf8");
+    expect(rule).toContain("<!-- krimto:start -->");
+    expect(rule).toContain("krimto_recall");
+  });
+
+  it("bakes KRIMTO_EMBED_PROVIDER + key into the MCP env when search is OpenAI", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await applyWizardAnswers(
+      dir,
+      baseAnswers({ search: { provider: "openai", apiKey: "sk-test-123" } }),
+      { homeDir: home },
+    );
+    const cursorMcp = JSON.parse(
+      await fs.readFile(path.join(home, ".cursor", "mcp.json"), "utf8"),
+    ) as { mcpServers: { krimto: { env: Record<string, string> } } };
+    expect(cursorMcp.mcpServers.krimto.env.KRIMTO_EMBED_PROVIDER).toBe("openai");
+    expect(cursorMcp.mcpServers.krimto.env.KRIMTO_EMBED_API_KEY).toBe("sk-test-123");
+  });
+
+  it("writes an HTTP MCP entry (no env) when run mode is 'always-running'", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const res = await applyWizardAnswers(
+      dir,
+      baseAnswers({ runMode: "always-running" }),
+      {
+        homeDir: home,
+        dryRun: true,
+        binPath: "/usr/bin/node",
+        serviceArgs: ["/krimto/bin/krimto.mjs", "serve"],
+      },
+    );
+    const cursorMcp = JSON.parse(
+      await fs.readFile(path.join(home, ".cursor", "mcp.json"), "utf8"),
+    ) as { mcpServers: { krimto: { url: string } } };
+    expect(cursorMcp.mcpServers.krimto.url).toBe("http://localhost:8080/mcp");
+    expect(res.serviceInstall).toBeDefined();
+    expect(res.serviceInstall?.activated).toBe(false); // dryRun
+    expect(res.serviceInstall?.platform).toBeDefined();
+  });
+
+  it("reports 'manual' for Gemini CLI (mcpWire null) and still writes the rule file", async () => {
+    await fs.writeFile(path.join(dir, "gemini-extension.json"), "{}");
+    const res = await applyWizardAnswers(
+      dir,
+      baseAnswers({ selectedEditors: ["gemini-cli"] }),
+      { homeDir: home },
+    );
+    const gemini = res.editorOutcomes.find((o) => o.editor === "gemini-cli")!;
+    expect(gemini.mcpAction).toBe("manual");
+    expect(gemini.manualSnippet).toContain("krimto");
+    expect(gemini.ruleWritten).toBe(true);
+    expect(await fs.readFile(path.join(dir, "GEMINI.md"), "utf8")).toContain("krimto_recall");
+  });
+
+  it("idempotent: re-applying identical answers reports no-change / ruleWritten=false", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await applyWizardAnswers(dir, baseAnswers(), { homeDir: home });
+    const res = await applyWizardAnswers(dir, baseAnswers(), { homeDir: home });
+    const cursorOutcome = res.editorOutcomes.find((o) => o.editor === "cursor")!;
+    expect(cursorOutcome.mcpAction).toBe("no-change");
+    expect(cursorOutcome.ruleWritten).toBe(false);
+  });
+
+  it("only writes for selected editors, even if multiple are present", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "");
+    const res = await applyWizardAnswers(
+      dir,
+      baseAnswers({ selectedEditors: ["cursor"] }), // not claude-code
+      { homeDir: home, dryRun: true },
+    );
+    expect(res.editorOutcomes.map((o) => o.editor)).toEqual(["cursor"]);
+  });
+});
+
+describe("detectExistingSetup", () => {
+  let home: string;
+  beforeEach(async () => {
+    home = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-existing-home-"));
+  });
+  afterEach(async () => {
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
+  it("reports configured=false on a clean machine", async () => {
+    const snap = await detectExistingSetup(dir, home);
+    expect(snap.configured).toBe(false);
+    expect(snap.registeredEditors).toEqual([]);
+    expect(snap.runMode).toBe("as-needed");
+    expect(snap.searchProvider).toBe("keyword");
+  });
+
+  it("reports configured=true with cursor registered after a wizard apply", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await applyWizardAnswers(
+      dir,
+      {
+        selectedEditors: ["cursor"],
+        runMode: "as-needed",
+        whoFor: "just-me",
+        search: { provider: "keyword" },
+        identity: "alice@acme.com",
+      },
+      { homeDir: home },
+    );
+    const snap = await detectExistingSetup(dir, home);
+    expect(snap.configured).toBe(true);
+    expect(snap.registeredEditors).toEqual(["cursor"]);
+    expect(snap.runMode).toBe("as-needed");
+    expect(snap.searchProvider).toBe("keyword");
+  });
+
+  it("reports searchProvider='openai' when the MCP env carries the KRIMTO_EMBED_PROVIDER flag", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await applyWizardAnswers(
+      dir,
+      {
+        selectedEditors: ["cursor"],
+        runMode: "as-needed",
+        whoFor: "just-me",
+        search: { provider: "openai", apiKey: "sk-test" },
+        identity: "alice@acme.com",
+      },
+      { homeDir: home },
+    );
+    const snap = await detectExistingSetup(dir, home);
+    expect(snap.searchProvider).toBe("openai");
+  });
+});
+
+describe("defaultIdentity", () => {
+  it("returns either a real email-shaped string or the safe fallback", async () => {
+    const id = await defaultIdentity();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(0);
+    // Either the safe default OR a real email-shaped string.
+    expect(/^[^@\s]+@[^@\s]+$/.test(id)).toBe(true);
   });
 });
 

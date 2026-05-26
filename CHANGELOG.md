@@ -4,6 +4,72 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17] — 2026-05-26
+
+### Added
+
+The wizard-driven onboarding redesign (Phase A of the v0.2.17 plan — see
+[`docs/krimto-v0.2.17-maria-journey.html`](docs/krimto-v0.2.17-maria-journey.html) for the full
+journey, [`/Users/paulbuiko/.claude/plans/crispy-inventing-catmull.md`](#) for the implementation
+plan). Six commands collapse into one interactive wizard with preselected defaults and inline
+plain-English explanations.
+
+- **`krimto init` is now an interactive 5-question wizard** (TTY-only; non-TTY callers and the
+  legacy `--all` / `--minimal` flags get the v0.2.16 rule-only path unchanged). The wizard asks:
+  (1) which editors to connect, (2) how Krimto should run (as-needed / always-running / manual),
+  (3) just-me or team, (4) keyword vs semantic search, (5) a final summary + confirm. Each
+  question carries a preselected default and a one-line "you can change this later" note.
+  Powered by `@inquirer/prompts@^7` (MIT). Source: `src/cli/wizard.ts`.
+- **`krimto init --yes`** — non-interactive applies all defaults. CI/scripts use this.
+- **Self-aware rerun.** Running `krimto init` on an already-configured machine shows a menu:
+  refresh the standing rule, change settings (re-runs wizard with current values pre-filled),
+  view status, or quit. Source: `detectExistingSetup` in `src/cli/init.ts`.
+- **`detectEditorEnvironments(cwd, homeDir)`** in `src/cli/init.ts` — extends the v0.2.16
+  `detectEditorTargets` with MCP-config paths + wire method (`json` for Cursor, `cli` for
+  Claude Code, `null` for Gemini CLI and Codex where wiring is deferred to a follow-up).
+- **`src/cli/mcpConfig.ts`** — idempotent MCP-config writer. Reads/writes/removes the `krimto`
+  entry from each editor's MCP config file. Preserves other servers. JSON method (Cursor):
+  direct merge; CLI method (Claude Code): shells out to `claude mcp add krimto -- ...`;
+  manual method (Gemini/Codex): prints a copy-paste snippet. Includes `dryRun` mode for tests.
+- **`src/cli/service.ts`** — three-platform service installer for "Always running" mode:
+  macOS launchd (`~/Library/LaunchAgents/com.krimto.server.plist`), Linux systemd-user
+  (`~/.config/systemd/user/krimto.service`), Windows Task Scheduler (`schtasks /SC ONLOGON`).
+  Every install/uninstall path has `dryRun` + `platform` overrides so all three are tested on
+  a single CI runner.
+- **`krimto status`** — new consolidated diagnostic that replaces the four separate v0.2.16
+  commands (`verify-connection`, `where`, `storage`, `usage`) with one screen. Reports:
+  connections (which editors are wired), storage (data dir + git log + index), optional
+  add-ons (team sync, semantic search), recent activity (last 5 min), and the hijack warning.
+  Source: `src/cli/status.ts`. The four legacy verbs still work unchanged.
+- **Structured MCP entry builders.** `src/server/connect.ts` now also exports
+  `stdioMcpEntry` / `httpMcpEntry` (returning the entry object) alongside the existing
+  snippet-formatting functions, so the wizard's writer + the legacy snippet printers share
+  one source of truth for what a Krimto MCP entry looks like.
+
+### Backward compatibility
+
+Every v0.2.16 CLI verb still works. `krimto init --all` and `krimto init --minimal` behave
+exactly as before. Non-TTY callers (`exec` / pipes / Dockerfile RUN) also fall through to
+the legacy rule-only path — no existing scripts break.
+
+### Tests
+
+Coverage added for every new file:
+
+- `tests/integration/init.test.ts` — extended with `detectEditorEnvironments`,
+  `applyWizardAnswers`, `detectExistingSetup`, `defaultIdentity` tests.
+- `tests/integration/init-wizard.test.ts` — new: walks the 5 questions with mocked
+  `@inquirer/prompts`, plus the `--yes` non-interactive path and the reconfigure menu.
+- `tests/integration/mcp-config.test.ts` — new: round-trips for the JSON method (Cursor),
+  the CLI method (Claude Code, dry-run), the manual method (Gemini/Codex). Multi-server
+  preservation verified.
+- `tests/integration/service.test.ts` — new: dry-run install + uninstall on all three
+  platforms via `opts.platform` override.
+- `tests/integration/status.test.ts` — new: ok / warning / error paths, hijack detection,
+  activity rendering.
+
+Total suite: **463 passing**.
+
 ## [0.2.16] — 2026-05-26
 
 ### Fixed

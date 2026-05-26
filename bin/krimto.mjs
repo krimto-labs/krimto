@@ -15,47 +15,71 @@ try {
     const { KRIMTO_VERSION } = await tsImport("../src/server/index.ts", import.meta.url);
     process.stdout.write(formatHelp(KRIMTO_VERSION));
   } else if (cmd === "init") {
-    // `krimto init` — drop the always-use-Krimto rule into this project's agent rules files.
-    // v0.2.16+: default writes to all four supported rule files (safer — silent detection
-    // failures were trapping Claude Code users). Pass `--minimal` to write only files matching
-    // editor signals in this project. `--all` is the legacy flag (still works, same as default).
+    // `krimto init` — v0.2.17 dispatch:
+    //   • `--all` / `--minimal`  → legacy rule-only writer (v0.2.16 behaviour, kept for back-compat)
+    //   • `--yes`                → non-interactive wizard apply (CI / scripts)
+    //   • interactive TTY        → v0.2.17 wizard (5 questions, preselected defaults)
+    //   • non-TTY w/o flags      → legacy rule-only writer (existing pipelines keep working)
     const flags = process.argv.slice(3);
     const all = flags.includes("--all");
     const minimal = flags.includes("--minimal");
-    const { runInit } = await tsImport("../src/cli/init.ts", import.meta.url);
-    const res = await runInit(process.cwd(), { all, minimal });
-    if (res.written.length === 0) {
-      const detected = res.detected ? res.considered.join(", ") : "(no editor signals)";
+    const yes = flags.includes("--yes");
+    const isTty = process.stdin.isTTY === true;
+    const legacyMode = all || minimal || (!isTty && !yes);
+
+    if (legacyMode) {
+      const { runInit } = await tsImport("../src/cli/init.ts", import.meta.url);
+      const res = await runInit(process.cwd(), { all, minimal });
+      if (res.written.length === 0) {
+        const detected = res.detected ? res.considered.join(", ") : "(no editor signals)";
+        process.stderr.write(
+          "\n✅ Already in AUTO MODE — no changes needed\n" +
+            "\n" +
+            `   Rule detected in: ${detected}\n` +
+            "\n" +
+            "To undo:  $ npx @krimto-labs/krimto uninit\n" +
+            "Other:    --all writes to every supported rule file\n\n",
+        );
+      } else {
+        const detectedLine = res.detected
+          ? `   --minimal — wrote only files matching detected editor signals.\n   (Default: write all 4 supported files. Use 'uninit' to clean up unwanted ones.)\n\n`
+          : !minimal
+            ? `   Default: wrote all 4 supported rule files (safer than detecting one editor and\n   missing the actual one). Pass --minimal to write only matched editors next time.\n\n`
+            : "";
+        process.stderr.write(
+          "\n✅ AUTO MODE on — rule written to " + res.written.length + " file" +
+            (res.written.length === 1 ? "" : "s") + "\n" +
+            "\n" +
+            res.written.map((f) => `   ${f}`).join("\n") + "\n" +
+            "\n" +
+            detectedLine +
+            "━━ Next steps ━━\n" +
+            "\n" +
+            "  1. Restart your editor (so it loads the new rule)\n" +
+            "  2. Test in chat: \"Remember that we use pnpm in this repo\"\n" +
+            "  3. Verify it landed: $ npx @krimto-labs/krimto verify-connection\n" +
+            "\n" +
+            "To undo:  $ npx @krimto-labs/krimto uninit\n" +
+            "Manual:   delete the block between <!-- krimto:start --> and <!-- krimto:end -->\n\n",
+        );
+      }
+    } else if (yes) {
+      // `--yes` runs the wizard with all defaults — for CI / `pnpm dev` scripts.
+      const { runInitNonInteractive } = await tsImport("../src/cli/wizard.ts", import.meta.url);
+      const result = await runInitNonInteractive(process.cwd());
+      const wired = result.editorOutcomes.map((o) => o.editor).join(", ") || "(none)";
       process.stderr.write(
-        "\n✅ Already in AUTO MODE — no changes needed\n" +
-          "\n" +
-          `   Rule detected in: ${detected}\n` +
-          "\n" +
-          "To undo:  $ npx @krimto-labs/krimto uninit\n" +
-          "Other:    --all writes to every supported rule file\n\n",
+        `\n✅ Krimto set up (non-interactive). Editors: ${wired}\n` +
+          `   Run mode: ${result.serviceInstall ? "always-running" : "as-needed"}\n` +
+          `   Search:   ${result.embeddingsConfigured ? "OpenAI" : "keyword"}\n` +
+          `   Data:     ${result.dataDir}\n\n` +
+          "Restart your editor so it loads the new rule.\n\n",
       );
     } else {
-      const detectedLine = res.detected
-        ? `   --minimal — wrote only files matching detected editor signals.\n   (Default: write all 4 supported files. Use 'uninit' to clean up unwanted ones.)\n\n`
-        : !minimal
-          ? `   Default: wrote all 4 supported rule files (safer than detecting one editor and\n   missing the actual one). Pass --minimal to write only matched editors next time.\n\n`
-          : "";
-      process.stderr.write(
-        "\n✅ AUTO MODE on — rule written to " + res.written.length + " file" +
-          (res.written.length === 1 ? "" : "s") + "\n" +
-          "\n" +
-          res.written.map((f) => `   ${f}`).join("\n") + "\n" +
-          "\n" +
-          detectedLine +
-          "━━ Next steps ━━\n" +
-          "\n" +
-          "  1. Restart your editor (so it loads the new rule)\n" +
-          "  2. Test in chat: \"Remember that we use pnpm in this repo\"\n" +
-          "  3. Verify it landed: $ npx @krimto-labs/krimto verify-connection\n" +
-          "\n" +
-          "To undo:  $ npx @krimto-labs/krimto uninit\n" +
-          "Manual:   delete the block between <!-- krimto:start --> and <!-- krimto:end -->\n\n",
-      );
+      // Interactive wizard (the v0.2.17 first-run path).
+      const { runInitWizard } = await tsImport("../src/cli/wizard.ts", import.meta.url);
+      await runInitWizard(process.cwd());
+      // The wizard prints its own summary; nothing more to do here.
     }
   } else if (cmd === "uninit") {
     // `krimto uninit` — remove the always-use-Krimto rule from this project's rules files,
@@ -99,6 +123,15 @@ try {
     const result = await runSetupRemote(resolveDataDir(), url);
     process.stdout.write(result.message + "\n");
     if (result.status !== "ok") process.exitCode = 1;
+  } else if (cmd === "status") {
+    // `krimto status` — v0.2.17 consolidator: replaces the four separate diagnostics from v0.2.16
+    // (`verify-connection`, `where`, `storage`, `usage`) with one screen. The legacy verbs still
+    // work and print the same content they always did, with a deprecation pointer at the bottom.
+    const { runStatus } = await tsImport("../src/cli/status.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runStatus(resolveDataDir());
+    process.stdout.write(result.message);
+    if (result.status === "error") process.exitCode = 1;
   } else if (cmd === "verify-connection") {
     // `krimto verify-connection` — read the lockfile + activity JSONL to answer "is my agent
     // actually calling Krimto right now?" Works from any terminal regardless of how Krimto launched.

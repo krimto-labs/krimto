@@ -5,15 +5,52 @@ export interface ConnectOpts {
   key?: string;
 }
 
+/** Structured Krimto entry for an MCP client config file (stdio variant — `npx`-launched). */
+export interface StdioMcpEntry {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+/** Structured Krimto entry for an MCP client config file (HTTP variant — talks to a running server). */
+export interface HttpMcpEntry {
+  url: string;
+  headers?: Record<string, string>;
+}
+
+/** Discriminated union covering both transports. Consumers narrow on the presence of `url`. */
+export type KrimtoMcpEntry =
+  | ({ transport: "stdio" } & StdioMcpEntry)
+  | ({ transport: "http" } & HttpMcpEntry);
+
+/**
+ * Build the structured stdio entry. Single source of truth for what a Krimto MCP server entry
+ * looks like — both `stdioConnectSnippets` (which renders it as a snippet) and the wizard's
+ * `writeMcpConfig` (which writes it into an editor's config file) consume this.
+ */
+export function stdioMcpEntry(opts: { identity?: string } = {}): StdioMcpEntry {
+  const identity = opts.identity ?? "you@acme.com";
+  return {
+    command: "npx",
+    args: ["-y", "@krimto-labs/krimto"],
+    env: { KRIMTO_IDENTITY: identity },
+  };
+}
+
+/** Build the structured HTTP entry. Mirrors {@link stdioMcpEntry} for HTTP-transport setups. */
+export function httpMcpEntry(opts: ConnectOpts): HttpMcpEntry {
+  const entry: HttpMcpEntry = { url: `http://${opts.host}/mcp` };
+  if (opts.key) entry.headers = { Authorization: `Bearer ${opts.key}` };
+  return entry;
+}
+
 export function connectSnippets(opts: ConnectOpts): { url: string; claude: string; cursorJson: string } {
-  const url = `http://${opts.host}/mcp`;
+  const entry = httpMcpEntry(opts);
   const claude =
-    `claude mcp add --transport http krimto ${url}` +
+    `claude mcp add --transport http krimto ${entry.url}` +
     (opts.key ? ` --header "Authorization: Bearer ${opts.key}"` : "");
-  const server: Record<string, unknown> = { url };
-  if (opts.key) server.headers = { Authorization: `Bearer ${opts.key}` };
-  const cursorJson = JSON.stringify({ mcpServers: { krimto: server } }, null, 2);
-  return { url, claude, cursorJson };
+  const cursorJson = JSON.stringify({ mcpServers: { krimto: entry } }, null, 2);
+  return { url: entry.url, claude, cursorJson };
 }
 
 /**
@@ -24,21 +61,9 @@ export function stdioConnectSnippets(opts: { identity?: string } = {}): {
   claude: string;
   cursorJson: string;
 } {
-  const identity = opts.identity ?? "you@acme.com";
+  const entry = stdioMcpEntry(opts);
   const claude = "claude mcp add krimto -- npx -y @krimto-labs/krimto";
-  const cursorJson = JSON.stringify(
-    {
-      mcpServers: {
-        krimto: {
-          command: "npx",
-          args: ["-y", "@krimto-labs/krimto"],
-          env: { KRIMTO_IDENTITY: identity },
-        },
-      },
-    },
-    null,
-    2,
-  );
+  const cursorJson = JSON.stringify({ mcpServers: { krimto: entry } }, null, 2);
   return { claude, cursorJson };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@krimto-labs/krimto",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "Open-source team memory layer for AI agents — markdown files in git, user/team/org hierarchy, cross-vendor MCP server.",
   "license": "Apache-2.0",
   "type": "module",
@@ -41,6 +41,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",
