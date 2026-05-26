@@ -11,6 +11,7 @@ import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { rankCandidates } from "../retrieval/pipeline";
 import { type CommitBatcher } from "../storage/batcher";
+import { type ActivityLog } from "./activity";
 import { KrimtoError } from "./errors";
 
 export interface ToolContext {
@@ -26,6 +27,14 @@ export interface ToolContext {
   writeQueue: Serializer;
   /** Optional commit batcher; when present, writes are staged and committed in batches (Gap 08). */
   git?: CommitBatcher;
+  /** Persistent activity log for the /ui Recent Activity panel + `verify-connection` CLI (G5). */
+  activity?: ActivityLog;
+  /**
+   * G6 — mutable per-process flag. False initially; set to true after the first successful
+   * krimto_write, so the expanded "where things live" hint only fires once per process. Cursor
+   * swallows the startup banner; this is how Maria learns the discovery hints by other means.
+   */
+  firstSaveHintEmitted?: boolean;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -42,6 +51,10 @@ export interface WriteResult {
   id: string;
   scope: string;
   path: string;
+  /** Full path to the markdown file on disk. Lets the agent (and via it, the user) find the file. */
+  absolute_path: string;
+  /** Human-readable hint for the agent to relay back. Teaches "this is just a file you can open." */
+  hint: string;
   commit_sha: string | null;
 }
 
@@ -81,6 +94,10 @@ export interface SupersedeInput {
 export interface SupersedeResult {
   old_id: string;
   new_id: string;
+  /** Full path to the new markdown file on disk. */
+  absolute_path: string;
+  /** Human-readable hint for the agent to relay back. */
+  hint: string;
   commit_sha: string | null;
 }
 
@@ -169,7 +186,28 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
         );
       }
     }
-    return { id: fact.frontmatter.id, scope: fact.frontmatter.scope, path, commit_sha: null };
+    const absolutePath = `${ctx.store.dataDir()}/${path}`;
+    if (ctx.activity) await ctx.activity.record("krimto_write", ctx.requester.identity, `${scope}: ${input.title}`);
+    // G6 — first save in this process gets the expanded "where things live" hint, so a user
+    // launched-by-Cursor (who never sees the startup banner) still learns the basics.
+    const baseHint = `Saved to ${absolutePath} — this is a plain markdown file you can open in any editor.`;
+    let hint = baseHint;
+    if (!ctx.firstSaveHintEmitted) {
+      ctx.firstSaveHintEmitted = true;
+      hint =
+        `${baseHint}\n` +
+        `(First save in this session — quick orientation: your data lives at ${ctx.store.dataDir()}, ` +
+        `git auto-commits every 30s, run \`npx @krimto-labs/krimto --help\` for the full CLI surface, ` +
+        `or \`npx @krimto-labs/krimto storage\` for the storage model.)`;
+    }
+    return {
+      id: fact.frontmatter.id,
+      scope: fact.frontmatter.scope,
+      path,
+      absolute_path: absolutePath,
+      hint,
+      commit_sha: null,
+    };
   });
 }
 
@@ -188,6 +226,7 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
     now: clock(ctx),
     params: input.limit !== undefined ? { resultLimit: input.limit } : undefined,
   });
+  if (ctx.activity) await ctx.activity.record("krimto_recall", ctx.requester.identity, `"${input.query}" → ${ranked.length} hit(s)`);
   return {
     results: ranked.map((r) => ({
       id: r.id,
@@ -208,6 +247,7 @@ export async function krimtoRead(ctx: ToolContext, id: string): Promise<ReadResu
   if (!fact || !canRead(ctx.membership, ctx.requester.identity, fact.frontmatter.scope)) {
     throw new KrimtoError("not_found", `Fact ${id} not found`, { id });
   }
+  if (ctx.activity) await ctx.activity.record("krimto_read", ctx.requester.identity, `${fact.frontmatter.scope}: ${fact.frontmatter.title}`);
   return {
     id: fact.frontmatter.id,
     scope: fact.frontmatter.scope,
@@ -262,13 +302,22 @@ export async function krimtoSupersede(
         );
       }
     }
-    return { old_id: input.id, new_id: replacement.frontmatter.id, commit_sha: null };
+    const absolutePath = `${ctx.store.dataDir()}/${path}`;
+    if (ctx.activity) await ctx.activity.record("krimto_supersede", ctx.requester.identity, `${old.frontmatter.scope}: ${input.new_title} (was ${input.id})`);
+    return {
+      old_id: input.id,
+      new_id: replacement.frontmatter.id,
+      absolute_path: absolutePath,
+      hint: `Updated fact saved to ${absolutePath} — the old version is still in git history.`,
+      commit_sha: null,
+    };
   });
 }
 
 /** Discover the scopes that exist and what they contain. */
 export async function krimtoListScopes(ctx: ToolContext): Promise<ListScopesResult> {
   const scopes = ctx.index.listScopes(readableScopesFor(ctx));
+  if (ctx.activity) await ctx.activity.record("krimto_list_scopes", ctx.requester.identity, `${scopes.length} scope(s)`);
   return {
     scopes: scopes.map((s) => ({
       path: s.path,

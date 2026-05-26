@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, connectPanel, gettingStartedPanel, type FactView } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -18,6 +18,8 @@ export interface WebRouterDeps {
   admin?: AdminContext;
   /** When set (local mode), skip login and use this identity for every request. */
   localIdentity?: string;
+  /** Live status snapshot for the /ui/facts status panel. Called per request so it's never stale. */
+  status?: () => StatusPanelOpts;
 }
 
 type WithIdentity = Request & { identity: string };
@@ -96,8 +98,13 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           page(res, 200, "Memory", gettingStartedPanel(), identity); // empty store: teach, don't show a blank list
           return;
         }
+        // Pull recent activity (best-effort — empty list when no log file yet).
+        const recent = deps.ctx.activity ? await deps.ctx.activity.tail(5) : [];
         const body =
           howItWorksPanel() +
+          behindTheScenesPanel(deps.ctx.store.dataDir()) +
+          (deps.status ? statusPanel(deps.status()) : "") +
+          activityPanel(recent) +
           searchBox(q) +
           scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })));
         page(res, 200, "Memory", body, identity);
@@ -112,7 +119,11 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       const identity = idOf(req);
       try {
         const fact = await krimtoRead(ctxFor(req), req.params.id);
-        page(res, 200, "Fact", factDetail(toFactView(fact)), identity);
+        // Resolve the markdown file's absolute path so the user learns "this is just a file."
+        // Best-effort: a missing entry (concurrent delete, sync race) just hides the line.
+        const stored = await deps.ctx.store.readFact(req.params.id).catch(() => null);
+        const sourcePath = stored ? `${deps.ctx.store.dataDir()}/${stored.path}` : undefined;
+        page(res, 200, "Fact", factDetail(toFactView(fact, sourcePath)), identity);
       } catch (e) {
         if (e instanceof KrimtoError) {
           errorPage(res, 404, "Not found", identity);
@@ -218,7 +229,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
 // ReadResult shape: { id, scope, title, body, frontmatter: FactFrontmatter, history }
 // FactFrontmatter has: author, created, updated, tags?, source?
 // Top-level id, scope, title, body are promoted; the rest live under frontmatter.
-function toFactView(fact: unknown): FactView {
+function toFactView(fact: unknown, sourcePath?: string): FactView {
   const f = fact as Record<string, unknown>;
   const fm = (typeof f.frontmatter === "object" && f.frontmatter !== null ? f.frontmatter : {}) as Record<string, unknown>;
   const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -232,5 +243,6 @@ function toFactView(fact: unknown): FactView {
     source: str(fm.source),
     created: str(fm.created),
     tags,
+    sourcePath,
   };
 }

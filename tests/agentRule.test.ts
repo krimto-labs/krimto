@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AGENT_RULE, applyRule, ruleBlock } from "../src/agentRule";
+import { AGENT_RULE, applyRule, removeRule, ruleBlock } from "../src/agentRule";
 
 describe("agentRule", () => {
   it("the rule tells the agent to recall and write to Krimto", () => {
@@ -37,5 +37,29 @@ describe("agentRule", () => {
     expect(out).not.toContain("OLD RULE");
     expect(out).toContain("krimto_recall");
     expect((out.match(/<!-- krimto:start -->/g) ?? []).length).toBe(1);
+  });
+
+  it("removeRule: returns null when the file contains only our block (signal: delete file)", () => {
+    const onlyOurs = applyRule(null);
+    expect(removeRule(onlyOurs)).toBeNull();
+  });
+
+  it("removeRule: strips the block but preserves pre-existing content around it", () => {
+    const mixed = applyRule("# My project rules\n- use 2 spaces\n");
+    const cleaned = removeRule(mixed);
+    expect(cleaned).not.toBeNull();
+    expect(cleaned).toContain("# My project rules");
+    expect(cleaned).toContain("- use 2 spaces");
+    expect(cleaned).not.toContain("<!-- krimto:start -->");
+    expect(cleaned).not.toContain("krimto_recall");
+  });
+
+  it("removeRule: returns the input unchanged when no markers are present (no-op)", () => {
+    const unrelated = "# rules\n- pnpm only\n";
+    expect(removeRule(unrelated)).toBe(unrelated);
+  });
+
+  it("removeRule: null in, null out", () => {
+    expect(removeRule(null)).toBeNull();
   });
 });

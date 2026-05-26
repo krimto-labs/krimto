@@ -16,6 +16,32 @@ export function connectSnippets(opts: ConnectOpts): { url: string; claude: strin
   return { url, claude, cursorJson };
 }
 
+/**
+ * Stdio (solo, no HTTP) connect snippets — the npx on-ramp shape. Returned as one object so the
+ * `krimto connect` CLI and any future surface can't drift on what we tell users to paste.
+ */
+export function stdioConnectSnippets(opts: { identity?: string } = {}): {
+  claude: string;
+  cursorJson: string;
+} {
+  const identity = opts.identity ?? "you@acme.com";
+  const claude = "claude mcp add krimto -- npx -y @krimto-labs/krimto";
+  const cursorJson = JSON.stringify(
+    {
+      mcpServers: {
+        krimto: {
+          command: "npx",
+          args: ["-y", "@krimto-labs/krimto"],
+          env: { KRIMTO_IDENTITY: identity },
+        },
+      },
+    },
+    null,
+    2,
+  );
+  return { claude, cursorJson };
+}
+
 // One-click "Add to Cursor" deeplink. Cursor expects the BARE server-config object, base64-encoded
 // (verified against Cursor's MCP install-links docs); for our HTTP transport that's `{ url }`.
 export function cursorDeeplink(host: string): string {

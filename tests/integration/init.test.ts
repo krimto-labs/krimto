@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { runInit } from "../../src/cli/init";
+import { detectEditorTargets, runInit, INIT_TARGETS } from "../../src/cli/init";
 
 const exec = promisify(execFile);
 const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../bin/krimto.mjs");
@@ -47,9 +47,75 @@ describe("runInit", () => {
   });
 });
 
+describe("detectEditorTargets (G4)", () => {
+  it("returns the matching target when CLAUDE.md exists", async () => {
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "# existing\n");
+    expect(await detectEditorTargets(dir)).toEqual(["CLAUDE.md"]);
+  });
+
+  it("returns the cursor target when .cursor/ exists", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const targets = await detectEditorTargets(dir);
+    expect(targets).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
+  });
+
+  it("returns the Gemini target when gemini-extension.json exists", async () => {
+    await fs.writeFile(path.join(dir, "gemini-extension.json"), "{}");
+    expect(await detectEditorTargets(dir)).toEqual(["GEMINI.md"]);
+  });
+
+  it("returns multiple targets when multiple signals match", async () => {
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "# x");
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const targets = await detectEditorTargets(dir);
+    expect(targets).toContain("CLAUDE.md");
+    expect(targets).toContain(path.join(".cursor", "rules", "krimto.mdc"));
+    expect(targets).not.toContain("GEMINI.md");
+  });
+
+  it("returns an empty list when no signals present (caller falls back to all)", async () => {
+    expect(await detectEditorTargets(dir)).toEqual([]);
+  });
+});
+
+describe("runInit auto-detection (G4)", () => {
+  it("writes only the matching file when one editor signal is present", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const res = await runInit(dir);
+    expect(res.detected).toBe(true);
+    expect(res.written).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
+    expect(res.considered).toEqual([path.join(".cursor", "rules", "krimto.mdc")]);
+    // Other targets must NOT exist
+    await expect(fs.access(path.join(dir, "CLAUDE.md"))).rejects.toThrow();
+    await expect(fs.access(path.join(dir, "AGENTS.md"))).rejects.toThrow();
+    await expect(fs.access(path.join(dir, "GEMINI.md"))).rejects.toThrow();
+  });
+
+  it("writes everything when no signals are present (safe default)", async () => {
+    const res = await runInit(dir);
+    expect(res.detected).toBe(false);
+    expect(res.written.sort()).toEqual([...INIT_TARGETS].sort());
+  });
+
+  it("writes everything when --all is forced even if signals are present", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const res = await runInit(dir, { all: true });
+    expect(res.detected).toBe(false); // legacy mode, not detection
+    expect(res.written.sort()).toEqual([...INIT_TARGETS].sort());
+  });
+});
+
 describe("krimto init (bin dispatch)", () => {
   it("`node bin/krimto.mjs init` writes the rule in the current directory", async () => {
     await exec(process.execPath, [BIN, "init"], { cwd: dir });
     expect(await read("AGENTS.md")).toContain("krimto_recall");
+  }, 30000);
+
+  it("prints what changed AND how to remove the rule", async () => {
+    const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
+    expect(stderr).toContain("What changed");
+    expect(stderr).toContain("To remove the rule");
+    expect(stderr).toContain("<!-- krimto:start -->");
+    expect(stderr).toContain("<!-- krimto:end -->");
   }, 30000);
 });

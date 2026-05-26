@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { connectSnippets, cursorDeeplink, genericContract, MCP_TOOL_NAMES } from "../../src/server/connect";
+import {
+  connectSnippets,
+  cursorDeeplink,
+  genericContract,
+  stdioConnectSnippets,
+  MCP_TOOL_NAMES,
+} from "../../src/server/connect";
 
 describe("connectSnippets", () => {
   it("builds a no-key local config", () => {
@@ -14,6 +20,28 @@ describe("connectSnippets", () => {
     const s = connectSnippets({ host: "localhost:8080", key: "krm_live_abc" });
     expect(s.claude).toContain('--header "Authorization: Bearer krm_live_abc"');
     expect(s.cursorJson).toContain('"Authorization": "Bearer krm_live_abc"');
+  });
+});
+
+describe("stdioConnectSnippets", () => {
+  it("builds the npx-based Claude Code and Cursor snippets with a default identity", () => {
+    const s = stdioConnectSnippets();
+    expect(s.claude).toBe("claude mcp add krimto -- npx -y @krimto-labs/krimto");
+    const parsed = JSON.parse(s.cursorJson) as Record<string, unknown>;
+    expect(parsed).toEqual({
+      mcpServers: {
+        krimto: {
+          command: "npx",
+          args: ["-y", "@krimto-labs/krimto"],
+          env: { KRIMTO_IDENTITY: "you@acme.com" },
+        },
+      },
+    });
+  });
+
+  it("honors a caller-provided identity", () => {
+    const s = stdioConnectSnippets({ identity: "maria@acme.com" });
+    expect(s.cursorJson).toContain('"KRIMTO_IDENTITY": "maria@acme.com"');
   });
 });
 

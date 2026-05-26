@@ -1,5 +1,38 @@
 import { describe, it, expect } from "vitest";
-import { localModeBanner, teamModeBanner } from "../../src/server/banner";
+import { DEFAULT_IDENTITY, identityWarning, localModeBanner, stdioStartupBanner, teamModeBanner } from "../../src/server/banner";
+
+describe("stdioStartupBanner", () => {
+  it("names the version, data dir, and lists every CLI command", () => {
+    const b = stdioStartupBanner("0.2.7", "/tmp/k-data");
+    expect(b).toContain("0.2.7");
+    expect(b).toContain("/tmp/k-data");
+    expect(b).toContain("stdio MCP server ready");
+    expect(b).toContain("serve");
+    expect(b).toContain("connect");
+    expect(b).toContain("init");
+    expect(b).toContain("uninit");
+    expect(b).toContain("usage");
+    expect(b).toContain("storage");
+    expect(b).toContain("setup-remote");
+    expect(b).toContain("setup-embeddings");
+    expect(b).toContain("verify-connection");
+    expect(b).toContain("where");
+    expect(b).toContain("--help");
+  });
+});
+
+describe("identityWarning (G2)", () => {
+  it("warns when the identity is the unset-placeholder default", () => {
+    const w = identityWarning(DEFAULT_IDENTITY);
+    expect(w).toContain("⚠");
+    expect(w).toContain("KRIMTO_IDENTITY");
+    expect(w).toContain("different scopes between");
+  });
+
+  it("returns empty when an explicit identity is set", () => {
+    expect(identityWarning("maria@acme.com")).toBe("");
+  });
+});
 
 describe("localModeBanner", () => {
   it("leads with the dashboard URL, names /ui/connect, shows the data dir + the team upgrade", () => {
@@ -8,6 +41,28 @@ describe("localModeBanner", () => {
     expect(b).toContain("/ui/connect");
     expect(b).toContain("Data: /tmp/k-data");
     expect(b).toContain("KRIMTO_BOOTSTRAP_ADMIN");
+  });
+
+  it("teaches that facts are plain markdown files in that folder", () => {
+    const b = localModeBanner(8080, "/tmp/k-data");
+    expect(b).toContain("plain markdown files");
+  });
+
+  it("appends the identity warning when identity is the placeholder default", () => {
+    const b = localModeBanner(8080, "/tmp/k-data"); // default identity arg
+    expect(b).toContain("KRIMTO_IDENTITY");
+    expect(b).toContain("different scopes");
+  });
+
+  it("omits the identity warning when an explicit identity is passed", () => {
+    const b = localModeBanner(8080, "/tmp/k-data", "maria@acme.com");
+    expect(b).not.toContain("⚠");
+  });
+
+  it("tells the user not to double-configure when she's already connected via stdio (G3)", () => {
+    const b = localModeBanner(8080, "/tmp/k-data");
+    expect(b).toContain("Already connected via stdio");
+    expect(b).toContain("Keep that config");
   });
 });
 

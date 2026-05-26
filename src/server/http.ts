@@ -15,6 +15,7 @@ import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck, git
 import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
 import { buildWebRouter } from "../web/router";
+import { type StatusPanelOpts } from "../web/views";
 import { sessionConfigFromEnv } from "../web/session";
 import { buildAdminRouter, type AdminContext } from "./admin";
 
@@ -36,6 +37,8 @@ export interface HttpAppDeps {
   admin?: AdminContext;
   /** True = team mode (auth on /mcp + /ui login + /admin). False = local mode (no auth). */
   requireAuth: boolean;
+  /** Live status snapshot for the /ui dashboard status panel. */
+  status?: () => StatusPanelOpts;
 }
 
 export function buildHttpApp(deps: HttpAppDeps): Express {
@@ -107,6 +110,7 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       sessionSecret: sessionConfigFromEnv().secret,
       admin: deps.requireAuth ? deps.admin : undefined,
       localIdentity: deps.requireAuth ? undefined : deps.ctx.requester.identity,
+      status: deps.status,
     }),
   );
 

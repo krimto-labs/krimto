@@ -3,13 +3,52 @@
 
 import { connectSnippets } from "./connect";
 
+/** The placeholder identity that resolves when KRIMTO_IDENTITY is unset. Keep in sync with resolveIdentity(). */
+export const DEFAULT_IDENTITY = "user@localhost";
+
+/**
+ * G2 — warn when the resolved identity is the unset-placeholder default. Two Krimto processes
+ * on the same data dir (e.g. Cursor's stdio launch + a separate `serve` in her terminal) often
+ * resolve to different identities — the MCP config sets one, the bare shell doesn't. The result
+ * is scope mismatch: she writes facts under one identity and sees a different scope in /ui.
+ * Returns an empty string when the identity was explicitly set.
+ */
+export function identityWarning(identity: string): string {
+  if (identity !== DEFAULT_IDENTITY) return "";
+  return (
+    `  ⚠️  Identity = ${DEFAULT_IDENTITY} (KRIMTO_IDENTITY is unset). If your editor's MCP\n` +
+    `     config sets a different KRIMTO_IDENTITY, you'll see different scopes between\n` +
+    `     surfaces. Set KRIMTO_IDENTITY in your shell to match for a consistent view.\n`
+  );
+}
+
+/**
+ * Stdio mode banner — printed on stderr when the npx/stdio MCP server boots. Surfaces the four
+ * subcommands so a user who ran `npx ...krimto` interactively (and sees a process that just sits
+ * there) can discover the CLI surface without hunting for the README.
+ */
+export function stdioStartupBanner(version: string, dataDir: string, identity = DEFAULT_IDENTITY): string {
+  return (
+    `\nKrimto ${version} — stdio MCP server ready (data: ${dataDir})\n` +
+    `  This process speaks MCP over stdin/stdout. Point an MCP client at it.\n` +
+    `  CLI: krimto serve · connect · init · uninit · usage · storage · setup-remote · setup-embeddings · verify-connection · where · --help\n` +
+    identityWarning(identity) +
+    `\n`
+  );
+}
+
 /** Local mode (no auth): one signpost line to /ui/connect, the data location, plus the team upgrade hint. */
-export function localModeBanner(port: number, dataDir: string): string {
+export function localModeBanner(port: number, dataDir: string, identity = DEFAULT_IDENTITY): string {
   return (
     `\nKrimto is running → http://localhost:${port}\n` +
     `  👉 Open http://localhost:${port}/ui/connect to connect your editor (60 seconds)\n` +
     `  💾 Data: ${dataDir}  (run \`npx @krimto-labs/krimto where\` to find it later)\n` +
-    `  🔒 Local mode (no auth — local/trusted use only). For teams: set KRIMTO_BOOTSTRAP_ADMIN=<email>.\n\n`
+    `  📝 Your facts are plain markdown files — open any .md in that folder to read them.\n` +
+    `  🔌 Already connected via stdio (the npx path)? Keep that config — this HTTP server is\n` +
+    `     just for the browser dashboard, not a second MCP connection.\n` +
+    `  🔒 Local mode (no auth — local/trusted use only). For teams: set KRIMTO_BOOTSTRAP_ADMIN=<email>.\n` +
+    identityWarning(identity) +
+    `\n`
   );
 }
 

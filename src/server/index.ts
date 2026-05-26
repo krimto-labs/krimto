@@ -15,7 +15,9 @@ import { buildHttpApp } from "./http";
 import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
 import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
 import { type AdminContext } from "./admin";
-import { localModeBanner, teamModeBanner } from "./banner";
+import { localModeBanner, stdioStartupBanner, teamModeBanner } from "./banner";
+import { acquireLock, LockHeldError, type LockHandle } from "./lock";
+import { ActivityLog } from "./activity";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -218,6 +220,20 @@ export async function main(): Promise<void> {
   await fs.mkdir(dataDir, { recursive: true });
   await ensureDataGitignore(dataDir);
 
+  // G1 — refuse to boot if another Krimto holds the data dir. Mode is determined by env; the
+  // lock just records it for nicer error messages if a second process tries to start.
+  const mode = process.env.KRIMTO_HTTP_PORT ? "http" : "stdio";
+  let lock: LockHandle;
+  try {
+    lock = await acquireLock(dataDir, mode);
+  } catch (e) {
+    if (e instanceof LockHeldError) {
+      process.stderr.write(`krimto: ${e.message}\n`);
+      process.exit(2);
+    }
+    throw e;
+  }
+
   // Key store + bootstrap (must happen before membership is finalised so that
   // ensureOrgAdmin's writes to members.yaml are visible in the loaded membership).
   const keysPath = process.env.KRIMTO_KEYS_PATH ?? path.join(dataDir, ".krimto", "keys.json");
@@ -259,6 +275,7 @@ export async function main(): Promise<void> {
     await repo.setRemote(process.env.KRIMTO_GIT_REMOTE);
   }
   const batcher = new CommitBatcher(repo, batcherConfigFromEnv());
+  const activity = new ActivityLog(dataDir);
   const ctx: ToolContext = {
     store,
     index,
@@ -272,6 +289,7 @@ export async function main(): Promise<void> {
         }
       : undefined,
     git: batcher,
+    activity,
   };
   if (embeddingProvider) {
     process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
@@ -328,7 +346,12 @@ export async function main(): Promise<void> {
     telemetry.stop();
     sync.stop();
     batcher.stop();
-    void ctx.writeQueue.run(() => batcher.flush()).finally(() => process.exit(0));
+    void ctx.writeQueue
+      .run(() => batcher.flush())
+      .finally(async () => {
+        await lock.release(); // G1 — clear the lock so the next boot can acquire it cleanly
+        process.exit(0);
+      });
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -352,11 +375,20 @@ export async function main(): Promise<void> {
       rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
       admin,
       requireAuth,
+      // Live status for the /ui dashboard panel — built per request so it never goes stale.
+      status: () => ({
+        gitRemoteUrl: process.env.KRIMTO_GIT_REMOTE,
+        lastPushStatus: batcher.lastPushStatus(),
+        lastPullStatus: sync.lastPullStatus(),
+        embeddings: embeddingProvider
+          ? { provider: embeddingProvider.name, dimensions: embeddingProvider.dimensions }
+          : undefined,
+      }),
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
       if (!requireAuth) {
-        process.stderr.write(localModeBanner(httpPort, dataDir));
+        process.stderr.write(localModeBanner(httpPort, dataDir, identity));
       } else {
         process.stderr.write(teamModeBanner({ host: `localhost:${httpPort}`, key: bootstrapKey, dataDir }));
       }
@@ -365,7 +397,7 @@ export async function main(): Promise<void> {
   } else {
     const server = buildServer(ctx);
     await server.connect(new StdioServerTransport());
-    process.stderr.write(`Krimto ${KRIMTO_VERSION} MCP server ready (data: ${resolveDataDir()})\n`);
+    process.stderr.write(stdioStartupBanner(KRIMTO_VERSION, resolveDataDir(), identity));
   }
 }
 

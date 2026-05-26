@@ -34,6 +34,11 @@ export interface ScopeSummary {
 export class FactStore {
   constructor(private readonly root: string) {}
 
+  /** The absolute data directory the store reads/writes from. Surfaces to the UI so users can find their files. */
+  dataDir(): string {
+    return this.root;
+  }
+
   /** Create a fact (server-set id/timestamps), write it to its scope folder, return it + its path. */
   async writeFact(input: NewFactInput): Promise<StoredFact> {
     return this.writeFactExact(createFact(input));

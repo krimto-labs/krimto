@@ -41,3 +41,24 @@ export function applyRule(existing: string | null): string {
   const sep = existing.endsWith("\n") ? "\n" : "\n\n";
   return `${existing}${sep}${block}\n`;
 }
+
+/**
+ * Inverse of `applyRule` — remove the marker-delimited Krimto rule block.
+ * Returns:
+ *   - the original string when no markers are found (caller treats as no-op)
+ *   - the cleaned content (markers + everything between them stripped) otherwise
+ *   - `null` when removing the block leaves the file empty/whitespace-only,
+ *     signalling "delete this file" (it had no pre-existing content)
+ */
+export function removeRule(existing: string | null): string | null {
+  if (existing === null) return null;
+  const startIdx = existing.indexOf(START);
+  const endIdx = existing.indexOf(END);
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return existing;
+
+  // Strip the block. Also consume one trailing newline so re-applying doesn't leave a blank gap.
+  const after = endIdx + END.length;
+  const trimmedAfter = after < existing.length && existing[after] === "\n" ? after + 1 : after;
+  const cleaned = existing.slice(0, startIdx) + existing.slice(trimmedAfter);
+  return cleaned.trim() === "" ? null : cleaned;
+}

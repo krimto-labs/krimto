@@ -45,14 +45,21 @@ export function scopeList(scopes: ScopeRow[]): string {
 export interface FactView {
   id: string; scope: string; title: string; body: string;
   author?: string; source?: string; created?: string; tags?: string[];
+  /** Absolute path to the markdown file on disk. Surfaced so users learn "this is just a file." */
+  sourcePath?: string;
 }
 export function factDetail(f: FactView): string {
   const tags = f.tags && f.tags.length ? f.tags.map((t) => escapeHtml(t)).join(", ") : "—";
+  const sourceLine = f.sourcePath
+    ? `<p class="muted" style="margin-top:0.5rem">📝 Source file: <code>${escapeHtml(f.sourcePath)}</code> ` +
+      `<span style="opacity:0.7">— open it in any editor to see exactly what was stored.</span></p>`
+    : "";
   return (
     `<p><a href="/ui/facts">← Facts</a></p><h1>${escapeHtml(f.title)}</h1>` +
     `<p class="muted">${escapeHtml(f.scope)} · ${escapeHtml(f.author ?? "unknown")} · ${escapeHtml(f.created ?? "")}</p>` +
     `<pre>${escapeHtml(f.body)}</pre>` +
-    `<p class="muted">id: ${escapeHtml(f.id)} · source: ${escapeHtml(f.source ?? "—")} · tags: ${tags}</p>`
+    `<p class="muted">id: ${escapeHtml(f.id)} · source: ${escapeHtml(f.source ?? "—")} · tags: ${tags}</p>` +
+    sourceLine
   );
 }
 
@@ -154,9 +161,20 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     ? `<li>Header: <code>${escapeHtml(contract.header)}</code></li>`
     : "";
 
+  // G3 — only render the "already on stdio?" notice in local mode (the `serve` path). In team
+  // mode this page is the ONLY connect path users have, so the notice would just confuse them.
+  const stdioAlreadyNotice = opts.requireAuth
+    ? ""
+    : `<p style="background:#fff8d5;border:1px solid #c8a830;border-radius:4px;padding:10px 14px;margin:0 0 16px">` +
+      `<strong>🔌 Already connected via stdio?</strong> If your editor already runs Krimto via ` +
+      `<code>npx @krimto-labs/krimto</code> (the npx path), <strong>keep that config</strong>. ` +
+      `This page is for clients you haven't connected yet. Two configs pointing at one Krimto ` +
+      `aren't needed — and adding the HTTP one alongside stdio risks two processes fighting ` +
+      `over the same data folder.</p>`;
   return (
     `<h1>Connect your agent</h1>` +
     `<p class="muted">Point your editor at Krimto: pick it, copy the config, paste it, then check the connection.</p>` +
+    stdioAlreadyNotice +
     `<h2>1. Claude Code</h2>` +
     `<pre id="cc-cmd">${escapeHtml(claude)}</pre>${copy("cc-cmd")}` +
     `<p class="muted">Run it in your terminal. If Claude Code is already open, restart the session. ` +
@@ -183,6 +201,157 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     `</ul>` +
     `<p class="muted">See your client's own MCP-server docs for where to paste this.</p>` +
     `<p><strong>Next:</strong> <a href="/ui/facts">save your first memory →</a></p>`
+  );
+}
+
+/**
+ * "You own your data" explainer — taught at the moment a user is looking at their facts. Surfaces
+ * the markdown-in-git storage model (Krimto's wedge vs. Mem0 / Cursor's built-in memory) so a
+ * first-timer learns it from the product, not from the README they didn't read.
+ */
+export function behindTheScenesPanel(dataDir: string): string {
+  return (
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Behind the scenes — your data, your files</h2>` +
+    `<p class="muted">Your facts aren't locked in a database. They live as <strong>plain markdown files</strong> ` +
+    `you can open in any editor, tracked by <strong>git</strong> (audit log + history).</p>` +
+    `<ul>` +
+    `<li><strong>📝 Markdown files</strong> — one fact per file at ` +
+    `<code>${escapeHtml(dataDir)}/{user,team,org}/&lt;id&gt;/&lt;slug&gt;.md</code>. ` +
+    `The real source of truth. Open one with any editor.</li>` +
+    `<li><strong>📚 Git repo</strong> — every change is committed (batched every 30s). ` +
+    `Run <code>git log</code> inside the folder for the full history.</li>` +
+    `<li><strong>⚡ index.db</strong> — a fast search index. Just a cache — Krimto rebuilds ` +
+    `it from your markdown on next boot. You can ignore it.</li>` +
+    `</ul>` +
+    `<p class="muted">If Krimto disappeared tomorrow, you'd still have every fact: they're just files in a folder you own. ` +
+    `Run <code>npx @krimto-labs/krimto storage</code> in your terminal for the full explanation.</p>` +
+    `</section>`
+  );
+}
+
+export interface ActivityRow {
+  timestamp: string;
+  tool: string;
+  identity: string;
+  detail?: string;
+}
+
+/**
+ * G5 — "Recent activity" panel on /ui/facts. Shows the last few MCP tool calls so a user can see
+ * at a glance whether her agent is actually hitting Krimto, and what scope/title each call touched.
+ * Critical for diagnosing the silent-no-call failure mode (DEFAULT mode without the "use krimto" prefix).
+ */
+export function activityPanel(entries: ActivityRow[], now: Date = new Date()): string {
+  if (entries.length === 0) {
+    return (
+      `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+      `<h2 style="margin-top:0">Recent activity</h2>` +
+      `<p class="muted">No MCP tool calls yet.</p>` +
+      `<p class="muted">Try this in your editor: <em>"Use krimto to list the scopes I can see."</em> ` +
+      `That should trigger a <code>krimto_list_scopes</code> call and appear here within a few seconds.</p>` +
+      `</section>`
+    );
+  }
+  // Newest first
+  const sorted = [...entries].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+  const rows = sorted
+    .map((e) => {
+      const ago = humanAgo(e.timestamp, now);
+      return (
+        `<tr>` +
+        `<td class="muted" style="white-space:nowrap">${escapeHtml(ago)}</td>` +
+        `<td><code>${escapeHtml(e.tool)}</code></td>` +
+        `<td>${escapeHtml(e.detail ?? "—")}</td>` +
+        `<td class="muted">${escapeHtml(e.identity)}</td>` +
+        `</tr>`
+      );
+    })
+    .join("");
+  return (
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Recent activity</h2>` +
+    `<p class="muted">Last few MCP tool calls Krimto received. Helps diagnose "did my agent actually search?"</p>` +
+    `<table><thead><tr><th>When</th><th>Tool</th><th>Detail</th><th>Caller</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>` +
+    `</section>`
+  );
+}
+
+function humanAgo(iso: string, now: Date): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const secs = Math.max(0, Math.round((now.getTime() - t) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+export interface StatusPanelOpts {
+  /** The configured git remote URL, or undefined when none. */
+  gitRemoteUrl?: string;
+  /** Status of the most recent push attempt. */
+  lastPushStatus?: "ok" | "skipped" | "error" | "none";
+  /** Most recent inbound pull status, when a remote sync loop is running. */
+  lastPullStatus?: "ok" | "skipped" | "up-to-date" | "conflict" | "error" | "none";
+  /** Configured embedding provider name + dim, or undefined when lexical-only. */
+  embeddings?: { provider: string; dimensions: number };
+}
+
+/**
+ * "Operational status" panel — shows whether the two optional add-ons (git remote sync, semantic
+ * embeddings) are configured and working, so Maria doesn't have to grep stderr or `git remote -v`
+ * to know whether her facts are syncing.
+ */
+export function statusPanel(opts: StatusPanelOpts): string {
+  const dot = (color: string): string =>
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>`;
+  const ok = dot("#3d5a3d");
+  const warn = dot("#8a6817");
+  const err = dot("#a82c1c");
+
+  // Git remote row — three states: configured + healthy, configured + recent error, not configured.
+  let gitRow: string;
+  if (opts.gitRemoteUrl) {
+    const pushBad = opts.lastPushStatus === "error";
+    const pullBad = opts.lastPullStatus === "conflict" || opts.lastPullStatus === "error";
+    if (pushBad || pullBad) {
+      gitRow =
+        `<li>${err}<strong>Git remote:</strong> <code>${escapeHtml(opts.gitRemoteUrl)}</code>` +
+        ` — last sync failed (push: ${escapeHtml(opts.lastPushStatus ?? "?")}, ` +
+        `pull: ${escapeHtml(opts.lastPullStatus ?? "?")}). Check <code>/health/ready</code> for detail.</li>`;
+    } else {
+      gitRow =
+        `<li>${ok}<strong>Git remote:</strong> <code>${escapeHtml(opts.gitRemoteUrl)}</code>` +
+        ` — auto-push every batch, auto-pull every 60s.</li>`;
+    }
+  } else {
+    gitRow =
+      `<li>${warn}<strong>Git remote:</strong> not configured — facts stay on this machine only. ` +
+      `Set up cross-machine sync with: <code>npx @krimto-labs/krimto setup-remote &lt;url&gt;</code></li>`;
+  }
+
+  // Embedding row — two states: provider configured (semantic+lexical) vs none (lexical only).
+  let embedRow: string;
+  if (opts.embeddings) {
+    embedRow =
+      `<li>${ok}<strong>Embeddings:</strong> ${escapeHtml(opts.embeddings.provider)} ` +
+      `(${opts.embeddings.dimensions}-dim) — semantic + keyword search enabled.</li>`;
+  } else {
+    embedRow =
+      `<li>${warn}<strong>Embeddings:</strong> not configured — recall uses keyword search (BM25) only. ` +
+      `Turn on semantic search with: <code>npx @krimto-labs/krimto setup-embeddings</code></li>`;
+  }
+
+  return (
+    `<section style="border:1px solid #ddd;border-radius:6px;padding:1rem;margin:0 0 1rem">` +
+    `<h2 style="margin-top:0">Status</h2>` +
+    `<p class="muted">Both rows below are optional add-ons. Krimto works fully without them.</p>` +
+    `<ul style="list-style:none;padding-left:0;margin:0">${gitRow}${embedRow}</ul>` +
+    `</section>`
   );
 }
 

@@ -50,9 +50,35 @@ describe("krimto_write", () => {
     expect(res.scope).toBe("user/alice@acme.com");
     expect(res.path).toBe("user/alice@acme.com/staging-resets-sunday.md");
     expect(res.commit_sha).toBeNull();
+    // The absolute path + hint teach the agent (and via it, the user) that this is just a file.
+    expect(res.absolute_path).toContain("user/alice@acme.com/staging-resets-sunday.md");
+    expect(res.absolute_path.endsWith(res.path)).toBe(true);
+    expect(res.hint).toContain("markdown file");
+    expect(res.hint).toContain(res.absolute_path);
 
     const read = await krimtoRead(ctx, res.id);
     expect(read.frontmatter.author).toBe("alice@acme.com");
+  });
+
+  it("includes the expanded 'where things live' hint on the FIRST save only (G6)", async () => {
+    // First write: extended hint
+    const first = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "First fact",
+      body: "x",
+    });
+    expect(first.hint).toContain("First save in this session");
+    expect(first.hint).toContain("git auto-commits every 30s");
+    expect(first.hint).toContain("krimto --help");
+    expect(first.hint).toContain("krimto storage");
+    // Subsequent writes: normal one-line hint, no orientation
+    const second = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Second fact",
+      body: "y",
+    });
+    expect(second.hint).not.toContain("First save in this session");
+    expect(second.hint).toContain("markdown file");
   });
 
   it("rejects an invalid scope and an over-long title", async () => {
@@ -158,6 +184,8 @@ describe("krimto_supersede", () => {
     });
     expect(sup.old_id).toBe(original.id);
     expect(sup.new_id).not.toBe(original.id);
+    expect(sup.absolute_path).toContain("team/payments");
+    expect(sup.hint).toContain("git history");
 
     const { results } = await krimtoRecall(ctx, { query: "postgres version" });
     expect(results).toHaveLength(1);
