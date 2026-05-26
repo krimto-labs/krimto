@@ -64,6 +64,19 @@ describe("localModeBanner", () => {
     expect(b).toContain("Already connected via stdio");
     expect(b).toContain("Keep that config");
   });
+
+  it("includes the explicit 2-command recipe + verify prompt so users know what to do next (Gap #5d)", () => {
+    const b = localModeBanner(8080, "/tmp/k-data");
+    // The two commands explicitly:
+    expect(b).toContain("claude mcp add --transport http krimto http://localhost:8080/mcp");
+    expect(b).toContain("npx @krimto-labs/krimto init");
+    // The required-vs-optional callout:
+    expect(b).toContain("BOTH commands are required");
+    expect(b).toContain("Without step 2");
+    // The verify prompt so they know what success looks like:
+    expect(b).toContain("Remember that we use pnpm");
+    expect(b).toContain("What do you use");
+  });
 });
 
 describe("teamModeBanner", () => {

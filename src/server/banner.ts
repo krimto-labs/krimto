@@ -37,11 +37,28 @@ export function stdioStartupBanner(version: string, dataDir: string, identity = 
   );
 }
 
-/** Local mode (no auth): one signpost line to /ui/connect, the data location, plus the team upgrade hint. */
+/** Local mode (no auth): the explicit 2-command recipe, the data location, plus the team upgrade hint. */
 export function localModeBanner(port: number, dataDir: string, identity = DEFAULT_IDENTITY): string {
   return (
     `\nKrimto is running → http://localhost:${port}\n` +
-    `  👉 Open http://localhost:${port}/ui/connect to connect your editor (60 seconds)\n` +
+    `\n` +
+    `┌─ To connect your editor — BOTH commands are required ─────────────────┐\n` +
+    `│                                                                       │\n` +
+    `│  1. Tell your editor about Krimto:                                    │\n` +
+    `│       claude mcp add --transport http krimto http://localhost:${port}/mcp\n` +
+    `│       (Cursor / other editors: http://localhost:${port}/ui/connect)\n` +
+    `│                                                                       │\n` +
+    `│  2. In your PROJECT root, make the agent auto-use Krimto:             │\n` +
+    `│       cd <your project> && npx @krimto-labs/krimto init               │\n` +
+    `│       ↑ Without step 2, your agent uses its own memory and ignores    │\n` +
+    `│         Krimto. The agent never calls krimto_recall / krimto_write.   │\n` +
+    `│                                                                       │\n` +
+    `│  3. Test it in your AI chat:                                          │\n` +
+    `│       "Remember that we use pnpm in this repo (not npm)."             │\n` +
+    `│     Then in a NEW chat: "What do you use for installing deps?"        │\n` +
+    `│                                                                       │\n` +
+    `└───────────────────────────────────────────────────────────────────────┘\n` +
+    `\n` +
     `  💾 Data: ${dataDir}  (run \`npx @krimto-labs/krimto where\` to find it later)\n` +
     `  📝 Your facts are plain markdown files — open any .md in that folder to read them.\n` +
     `  🔌 Already connected via stdio (the npx path)? Keep that config — this HTTP server is\n` +

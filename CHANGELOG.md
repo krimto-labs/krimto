@@ -4,6 +4,17 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] — 2026-05-26
+
+### Fixed
+- **Gap #5d — serve banner now carries the explicit 2-command recipe.** The previous boot banner only
+  pointed at `/ui/connect`; users who went straight to `claude mcp add` hit a silent terminal with no
+  signal about the load-bearing `krimto init` step. The new banner inlines the full recipe in a
+  visible box: (1) `claude mcp add ...`, (2) `cd <project> && npx @krimto-labs/krimto init` with
+  *"Without step 2, your agent uses its own memory and ignores Krimto"*, and (3) the two test prompts
+  ("Remember that we use pnpm...", "What do you use..."). Same info that's on `/ui/connect` and in
+  `krimto connect`, but now visible in the terminal where the user already is.
+
 ## [0.2.10] — 2026-05-26
 
 ### Fixed
