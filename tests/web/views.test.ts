@@ -141,21 +141,63 @@ describe("factDetail source path", () => {
 
   it("renders the Delete button when canDelete is true", () => {
     const h = factDetail({ ...fact, canDelete: true });
-    expect(h).toContain("Delete this fact");
+    expect(h).toContain("Delete this note");
     expect(h).toContain(`action="/ui/facts/${fact.id}/delete"`);
     expect(h).toContain('method="post"');
     expect(h).toContain("confirm(");
   });
 
   it("omits the Delete button when canDelete is false / undefined", () => {
-    expect(factDetail({ ...fact, canDelete: false })).not.toContain("Delete this fact");
-    expect(factDetail(fact)).not.toContain("Delete this fact");
+    expect(factDetail({ ...fact, canDelete: false })).not.toContain("Delete this note");
+    expect(factDetail(fact)).not.toContain("Delete this note");
   });
 
   it("escapes a hostile source path (no XSS)", () => {
     const h = factDetail({ ...fact, sourcePath: "/tmp/<script>alert(1)</script>.md" });
     expect(h).not.toContain("<script>alert(1)</script>");
     expect(h).toContain("&lt;script&gt;");
+  });
+
+  // v0.2.17-3: inline Edit + Move forms gated by canEdit
+  it("renders the Edit form when canEdit is true", () => {
+    const h = factDetail({ ...fact, canEdit: true });
+    expect(h).toContain("Edit this note");
+    expect(h).toContain(`action="/ui/facts/${fact.id}/edit"`);
+    expect(h).toContain('name="body"');
+    expect(h).toContain(fact.body); // pre-filled with the current body
+  });
+
+  it("omits the Edit form when canEdit is false / undefined", () => {
+    expect(factDetail({ ...fact, canEdit: false })).not.toContain("Edit this note");
+    expect(factDetail(fact)).not.toContain("Edit this note");
+  });
+
+  it("renders the Move dropdown with writable scopes when given", () => {
+    const h = factDetail({
+      ...fact,
+      canEdit: true,
+      writableScopes: [
+        { scope: "team/backend", label: "Backend team" },
+        { scope: "org/acme", label: "Acme Inc." },
+      ],
+    });
+    expect(h).toContain("Move to a different scope");
+    expect(h).toContain('value="team/backend"');
+    expect(h).toContain("Backend team");
+    expect(h).toContain('value="org/acme"');
+    expect(h).toContain("Acme Inc.");
+  });
+
+  it("omits the Move dropdown when writableScopes is empty", () => {
+    const h = factDetail({ ...fact, canEdit: true, writableScopes: [] });
+    expect(h).not.toContain("Move to a different scope");
+  });
+
+  it("uses the plain-English scopeLabel in the meta line when provided", () => {
+    const h = factDetail({ ...fact, scopeLabel: "Just me" });
+    expect(h).toContain("Just me");
+    // Falls back to the raw scope when no label is given.
+    expect(factDetail(fact)).toContain("user/maria@acme.com");
   });
 });
 
@@ -193,42 +235,55 @@ describe("activityPanel (G5)", () => {
 });
 
 describe("factsList", () => {
-  it("renders rows with title, scope, author and a link to the detail page", () => {
+  // v0.2.17-3: factsList now takes (facts, total, membership, viewer) — scope is rendered as a
+  // plain-English label from members.yaml display names.
+  const membership = {
+    org: { slug: "acme", name: "Acme Inc.", admins: ["maria@acme.com"] },
+    teams: [{ slug: "backend", name: "Backend team", members: ["maria@acme.com"], leads: [] }],
+    users: [],
+  };
+
+  it("renders rows with title, plain-English scope label, author, and a link", () => {
     const h = factsList(
       [
-        { id: "fct_01ABC", scope: "user/me", title: "Deploys are Tuesdays", author: "maria@acme.com", updated: new Date().toISOString() },
+        { id: "fct_01ABC", scope: "user/maria@acme.com", title: "Deploys are Tuesdays", author: "maria@acme.com", updated: new Date().toISOString() },
         { id: "fct_02DEF", scope: "team/backend", title: "We use pnpm", author: "ben@acme.com", updated: new Date().toISOString() },
       ],
       2,
+      membership,
+      "maria@acme.com",
     );
     expect(h).toContain('href="/ui/facts/fct_01ABC"');
     expect(h).toContain("Deploys are Tuesdays");
-    expect(h).toContain("user/me");
-    expect(h).toContain("team/backend");
-    expect(h).toContain("maria@acme.com");
+    expect(h).toContain("Just me"); // user/maria → "Just me" (viewer is maria)
+    expect(h).toContain("Backend team"); // team/backend → name from members.yaml
+    expect(h).toContain("you"); // maria viewing her own fact
+    expect(h).toContain("ben@acme.com"); // other author shown verbatim
     expect(h).toContain("(2 total)");
   });
 
   it("returns empty string when there are no facts", () => {
-    expect(factsList([], 0)).toBe("");
+    expect(factsList([], 0, membership, "maria@acme.com")).toBe("");
   });
 
   it("shows the 'more available' count line when capped", () => {
     const facts = Array.from({ length: 5 }, (_, i) => ({
       id: `fct_${i}`,
-      scope: "user/me",
+      scope: "user/maria@acme.com",
       title: `Fact ${i}`,
       author: "x@y.z",
       updated: new Date().toISOString(),
     }));
-    const h = factsList(facts, 200);
-    expect(h).toContain("Showing 5 of 200 facts");
+    const h = factsList(facts, 200, membership, "maria@acme.com");
+    expect(h).toContain("Showing 5 of 200 notes");
   });
 
   it("escapes a hostile title (no XSS)", () => {
     const h = factsList(
-      [{ id: "fct_x", scope: "user/me", title: "<script>alert(1)</script>", updated: new Date().toISOString() }],
+      [{ id: "fct_x", scope: "user/maria@acme.com", title: "<script>alert(1)</script>", updated: new Date().toISOString() }],
       1,
+      membership,
+      "maria@acme.com",
     );
     expect(h).not.toContain("<script>alert(1)</script>");
     expect(h).toContain("&lt;script&gt;");

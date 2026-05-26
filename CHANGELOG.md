@@ -4,6 +4,52 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17-3] — 2026-05-26
+
+### Added
+
+Phase E (partial) of the v0.2.17 plan — the `/ui` notes-app surface starts catching up to the
+CLI changes Phase D delivered. Web users now get the same plain-English scope labels and the
+same per-note Edit/Move actions the journey doc §04 promised. (Full settings-page consolidation
+is deferred to a follow-up — the engineering panels stay on `/ui/facts` for now.)
+
+- **Plain-English scope labels in `/ui`.** `factsList`, `scopeList`, and `factDetail` now render
+  scopes via the new `scopeLabel` helper (`src/access/scopeLabels.ts`):
+  - `user/<viewer-email>` → "Just me"
+  - `user/<other-email>` → the literal email (when an admin sees a teammate's personal scope)
+  - `team/<slug>` → the team's `name` from `members.yaml`, falling back to `team/<slug>`
+  - `org/<slug>` → the org's `name`, falling back to `org/<slug>`
+  Author column also renders "you" for the viewer's own facts. Source: `src/web/views.ts`.
+- **Inline Edit form on `/ui/facts/:id`.** When the viewer has `canWrite` on the fact's scope,
+  a `<details>` block exposes a textarea pre-filled with the current body. POST goes to a new
+  route `/ui/facts/:id/edit` which calls the new `editFact()` helper. Body validation: empty
+  bodies return 422; forbidden returns 403; not-found returns 404. Source: `src/server/editFact.ts`.
+- **Inline Move dropdown on `/ui/facts/:id`.** Same gating. The dropdown lists every scope the
+  viewer can write to, minus the current scope (computed via a new `writableScopeOptions` helper
+  in the router that mirrors `writableScopesFor` in `src/server/tools.ts`). POST `/ui/facts/:id/move`
+  calls the new `moveFact()` helper which preserves the id, bumps `updated`, writes the new file,
+  unlinks the old, and stages both halves in git. Source: `src/server/moveFact.ts`.
+- **`src/access/scopeLabels.ts`** — extracted from `src/cli/cliRuntime.ts` so both the CLI
+  (`krimto notes`) and the web (`/ui/facts`) share one source of truth for label computation.
+  `cliRuntime.ts` re-exports the helper so existing CLI callers keep working.
+
+### Tests
+
+- `tests/web/views.test.ts` — extended `factsList` tests with plain-English label assertions;
+  new factDetail tests for the Edit form, Move dropdown, scopeLabel rendering, and the
+  canEdit gating.
+- `tests/integration/web.test.ts` — added Edit + Move end-to-end tests (POST round-trips, 422
+  on empty body, 422 on invalid scope, unreadable-fact 404). Verified that the writable-scopes
+  dropdown excludes the current scope.
+
+Total suite: **523 passing**. `pnpm typecheck` + `pnpm lint` clean.
+
+### Deferred
+
+- `/ui/settings` route + consolidation of the engineering panels (Status, Behind-the-scenes,
+  Recent activity, Hijack warning, How-Krimto-works) into one page. The panels currently still
+  live on `/ui/facts`. Will revisit if usage signals demand it.
+
 ## [0.2.17-2] — 2026-05-26
 
 ### Added

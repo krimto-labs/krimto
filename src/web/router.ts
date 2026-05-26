@@ -6,7 +6,10 @@ import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
 import { deleteFact } from "../server/deleteFact";
+import { editFact } from "../server/editFact";
+import { moveFact } from "../server/moveFact";
 import { canRead, canWrite } from "../access/membership";
+import { scopeLabel } from "../access/scopeLabels";
 import { KrimtoError } from "../server/errors";
 import { type AdminContext } from "../server/admin";
 import { addUser } from "../access/membershipStore";
@@ -117,8 +120,12 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           (deps.status ? statusPanel(deps.status()) : "") +
           activityPanel(recent) +
           searchBox(q) +
-          scopeList(scopes.map((s) => ({ scope: s.path, factCount: s.fact_count }))) +
-          factsList(allFacts, totalFacts);
+          scopeList(
+            scopes.map((s) => ({ scope: s.path, factCount: s.fact_count })),
+            deps.membership(),
+            identity,
+          ) +
+          factsList(allFacts, totalFacts, deps.membership(), identity);
         page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);
@@ -135,16 +142,89 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         // Best-effort: a missing entry (concurrent delete, sync race) just hides the line.
         const stored = await deps.ctx.store.readFact(req.params.id).catch(() => null);
         const sourcePath = stored ? `${deps.ctx.store.dataDir()}/${stored.path}` : undefined;
-        // The Delete button is gated by canWrite — same access control as `krimto rm`.
+        // The Edit/Move/Delete buttons are gated by canWrite — same access control as `krimto rm`.
         const factScope = (fact as { scope?: string }).scope ?? "";
-        const canDelete = canWrite(deps.membership(), identity, factScope);
-        page(res, 200, "Fact", factDetail(toFactView(fact, sourcePath, canDelete)), identity);
+        const m = deps.membership();
+        const canWriteHere = canWrite(m, identity, factScope);
+        // Compute target scopes for the Move dropdown — every scope the viewer can write to
+        // EXCEPT the current one. Mirrors the writableScopesFor logic in src/server/tools.ts.
+        const writableScopes = canWriteHere
+          ? writableScopeOptions(m, identity, factScope)
+          : [];
+        page(
+          res,
+          200,
+          "Fact",
+          factDetail(
+            toFactView(fact, sourcePath, canWriteHere, writableScopes, scopeLabel(factScope, identity, m)),
+          ),
+          identity,
+        );
       } catch (e) {
         if (e instanceof KrimtoError) {
           errorPage(res, 404, "Not found", identity);
           return;
         }
         errorPage(res, 500, "Something went wrong", identity);
+      }
+    })();
+  });
+
+  router.post("/facts/:id/edit", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      const rawBody = bodyOf(req).body;
+      const newBody = typeof rawBody === "string" ? rawBody : "";
+      try {
+        // Confirm read access first so existence isn't leaked to viewers who can't see the fact.
+        await krimtoRead(ctxFor(req), req.params.id);
+        await editFact(ctxFor(req), req.params.id, newBody);
+        res.redirect(`/ui/facts/${encodeURIComponent(req.params.id)}`);
+      } catch (e) {
+        if (e instanceof KrimtoError) {
+          if (e.code === "not_found") {
+            errorPage(res, 404, "Fact not found", identity);
+            return;
+          }
+          if (e.code === "forbidden") {
+            errorPage(res, 403, "You don't have permission to edit this note.", identity);
+            return;
+          }
+          if (e.code === "invalid_params") {
+            errorPage(res, 422, e.message, identity);
+            return;
+          }
+        }
+        errorPage(res, 500, "Edit failed — see server logs", identity);
+      }
+    })();
+  });
+
+  router.post("/facts/:id/move", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      const rawScope = bodyOf(req).scope;
+      const newScope = typeof rawScope === "string" ? rawScope.trim() : "";
+      try {
+        await krimtoRead(ctxFor(req), req.params.id);
+        await moveFact(ctxFor(req), req.params.id, newScope);
+        res.redirect(`/ui/facts/${encodeURIComponent(req.params.id)}`);
+      } catch (e) {
+        if (e instanceof KrimtoError) {
+          if (e.code === "not_found") {
+            errorPage(res, 404, "Fact not found", identity);
+            return;
+          }
+          if (e.code === "forbidden") {
+            errorPage(res, 403, "You don't have permission to move this note.", identity);
+            return;
+          }
+          if (e.code === "invalid_params") {
+            errorPage(res, 422, e.message, identity);
+            return;
+          }
+        }
+        errorPage(res, 500, "Move failed — see server logs", identity);
       }
     })();
   });
@@ -269,7 +349,13 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
 // ReadResult shape: { id, scope, title, body, frontmatter: FactFrontmatter, history }
 // FactFrontmatter has: author, created, updated, tags?, source?
 // Top-level id, scope, title, body are promoted; the rest live under frontmatter.
-function toFactView(fact: unknown, sourcePath?: string, canDelete?: boolean): FactView {
+function toFactView(
+  fact: unknown,
+  sourcePath?: string,
+  canWriteHere?: boolean,
+  writableScopes?: { scope: string; label: string }[],
+  scopeLabelText?: string,
+): FactView {
   const f = fact as Record<string, unknown>;
   const fm = (typeof f.frontmatter === "object" && f.frontmatter !== null ? f.frontmatter : {}) as Record<string, unknown>;
   const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -284,6 +370,35 @@ function toFactView(fact: unknown, sourcePath?: string, canDelete?: boolean): Fa
     created: str(fm.created),
     tags,
     sourcePath,
-    canDelete,
+    canEdit: canWriteHere,
+    canDelete: canWriteHere,
+    scopeLabel: scopeLabelText,
+    writableScopes,
   };
+}
+
+/**
+ * Compute the Move dropdown's option list — every scope the viewer can write to except the
+ * current one. Mirrors `writableScopesFor` in `src/server/tools.ts`: own user scope, every team
+ * they're a member of, plus the org scope when they're an org admin.
+ */
+function writableScopeOptions(
+  m: Membership,
+  identity: string,
+  currentScope: string,
+): { scope: string; label: string }[] {
+  const opts: { scope: string; label: string }[] = [];
+  const userScope = `user/${identity}`;
+  if (userScope !== currentScope) opts.push({ scope: userScope, label: "Just me" });
+  for (const team of m.teams) {
+    if (!team.members.includes(identity)) continue;
+    const s = `team/${team.slug}`;
+    if (s === currentScope) continue;
+    opts.push({ scope: s, label: team.name ?? `team/${team.slug}` });
+  }
+  if (isOrgAdmin(m, identity)) {
+    const s = `org/${m.org.slug}`;
+    if (s !== currentScope) opts.push({ scope: s, label: m.org.name ?? `org/${m.org.slug}` });
+  }
+  return opts;
 }

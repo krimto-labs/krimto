@@ -1,6 +1,8 @@
 import { escapeHtml } from "./html";
 import { connectSnippets, cursorDeeplink, genericContract } from "../server/connect";
 import { AGENT_RULE } from "../agentRule";
+import { scopeLabel } from "../access/scopeLabels";
+import { type Membership } from "../access/membership";
 
 export function loginBody(error?: string): string {
   const err = error ? `<p style="color:#b91c1c">${escapeHtml(error)}</p>` : "";
@@ -42,10 +44,16 @@ export interface FactListRow {
 }
 
 /**
- * Flat list of every fact the viewer can read, newest-first. Renders below the per-scope summary
- * on /ui/facts so a user can browse without typing a search query first.
+ * Flat list of every fact the viewer can read, newest-first. v0.2.17-3: the Scope column now
+ * renders plain-English labels (`Just me`, `Backend team`, `Acme`) computed from members.yaml
+ * display names — fall back to the literal `<kind>/<id>` when no name is configured.
  */
-export function factsList(facts: FactListRow[], totalAvailable: number): string {
+export function factsList(
+  facts: FactListRow[],
+  totalAvailable: number,
+  membership: Membership,
+  viewer: string,
+): string {
   if (facts.length === 0) return "";
   const ago = (iso?: string): string => {
     if (!iso) return "—";
@@ -64,19 +72,19 @@ export function factsList(facts: FactListRow[], totalAvailable: number): string 
       (f) =>
         `<tr>` +
         `<td><a href="/ui/facts/${encodeURIComponent(f.id)}">${escapeHtml(f.title)}</a></td>` +
-        `<td class="muted">${escapeHtml(f.scope)}</td>` +
+        `<td class="muted">${escapeHtml(scopeLabel(f.scope, viewer, membership))}</td>` +
         `<td class="muted" style="white-space:nowrap">${escapeHtml(ago(f.updated))}</td>` +
-        `<td class="muted">${escapeHtml(f.author ?? "—")}</td>` +
+        `<td class="muted">${escapeHtml(f.author === viewer ? "you" : f.author ?? "—")}</td>` +
         `</tr>`,
     )
     .join("");
   const moreLine =
     totalAvailable > facts.length
-      ? `<p class="muted" style="margin-top:8px">Showing ${facts.length} of ${totalAvailable} facts. ` +
+      ? `<p class="muted" style="margin-top:8px">Showing ${facts.length} of ${totalAvailable} notes. ` +
         `Use the search box above to find a specific one.</p>`
       : "";
   return (
-    `<h2 style="margin-top:2rem">All facts <span class="muted" style="font-weight:normal;font-size:0.7em">(${totalAvailable} total)</span></h2>` +
+    `<h2 style="margin-top:2rem">All notes <span class="muted" style="font-weight:normal;font-size:0.7em">(${totalAvailable} total)</span></h2>` +
     `<table><thead><tr><th>Title</th><th>Scope</th><th>Updated</th><th>Author</th></tr></thead>` +
     `<tbody>${rows}</tbody></table>` +
     moreLine
@@ -84,12 +92,25 @@ export function factsList(facts: FactListRow[], totalAvailable: number): string 
 }
 
 export interface ScopeRow { scope: string; factCount: number }
-export function scopeList(scopes: ScopeRow[]): string {
+
+/**
+ * Per-scope summary card list. v0.2.17-3: labels render in plain English. Lists the viewer's
+ * own scopes first, then teams, then org — same precedence the recall pipeline uses.
+ */
+export function scopeList(
+  scopes: ScopeRow[],
+  membership: Membership,
+  viewer: string,
+): string {
   if (scopes.length === 0) return `<p class="muted">No readable scopes yet.</p>`;
   const rows = scopes
-    .map((s) => `<tr><td>${escapeHtml(s.scope)}</td><td class="muted">${s.factCount} facts</td></tr>`)
+    .map(
+      (s) =>
+        `<tr><td>${escapeHtml(scopeLabel(s.scope, viewer, membership))}</td>` +
+        `<td class="muted">${s.factCount} note${s.factCount === 1 ? "" : "s"}</td></tr>`,
+    )
     .join("");
-  return `<p class="muted">Your scopes — use search to find facts.</p><table><tbody>${rows}</tbody></table>`;
+  return `<p class="muted">Your scopes — use search to find a note.</p><table><tbody>${rows}</tbody></table>`;
 }
 
 export interface FactView {
@@ -97,8 +118,14 @@ export interface FactView {
   author?: string; source?: string; created?: string; tags?: string[];
   /** Absolute path to the markdown file on disk. Surfaced so users learn "this is just a file." */
   sourcePath?: string;
-  /** When true, render the Delete form (caller decides based on canWrite for the fact's scope). */
+  /** When true, render the Edit/Move/Delete forms. Set by the route handler from canWrite. */
+  canEdit?: boolean;
+  /** Same gating as canEdit — kept separate so future "soft edit but no delete" UIs work. */
   canDelete?: boolean;
+  /** Plain-English label for the scope (e.g. "Just me", "Backend team"). */
+  scopeLabel?: string;
+  /** Other scopes the viewer can write to (for the Move dropdown). Excludes the current scope. */
+  writableScopes?: { scope: string; label: string }[];
 }
 export function factDetail(f: FactView): string {
   const tags = f.tags && f.tags.length ? f.tags.map((t) => escapeHtml(t)).join(", ") : "—";
@@ -106,23 +133,55 @@ export function factDetail(f: FactView): string {
     ? `<p class="muted" style="margin-top:0.5rem">📝 Source file: <code>${escapeHtml(f.sourcePath)}</code> ` +
       `<span style="opacity:0.7">— open it in any editor to see exactly what was stored.</span></p>`
     : "";
-  // Delete is opt-in (canDelete) — the route handler checks canWrite and only sets it when allowed.
+  const scopeDisplay = f.scopeLabel ?? f.scope;
+
+  // Inline Edit form (v0.2.17-3) — opens a <details> so the page stays compact by default.
+  const editForm = f.canEdit
+    ? `<details style="margin-top:1.5rem">` +
+      `<summary style="cursor:pointer;font-weight:500">Edit this note</summary>` +
+      `<form method="post" action="/ui/facts/${encodeURIComponent(f.id)}/edit" style="margin-top:8px">` +
+      `<textarea name="body" rows="12" required style="width:100%;font-family:inherit;font-size:0.95em">${escapeHtml(f.body)}</textarea>` +
+      `<p style="margin:6px 0"><button type="submit">Save changes</button> ` +
+      `<span class="muted">Replaces the body in place. Title, scope, tags unchanged.</span></p>` +
+      `</form></details>`
+    : "";
+
+  // Inline Move form (v0.2.17-3) — dropdown of writable scopes, excluding the current one.
+  const moveForm = f.canEdit && f.writableScopes && f.writableScopes.length > 0
+    ? `<details style="margin-top:1rem">` +
+      `<summary style="cursor:pointer;font-weight:500">Move to a different scope</summary>` +
+      `<form method="post" action="/ui/facts/${encodeURIComponent(f.id)}/move" style="margin-top:8px">` +
+      `<select name="scope" required>` +
+      f.writableScopes
+        .map(
+          (s) =>
+            `<option value="${escapeHtml(s.scope)}">${escapeHtml(s.label)}</option>`,
+        )
+        .join("") +
+      `</select> <button type="submit">Move</button> ` +
+      `<span class="muted">Id is preserved. Markdown moves to the new scope's folder; git tracks both halves.</span>` +
+      `</form></details>`
+    : "";
+
+  // Delete form (existing; canDelete preserved for back-compat).
   const deleteForm = f.canDelete
     ? `<form method="post" action="/ui/facts/${encodeURIComponent(f.id)}/delete" ` +
       `style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #ddd" ` +
-      `onsubmit="return confirm('Permanently delete this fact? The .md file will be removed and the deletion committed to git (old content stays in git log).');">` +
+      `onsubmit="return confirm('Permanently delete this note? The .md file will be removed and the deletion committed to git (old content stays in git log).');">` +
       `<button type="submit" style="background:#a82c1c;color:#fff;border:0;padding:6px 14px;border-radius:3px;cursor:pointer">` +
-      `🗑️ Delete this fact</button>` +
+      `🗑️ Delete this note</button>` +
       `<span class="muted" style="margin-left:10px">Hard-delete: file is unlinked + git records the removal. ` +
       `Old content stays in <code>git log</code>.</span>` +
       `</form>`
     : "";
   return (
-    `<p><a href="/ui/facts">← Facts</a></p><h1>${escapeHtml(f.title)}</h1>` +
-    `<p class="muted">${escapeHtml(f.scope)} · ${escapeHtml(f.author ?? "unknown")} · ${escapeHtml(f.created ?? "")}</p>` +
+    `<p><a href="/ui/facts">← Notes</a></p><h1>${escapeHtml(f.title)}</h1>` +
+    `<p class="muted">${escapeHtml(scopeDisplay)} · ${escapeHtml(f.author ?? "unknown")} · ${escapeHtml(f.created ?? "")}</p>` +
     `<pre>${escapeHtml(f.body)}</pre>` +
     `<p class="muted">id: ${escapeHtml(f.id)} · source: ${escapeHtml(f.source ?? "—")} · tags: ${tags}</p>` +
     sourceLine +
+    editForm +
+    moveForm +
     deleteForm
   );
 }

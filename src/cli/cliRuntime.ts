@@ -9,8 +9,7 @@ import * as path from "node:path";
 
 import type { Database } from "better-sqlite3";
 
-import { loadMembership, requesterFor, type Membership } from "../access/membership";
-import { parseScope, type ScopeKind } from "../access/scope";
+import { loadMembership, requesterFor } from "../access/membership";
 import { FactIndex } from "../index/factIndex";
 import { openIndexDb, type IndexConfig } from "../index/db";
 import {
@@ -116,34 +115,7 @@ export async function buildCliContext(opts: CliContextOptions): Promise<CliConte
   };
 }
 
-/**
- * Plain-English label for a scope, computed from `members.yaml` display names. Drives the
- * grouped-by-scope rendering in `krimto notes`. Falls back to the literal `<kind>/<id>` when
- * the membership data doesn't provide a friendlier name.
- *
- *   user/me               → "Just me"          (when scope.id === viewerEmail)
- *   user/other@acme.com   → "other@acme.com"   (a teammate's personal scope an admin can see)
- *   team/backend          → "Backend team"     (when team.name is set in members.yaml)
- *                        or "team/backend"     (when no display name configured)
- *   org/acme              → "Acme"             (when org.name is set)
- *                        or "org/acme"         (when no display name)
- */
-export function scopeLabel(scope: string, viewerEmail: string, membership: Membership): string {
-  const parsed = parseScope(scope);
-  if (!parsed) return scope;
-  if (parsed.kind === "user") {
-    return parsed.id === viewerEmail ? "Just me" : parsed.id;
-  }
-  if (parsed.kind === "team") {
-    const team = membership.teams.find((t) => t.slug === parsed.id);
-    return team?.name ?? `team/${parsed.id}`;
-  }
-  // org
-  return membership.org.name ?? `org/${membership.org.slug}`;
-}
-
-/** Sort key for the grouped list — user scopes first, then team, then org (memweave precedence). */
-export function scopeSortKey(scope: string): number {
-  const k = (parseScope(scope)?.kind as ScopeKind | undefined) ?? "other";
-  return { user: 0, team: 1, org: 2, other: 3 }[k as ScopeKind | "other"] ?? 3;
-}
+// `scopeLabel` and `scopeSortKey` moved to `src/access/scopeLabels.ts` in Phase E so the web UI
+// can reuse them without pulling in this CLI-runtime module's heavy imports. Re-exported here so
+// existing callers (notes.ts) keep working.
+export { scopeLabel, scopeSortKey } from "../access/scopeLabels";
