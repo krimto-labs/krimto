@@ -193,6 +193,34 @@ try {
     const result = await runVerifyConnection(resolveDataDir());
     process.stdout.write(result.message);
     if (result.status === "none") process.exitCode = 1;
+  } else if (cmd === "editors") {
+    // `krimto editors` — one-question shortcut to add/remove editor connections (Phase B).
+    const { runEditors } = await tsImport("../src/cli/editors.ts", import.meta.url);
+    const result = await runEditors();
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "search") {
+    // `krimto search` — change the search provider (Keyword vs OpenAI) without re-running the
+    // whole setup wizard (Phase B).
+    const { runSearchSettings } = await tsImport("../src/cli/searchSettings.ts", import.meta.url);
+    const result = await runSearchSettings();
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "service") {
+    // `krimto service` — change run mode (as-needed / always-running / manual). Installs or
+    // uninstalls the platform service to match (Phase B).
+    const { runServiceCmd } = await tsImport("../src/cli/serviceCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runServiceCmd({ dataDir: resolveDataDir() });
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "reset") {
+    // `krimto reset` — disconnect from all editors + uninstall service + wipe local key store.
+    // `--wipe-notes` adds a second confirmation and moves the data dir to a trash sibling.
+    const flags = process.argv.slice(3);
+    const yes = flags.includes("--yes");
+    const wipeNotes = flags.includes("--wipe-notes");
+    const { runReset } = await tsImport("../src/cli/reset.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runReset({ dataDir: resolveDataDir(), yes, wipeNotes });
+    if (result === null) process.exitCode = 1;
   } else if (cmd === "notes") {
     // `krimto notes [query]` — read-only list of every readable note (or search results).
     const query = process.argv[3];

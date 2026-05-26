@@ -4,6 +4,46 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17-4] — 2026-05-26
+
+### Added
+
+Phase B of the v0.2.17 plan (originally deferred — landing now). Four targeted shortcut
+commands that re-run individual questions from the Phase A wizard, plus a machine-level reset.
+Each is a thin orchestrator over Phase A primitives (no new write logic).
+
+- **`krimto editors`** — change which editors are connected without re-running the whole
+  5-question wizard. Renders the checkbox prompt with currently-connected editors preselected.
+  Apply diffs the new selection against the current state: newly-checked editors get
+  `writeMcpConfig` + `applyRule`; newly-unchecked get `removeMcpConfig` + `removeRule`. Source:
+  `src/cli/editors.ts`.
+- **`krimto search`** — flip between Keyword and OpenAI without re-running setup. Patches the
+  `KRIMTO_EMBED_*` env block on each connected editor's MCP config (stdio entries only — HTTP
+  team mode carries identity via the bearer header). Verifies the OpenAI key via
+  `runSetupEmbeddings` before persisting. Source: `src/cli/searchSettings.ts`.
+- **`krimto service`** — switch run mode (as-needed / always-running / manual). Installs or
+  uninstalls the platform service (launchd / systemd / schtasks) to match. No-op when the
+  current state already matches the requested mode. Source: `src/cli/serviceCmd.ts`.
+- **`krimto reset`** — machine-level wipe of Krimto's *config*. Disconnects every editor,
+  strips standing rules from the current project, uninstalls the background service, and
+  wipes the local `keys.json`. Default-N confirmation. Critically, it does NOT touch the
+  notes folder, `members.yaml`, or the team's git history. Source: `src/cli/reset.ts`.
+- **`krimto reset --wipe-notes`** — adds a second, explicit confirm and atomically moves the
+  data dir to a timestamped trash sibling (`<dataDir>.trash-<ts>`). The notes stay on disk
+  (recoverable) until the user deletes the trash dir manually — no one-key-press data loss.
+- **`krimto reset --yes`** — skip both confirmations. For scripts and CI.
+- **Bin dispatch** adds 4 branches (`editors`, `search`, `service`, `reset`). Existing verbs
+  (`setup-remote`, `setup-embeddings`) remain unchanged.
+
+### Tests
+
+- `tests/integration/shortcuts.test.ts` — one consolidated file with one describe block per
+  command. Each tests both `applyXxx` (pure, no prompts) and `runXxx` (interactive, with
+  mocked `@inquirer/prompts`). Covers add/remove diff, key-verification injection, dryRun
+  service install, and the `--wipe-notes` trash-move path.
+
+Total suite: **540 passing**. `pnpm typecheck` + `pnpm lint` clean.
+
 ## [0.2.17-3] — 2026-05-26
 
 ### Added
