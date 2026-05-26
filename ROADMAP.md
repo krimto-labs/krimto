@@ -27,13 +27,48 @@ Krimto Cloud in v1.0.
 
 **Next (post-v0.2 onboarding polish):**
 - ✅ v0.2.6 — first-run experience: signpost banner, guided Connect page (incl. a "make it automatic" rule and a generic-client contract), empty-dashboard getting-started guide, plain nav + per-page purpose lines, and a multi-arch image.
-- Verify Codex and Gemini CLI, and ship an `npx`/stdio package + `curl | sh` installer so connecting needs no Docker build
+- ✅ v0.2.8 — `init`, `connect`, `usage`, `storage`, `verify-connection`, `setup-remote`, `setup-embeddings`, `where`, and `--help` CLI verbs; `/ui` activity panel + status panel.
+
+## v0.2.17 series — UX redesign — ✅ Shipped (`0.2.17` through `0.2.17-5`)
+
+The setup + day-to-day UX caught up to the architecture. Six commands collapse into one
+interactive wizard, the team door becomes one wizard + one join command, and the `/ui` becomes
+a notes-app instead of an engineering dashboard. See
+[docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for the design.
+
+- **`0.2.17` — Phase A — Wizard-driven onboarding.** `krimto init` is now an interactive 5-question
+  wizard (TTY) with preselected defaults; non-interactive `--yes` for CI. Self-aware rerun shows a
+  menu (refresh / change / view status / quit) on already-configured machines. `krimto status`
+  consolidates the four legacy diagnostics. New: `src/cli/{wizard,mcpConfig,service,status}.ts` +
+  `@inquirer/prompts` (MIT).
+- **`0.2.17.1` — Phase C — Team-mode wizard.** `krimto team init` (admin-side) + `krimto join
+  --server <url> --key <key>` (teammate-side) + `krimto team disband` (per-machine step-back).
+  Composes the existing v0.2 team primitives (`bootstrapAdmin`, `createTeam`, `addUser`,
+  `ApiKeyStore.issue`, `runSetupRemote`).
+- **`0.2.17-2` — Phase D — Per-note CLI.** `krimto notes [query]`, `edit <id>`, `mv <id> <scope>`,
+  `supersede <id>`, `tag <id> +new -old`. Goes through the same write Serializer + index upsert + git
+  stage pipeline as MCP writes.
+- **`0.2.17-3` — Phase E (part 1) — Notes-app `/ui` redesign.** Plain-English scope labels in the
+  notes list + detail page; inline Edit + Move forms gated by `canWrite`; new
+  `src/server/{editFact,moveFact}.ts` shared between web and CLI.
+- **`0.2.17-4` — Phase B — Shortcut commands + machine reset.** `krimto editors` / `search` /
+  `service` / `reset`. Each is a one-question shortcut over the Phase A wizard's apply step;
+  `reset --wipe-notes` uses atomic mv to a recoverable trash sibling, never `rm -rf`.
+- **`0.2.17-5` — Phase E (part 2) — `/ui/settings` consolidation.** Engineering panels (How
+  Krimto works, Behind the scenes, Status dots, Recent activity, quick links) relocate to a
+  dedicated `/ui/settings` page so `/ui/facts` stays notes-focused.
+
+Cumulative: +23 source files, +9 test files, +144 tests. No architecture changes — pure CLI/web
+surface evolution over the v0.2 storage + index + access layers.
 
 ## v0.3 — Humans on top of git
 
-- Full seven-page web UI (browse, search, fact detail, pull requests, team management, API keys, settings)
+Remaining items that didn't ship in the v0.2.17 series:
+
 - Real human sign-in (OAuth) on top of the v0.2 API-key session scaffold
-- Pull-request approval flow for member-edited facts
+- Pull-request approval flow for member-edited facts in shared scopes (team / org)
+- Verified Codex and Gemini CLI MCP-config auto-wiring (Phase A wires Cursor + Claude Code only;
+  the other two still print a manual snippet)
 
 ## v1.0 — Krimto Cloud
 

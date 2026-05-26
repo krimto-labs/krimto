@@ -9,14 +9,27 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2.17** surface. The whole v0.2.16 feature set (markdown-in-git
-> storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git
-> sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI) is still here — plus
-> the new **one-command interactive setup wizard** that absorbs `connect`, `init`, `setup-remote`,
-> and `setup-embeddings` into a single flow with preselected defaults and inline explanations. See
-> [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and
-> [docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for what each
-> release adds.
+> **Where we are:** the **v0.2.17 series** (`0.2.17` through `0.2.17-5`) is fully shipped. Everything
+> from v0.2.16 (markdown-in-git storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced
+> access, two-way git sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI)
+> is still here, plus a substantial UX redesign on top. What's new in the v0.2.17 series:
+>
+> - **One-command interactive setup wizard** (`krimto init`) — five questions with preselected
+>   defaults; absorbs `connect`, `init`, `setup-remote`, and `setup-embeddings` into one flow.
+> - **Team-mode wizard** (`krimto team init` / `krimto join` / `krimto team disband`) — admins
+>   onboard their team in one command; teammates join with a single line from a DM template.
+> - **Per-note CLI** (`krimto notes` / `edit` / `mv` / `supersede` / `tag`) — browse, search,
+>   and edit notes from the terminal without opening the browser.
+> - **Settings shortcuts** (`krimto editors` / `search` / `service` / `reset`) — change one
+>   thing without re-running the whole wizard. `reset` cleanly disconnects + uninstalls; `--wipe-notes`
+>   moves data to a recoverable trash sibling, never `rm -rf`.
+> - **Notes-app `/ui`** — plain-English scope labels (Just me / Team name / Org name), inline
+>   Edit + Move + Delete on every note, and a consolidated **Settings** page for the engineering
+>   panels.
+>
+> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and
+> [docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for the design
+> rationale and what each release added.
 
 ## Try it in 90 seconds (solo, no account)
 
@@ -124,37 +137,57 @@ Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the 
 commands print clean, sectioned output with ✅ / ⚠️ / 🟢 status indicators and copy-paste shell
 commands. Grouped by purpose:
 
-**Get connected**
+**Get connected (start here)**
 
 | Command | What it does |
 |---|---|
+| `init` | Interactive setup wizard — five questions, preselected defaults. Connects detected editors, applies the standing rule, optionally installs a background service. `--yes` skips prompts; legacy `--all` / `--minimal` still work. |
 | `serve` | Start the HTTP server (port 8080) + browser `/ui` dashboard |
-| `connect` | Print copy-paste config for Claude Code & Cursor |
-| `init [--all]` | Switch this project to AUTO MODE (auto-detects editor; `--all` writes every file) |
-| `uninit` | Switch back to DEFAULT MODE — cleanly removes the rule |
+| `connect` | Print copy-paste config for Claude Code & Cursor (manual path) |
+| `uninit` | Strip the standing rule from this project's rules files |
 
-**Learn**
-
-| Command | What it does |
-|---|---|
-| `usage` | Show the five `krimto_*` tools with chat examples for both modes |
-| `storage` | Explain where Krimto keeps your data (markdown / git / index) |
-| `where` | Print the Krimto data directory |
-
-**Manage facts**
+**Daily use** (v0.2.17-2 Phase D)
 
 | Command | What it does |
 |---|---|
-| `rm <id>` | Delete a fact (file + index + git deletion commit). Refuses while a server is running on the data dir |
-| `reindex` | Rebuild `index.db` from the markdown files (fixes orphans left by manual `rm` of .md files) |
+| `notes [query]` | List notes grouped by plain-English scope (`Just me` / team name / org name). With a query: ranked search via `krimto_recall`. |
+| `edit <id>` | Open the fact's `.md` in `$EDITOR`; reindexes on save. Validates frontmatter; restores immutable fields. |
+| `mv <id> <scope>` | Move a note between scopes (id preserved). Refuses if `canWrite` fails on either side. `user/me` resolves to the caller's identity. |
+| `supersede <id>` | Replace a note with a new version. Old version stays in git history + index (hidden from recall). |
+| `tag <id> +new -old ...` | Add or remove tags via frontmatter rewrite. Lowercase kebab-case enforced. |
+
+**Team mode** (v0.2.17.1 Phase C)
+
+| Command | What it does |
+|---|---|
+| `team init` | Admin-side wizard: admin email, team slug, optional git remote, initial teammates. Prints the admin key + per-teammate keys + a copy-paste DM template. |
+| `join --server <url> --key <key>` | Teammate-side: detects editors, writes HTTP MCP config with the bearer header + the standing rule. |
+| `team disband [--yes]` | Per-machine step-back to solo mode: rewrites HTTP MCP entries as stdio. Notes / `members.yaml` / git history untouched. |
+
+**Change settings** (v0.2.17-4 Phase B)
+
+| Command | What it does |
+|---|---|
+| `editors` | Add or remove editor connections (checkbox prompt with current state preselected). |
+| `search` | Flip between Keyword and OpenAI search. Verifies the OpenAI key before persisting. |
+| `service` | Switch run mode (as-needed / always-running / manual). Installs or uninstalls the platform service. |
+| `reset [--yes] [--wipe-notes]` | Disconnect from all editors + uninstall service + wipe local keys. `--wipe-notes` atomically moves the data dir to a timestamped trash sibling (recoverable). |
 
 **Diagnose**
 
 | Command | What it does |
 |---|---|
-| `verify-connection` | Is my agent actually calling Krimto? (live status + last 5 calls) |
-| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push |
-| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config |
+| `status` | One-screen consolidator (v0.2.17): connections, storage, optional add-ons, recent activity, hijack warning. |
+| `verify-connection` / `where` / `storage` / `usage` | Legacy verbs — still work, point at `status` for the consolidated view. |
+| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push. |
+| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config. |
+
+**Storage**
+
+| Command | What it does |
+|---|---|
+| `rm <id>` | Delete a fact (file + index + git deletion commit). Refuses while a server holds the lock. |
+| `reindex` | Rebuild `index.db` from the markdown files (fixes orphans left by manual `rm` of .md files). |
 
 **Other**
 
@@ -299,11 +332,14 @@ stuck pull is reported at `/health/ready` under `git_sync` (it never blocks read
 When an agent saves a personal note, point it at `user/me` — the server resolves that to the caller's
 own scope, so facts never land in an unreadable scope.
 
-**Inviting teammates (org admins).** Open `http://localhost:8080/ui/admin` (or use the
-admin REST API: `POST /admin/members`, `POST /admin/keys`, `POST /admin/teams`,
-`PATCH /admin/teams/:slug`, all bearer-authed and org-admin-only) to add members, manage teams, and
-issue/revoke keys — no file edits or restarts. `KRIMTO_BOOTSTRAP_ADMIN` only makes the **first** admin;
-add later admins/members through the admin surface.
+**Inviting teammates (org admins).** Easiest path: `npx @krimto-labs/krimto team init` — interactive
+wizard that bootstraps the admin, creates the team, issues per-teammate keys, optionally wires a
+shared git remote, and prints a copy-paste DM template ending with `krimto join --server <url> --key
+<key>` for each teammate. The browser admin panel (`/ui/admin`) and the admin REST API
+(`POST /admin/members`, `POST /admin/keys`, `POST /admin/teams`, `PATCH /admin/teams/:slug`, all
+bearer-authed and org-admin-only) are still there for live edits — no file edits or restarts.
+`KRIMTO_BOOTSTRAP_ADMIN` only makes the **first** admin; add later admins/members through the
+admin surface.
 
 ### Option C — Docker (HTTP + bearer auth, containerized)
 
@@ -338,22 +374,33 @@ docker run -d --name krimto -p 8080:8080 \
 When the HTTP server is running, open `http://localhost:8080/ui`. In local mode (no
 `KRIMTO_BOOTSTRAP_ADMIN`), there's no login. In team mode, sign in with any Krimto API key.
 
-The dashboard shows:
+Nav: **Memory** · **Connect** · **Keys** · **Settings** · *Team* (admins only) · *Logout*.
 
-- **How Krimto works** — personal → team → org explainer for first-time users.
-- **Behind the scenes — your data, your files** — names the data folder; reminds you it's just
-  markdown in git that you can open in any editor.
-- **Status** — green/gold/red dots for the two optional add-ons (git remote sync; semantic embeddings).
-- **Recent activity** — last 5 MCP tool calls (tool, detail, caller, relative timestamp). Critical
-  for diagnosing "did my agent actually search?" without grepping stderr.
-- **Fact list / detail** — browse and search the facts you're allowed to see; the detail page shows
-  the absolute source-file path so you can open the underlying `.md` in any editor.
-- **API keys** — issue/revoke your own keys (team mode).
-- **Team admin** (`/ui/admin`, org admins only) — add members, manage teams, issue keys for others.
+**`/ui/facts` (Memory)** — focused on the notes:
+
+- **Plain-English scope labels** — `Just me` / your team's display name / your org's display name,
+  computed from `members.yaml` (falls back to the literal `<kind>/<id>` when no name configured).
+- **Inline Edit, Move, Delete** on every note's detail page when you have `canWrite` on its scope.
+  Edit replaces the body; Move drops down every scope you can write to; Delete is git-tracked.
+- **Search box + scope cards + flat notes list** — newest first, capped at 50.
+- **Hijack warning** — shown when 3+ recalls land with 0 writes in 5min (signature of an editor's
+  built-in memory intercepting "remember X"). Points at `krimto init` to refresh the standing rule.
+- **One-line activity blurb** that links to `/ui/settings` for the full log.
+
+**`/ui/settings`** — engineering panels in one place: how Krimto works, where your data lives
+(markdown/git/index explainer), status dots for the optional add-ons, recent MCP-tool-call log,
+quick links to keys / connect / team admin.
+
+**`/ui/keys`** — issue or revoke your own API keys (team mode).
+
+**`/ui/connect`** — copy-paste config for any MCP client + the always-use standing rule.
+
+**`/ui/admin`** (org admins only) — invite teammates, manage teams, issue keys for others.
 
 The UI reuses the same access control as the MCP tools — you only ever see what you can read. Set
-`KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random per-boot secret is
-used). The UI is read-only for facts; editing with a review/approval flow lands in v0.3.
+`KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random per-boot secret
+is used). Inline Edit/Move/Delete shipped in v0.2.17-3; the formal review/approval flow for shared
+scopes still lands in v0.3.
 
 ## The eight promises (current status)
 
@@ -365,7 +412,7 @@ used). The UI is read-only for facts; editing with a review/approval flow lands 
 | 4 | Attribution baked into every fact | ✓ v0.2 |
 | 5 | Self-hostable, single Docker | ✓ v0.2 — published multi-arch image at `ghcr.io/krimto-labs/krimto`; also `npx krimto serve` (no Docker needed) and `pnpm dev` |
 | 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
-| 7 | Web interface for humans, on top of git | ✓ v0.2.8 — `/ui` with browse/search, fact detail (with source-file path), status panel, recent-activity feed, API keys, team admin; full editing + PR approval in v0.3 |
+| 7 | Web interface for humans, on top of git | ✓ v0.2.8 + v0.2.17 — `/ui` with browse/search, fact detail, plain-English scope labels, inline Edit/Move/Delete, a dedicated `/ui/settings` consolidator, API keys, team admin. Formal PR-approval flow lands in v0.3. |
 | 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |
 
 ## How Krimto compares
@@ -383,7 +430,9 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 
 ## Roadmap
 
-`v0.2` (teams, today) → `v0.3` (web UI) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md).
+`v0.2` (teams) → `v0.2.17` series (UX redesign — wizards, per-note CLI, notes-app `/ui` — fully
+shipped) → `v0.3` (OAuth + PR approval flow) → `v1.0` (Krimto Cloud). See
+[ROADMAP.md](ROADMAP.md) for the per-release breakdown.
 
 ## License
 
