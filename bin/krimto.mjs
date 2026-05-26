@@ -23,9 +23,14 @@ try {
     const res = await runInit(process.cwd(), { all });
     if (res.written.length === 0) {
       const why = res.detected
-        ? `(detected: ${res.considered.join(", ")}). Re-run with --all to also write the others.`
+        ? ` (detected: ${res.considered.join(", ")}). Re-run with --all to also write the others.`
         : "";
-      process.stderr.write(`krimto: agent rules already up to date — nothing to change. ${why}\n`);
+      process.stderr.write(
+        `krimto: agent rules already up to date — nothing to change.${why}\n` +
+          "\n" +
+          "To remove the rule entirely: run `npx @krimto-labs/krimto uninit`\n" +
+          "  (cleanly strips the rule block; deletes files that held only it).\n",
+      );
     } else {
       const detectionLine = res.detected
         ? `Detected editor signals in this project — writing only the matching rule files.\n` +
@@ -42,9 +47,12 @@ try {
           "agent to call krimto_recall before tasks and krimto_write when you say \"remember\".\n" +
           "Existing content was preserved; running `init` again is a no-op.\n" +
           "\n" +
-          "To remove the rule: delete the block between <!-- krimto:start --> and\n" +
-          "<!-- krimto:end --> in each file above. Nothing else in those files will be affected.\n" +
-          "(Or run `krimto uninit` to remove the rule from every file.)\n" +
+          "To remove the rule later: run `npx @krimto-labs/krimto uninit`\n" +
+          "  (cleanly strips the marker-delimited block from each file above, and deletes\n" +
+          "   files that held only our rule; idempotent — safe to run more than once).\n" +
+          "\n" +
+          "Manual alternative: delete the block between <!-- krimto:start --> and\n" +
+          "<!-- krimto:end --> in each file above. Nothing else will be affected.\n" +
           "\n" +
           "Restart your editor so the rule takes effect.\n",
       );

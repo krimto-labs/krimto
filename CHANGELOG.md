@@ -4,6 +4,16 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.13] — 2026-05-26
+
+### Fixed
+- **`krimto init` now surfaces `krimto uninit` clearly** in both branches. Before, the no-op
+  message (*"agent rules already up to date — nothing to change"*) didn't mention `uninit` at all,
+  and the success branch buried it in a parenthetical at the bottom. Now both branches name
+  `npx @krimto-labs/krimto uninit` as the canonical removal path, with `<!-- krimto:start -->` /
+  `<!-- krimto:end -->` block deletion as the manual alternative. Run-it-twice users can now
+  discover `uninit` without reading the README.
+
 ## [0.2.12] — 2026-05-26
 
 ### Fixed

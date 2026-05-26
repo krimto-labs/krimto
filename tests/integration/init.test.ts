@@ -118,4 +118,18 @@ describe("krimto init (bin dispatch)", () => {
     expect(stderr).toContain("<!-- krimto:start -->");
     expect(stderr).toContain("<!-- krimto:end -->");
   }, 30000);
+
+  it("surfaces `krimto uninit` prominently on success", async () => {
+    const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
+    expect(stderr).toContain("npx @krimto-labs/krimto uninit");
+    expect(stderr).toContain("Manual alternative");
+  }, 30000);
+
+  it("mentions `krimto uninit` on the no-op path too (so a re-run discovers it)", async () => {
+    // First run writes the rule. Second run is a no-op.
+    await exec(process.execPath, [BIN, "init"], { cwd: dir });
+    const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
+    expect(stderr).toContain("already up to date");
+    expect(stderr).toContain("npx @krimto-labs/krimto uninit");
+  }, 30000);
 });
