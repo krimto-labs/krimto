@@ -4,6 +4,31 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.18] — 2026-05-26
+
+Consolidated npm release of the entire v0.2.17 development series — the prerelease tags
+`0.2.17`, `0.2.17.1`, `0.2.17-2`, `0.2.17-3`, `0.2.17-4`, and `0.2.17-5` were internal phase
+markers; this is the single SemVer-clean version that ships to the npm registry.
+
+What's in it (already detailed below, per phase):
+- **Phase A** — Wizard-driven `krimto init` (5 questions, preselected defaults, `--yes` for CI).
+- **Phase B** — Shortcut commands: `editors` / `search` / `service` / `reset` (`--wipe-notes` uses
+  atomic mv to a recoverable trash sibling, never `rm -rf`).
+- **Phase C** — Team-mode wizard: `team init` (admin) + `join` (teammate) + `team disband` (per-machine step-back).
+- **Phase D** — Per-note CLI: `notes` / `edit` / `mv` / `supersede` / `tag` — daily editing from
+  the terminal without opening the browser.
+- **Phase E** — Notes-app `/ui`: plain-English scope labels (Just me / team name / org name),
+  inline Edit + Move + Delete on every note, dedicated `/ui/settings` page consolidating the
+  engineering panels.
+
+Plus the `edit`/`supersede` `spawnEditor` bug fix (the `execFile` + bad pipe statement that
+crashed Node after the file was edited).
+
+23 new source files, 9 new test files, suite grew 399 → 543 tests. `@inquirer/prompts` (MIT)
+is the only new runtime dependency. No architecture changes — pure CLI/web surface evolution
+over the v0.2 storage + index + access layers. See the per-phase entries below for the full
+detail.
+
 ## [0.2.17-5] — 2026-05-26
 
 ### Added

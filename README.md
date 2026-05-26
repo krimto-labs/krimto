@@ -9,10 +9,11 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** the **v0.2.17 series** (`0.2.17` through `0.2.17-5`) is fully shipped. Everything
-> from v0.2.16 (markdown-in-git storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced
-> access, two-way git sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI)
-> is still here, plus a substantial UX redesign on top. What's new in the v0.2.17 series:
+> **Where we are:** **v0.2.18** is the current published release — a consolidated UX redesign over
+> the v0.2.16 storage / index / access layers (which are all unchanged). Everything from v0.2.16
+> (markdown-in-git storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced access,
+> two-way git sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI) is still
+> here, plus a substantial UX redesign on top. What's new in v0.2.18:
 >
 > - **One-command interactive setup wizard** (`krimto init`) — five questions with preselected
 >   defaults; absorbs `connect`, `init`, `setup-remote`, and `setup-embeddings` into one flow.
@@ -430,9 +431,9 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 
 ## Roadmap
 
-`v0.2` (teams) → `v0.2.17` series (UX redesign — wizards, per-note CLI, notes-app `/ui` — fully
-shipped) → `v0.3` (OAuth + PR approval flow) → `v1.0` (Krimto Cloud). See
-[ROADMAP.md](ROADMAP.md) for the per-release breakdown.
+`v0.2` (teams) → `v0.2.18` (UX redesign — wizards, per-note CLI, notes-app `/ui` — published) →
+`v0.3` (OAuth + PR approval flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the
+per-release breakdown.
 
 ## License
 
