@@ -7,7 +7,26 @@ import process from "node:process";
 import { tsImport } from "tsx/esm/api";
 
 try {
-  const cmd = process.argv[2];
+  // Two-word command support (v0.2.17.1): `team init`, `team disband`. Collapse argv[2]+argv[3]
+  // into one cmd string when argv[2] is one of the namespaced verbs.
+  const rawCmd = process.argv[2];
+  const cmd =
+    rawCmd === "team" && typeof process.argv[3] === "string"
+      ? `team ${process.argv[3]}`
+      : rawCmd;
+
+  // Guard: `krimto team` alone (or with an unknown subverb) shouldn't fall through to the stdio
+  // MCP server. Print usage and exit instead.
+  const knownTeamCmds = ["team init", "team disband"];
+  if (rawCmd === "team" && !knownTeamCmds.includes(cmd)) {
+    process.stderr.write(
+      "Usage: krimto team <init|disband>\n" +
+        "  init     Set up team mode (admin + members + git remote)\n" +
+        "  disband  Step back to solo mode on this machine\n",
+    );
+    process.exit(2);
+  }
+
   if (cmd === "--help" || cmd === "-h" || cmd === "help") {
     // `krimto --help` — surface every subcommand so a user who didn't read the README can still
     // discover them. Version is read from the server module so it never drifts from KRIMTO_VERSION.
@@ -81,6 +100,40 @@ try {
       await runInitWizard(process.cwd());
       // The wizard prints its own summary; nothing more to do here.
     }
+  } else if (cmd === "team init") {
+    // `krimto team init` — admin-side team-mode wizard (v0.2.17.1). Reads `process.cwd()` so it
+    // honors the project's data dir override (KRIMTO_DATA via resolveDataDir).
+    const { runTeamInit } = await tsImport("../src/cli/teamInit.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runTeamInit({ dataDir: resolveDataDir() });
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "team disband") {
+    // `krimto team disband` — per-machine step-back: rewrites HTTP MCP entries as stdio. Notes
+    // and team's git state are untouched.
+    const flags = process.argv.slice(4);
+    const yes = flags.includes("--yes");
+    const { runTeamDisband } = await tsImport("../src/cli/teamDisband.ts", import.meta.url);
+    const result = await runTeamDisband({ yes });
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "join") {
+    // `krimto join --server <url> --key <key>` — teammate-side: writes the HTTP MCP entry +
+    // standing rule into each detected editor. Flags are required.
+    const flags = process.argv.slice(3);
+    const serverIdx = flags.indexOf("--server");
+    const keyIdx = flags.indexOf("--key");
+    const server = serverIdx >= 0 ? flags[serverIdx + 1] : undefined;
+    const key = keyIdx >= 0 ? flags[keyIdx + 1] : undefined;
+    if (!server || !key) {
+      process.stderr.write(
+        "Usage: krimto join --server <url> --key <krm_live_...>\n" +
+          "  Example:\n" +
+          "    krimto join --server http://maria-mbp:8080 --key krm_live_abc...\n",
+      );
+      process.exit(2);
+    }
+    const { runJoin } = await tsImport("../src/cli/join.ts", import.meta.url);
+    const result = await runJoin({ server, key });
+    if (result === null) process.exitCode = 1;
   } else if (cmd === "uninit") {
     // `krimto uninit` — remove the always-use-Krimto rule from this project's rules files,
     // flipping the project back from AUTO MODE to DEFAULT MODE.

@@ -4,6 +4,50 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17.1] — 2026-05-26
+
+### Added
+
+Phase C of the v0.2.17 plan — the team-mode wizard (`docs/krimto-v0.2.17-maria-journey.html`
+§05). The Phase A wizard pattern (preselected defaults + inline explanations) extended to
+the team door, so admins onboard their team with the same UX shape they already learned.
+
+- **`krimto team init`** — interactive admin-side wizard. Asks: admin email (defaults to
+  `git config user.email`), team slug, optional team display name, optional git remote URL,
+  initial teammate emails (comma-separated). Composes existing primitives — `bootstrapAdmin`,
+  `addUser`, `createTeam`, `ApiKeyStore.issue`, `runSetupRemote` — into one apply step. Prints
+  the admin key + per-teammate keys + a copy-paste DM template ending with the
+  `krimto join --server <host> --key <key>` command. Source: `src/cli/teamInit.ts`.
+- **`krimto join --server <url> --key <key>`** — teammate-side: detects this machine's editors,
+  writes an HTTP-transport MCP entry pointing at the team server with a `Bearer` header, and
+  applies the standing rule. Reuses Phase A's `writeMcpConfig` so the JSON-merge idempotency
+  carries over. When multiple editors are detected, asks once which to wire; with one detected
+  it just goes. `normalizeServerUrl` accepts `host:port`, `http://host:port`, or `.../mcp` and
+  always lands on the canonical `<base>/mcp` shape. Source: `src/cli/join.ts`.
+- **`krimto team disband`** — per-machine step-back from team mode to solo. Rewrites each
+  editor's HTTP MCP entry as stdio (with the user's identity); leaves notes, `members.yaml`,
+  keys, and the team's git remote untouched. The narrower-scope sibling to a future
+  `krimto reset` (Phase B). Pass `--yes` to skip the confirm prompt. Source:
+  `src/cli/teamDisband.ts`.
+- **Shared prompt helpers** — extracted `WizardIO` + `defaultIO` + `isExitPrompt` into a new
+  `src/cli/promptHelpers.ts` so the four wizards (init, team init, join, team disband) share
+  one I/O contract and one Ctrl-C-detection rule. `src/cli/wizard.ts` re-exports `WizardIO`
+  for back-compat.
+- **Two-word command dispatch** in `bin/krimto.mjs`: `team init` and `team disband` are now
+  resolved by collapsing `argv[2]+argv[3]`. `krimto team` (bare) prints usage. The `join` verb
+  is single-word and reads `--server` + `--key` flags.
+
+### Tests
+
+- `tests/integration/team-init.test.ts` — apply-step yaml/keys assertions, idempotency, server
+  host inference, and the full interactive flow with mocked prompts (Ctrl-C path included).
+- `tests/integration/team-join.test.ts` — URL normalization, HTTP entry shape, bearer header,
+  invalid-key guard, Claude Code dry-run, and the multi-editor checkbox flow.
+- `tests/integration/team-disband.test.ts` — HTTP-to-stdio rewrite, multi-server preservation,
+  no-change for already-solo editors, confirm gate.
+
+Total suite: **493 passing**.
+
 ## [0.2.17] — 2026-05-26
 
 ### Added

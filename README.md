@@ -54,8 +54,10 @@ what your agent has been calling.
 `npx @krimto-labs/krimto serve` (defaults to port 8080), or Docker:
 `docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest`.
 
-**Want to bring teammates in?** `krimto team init` (Phase C of v0.2.17, ships in v0.2.17.2),
-or stick with the v0.2.16 path: restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com`.
+**Want to bring teammates in?** `krimto team init` walks you through it (admin email + team slug
++ optional git remote + teammate emails). Each teammate runs `krimto join --server <url> --key
+<key>` from the DM template the wizard prints. Step back any time with `krimto team disband`
+(notes are preserved). All shipped in v0.2.17.1.
 
 **Power-user / CI:** `npx @krimto-labs/krimto init --yes` skips all prompts and applies
 defaults non-interactively. `--all` and `--minimal` keep their v0.2.16 meaning.

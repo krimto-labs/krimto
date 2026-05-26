@@ -7,14 +7,7 @@
 
 import { checkbox, confirm, password, select } from "@inquirer/prompts";
 
-/**
- * `@inquirer/prompts` doesn't re-export `ExitPromptError` from `@inquirer/core`, so we sniff by
- * the error's `name` field. This is exactly how the underlying class identifies itself, so the
- * check is stable across @inquirer versions.
- */
-function isExitPrompt(e: unknown): boolean {
-  return e instanceof Error && e.name === "ExitPromptError";
-}
+import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
 import {
   applyWizardAnswers,
@@ -39,17 +32,9 @@ const EDITOR_LABEL: Record<EditorKind, string> = {
   "gemini-cli": "Gemini CLI",
 };
 
-export interface WizardIO {
-  /** stdout writer. Tests inject a buffer; production uses `process.stdout.write`. */
-  out: (s: string) => void;
-  /** stderr writer. */
-  err: (s: string) => void;
-}
-
-const defaultIO: WizardIO = {
-  out: (s) => process.stdout.write(s),
-  err: (s) => process.stderr.write(s),
-};
+// WizardIO and defaultIO live in `./promptHelpers` so every wizard shares the same contract.
+// Re-exported here so external consumers (e.g. tests importing from `./wizard`) keep working.
+export type { WizardIO } from "./promptHelpers";
 
 export interface RunWizardOptions extends ApplyOptions {
   io?: WizardIO;
