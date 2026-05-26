@@ -4,6 +4,58 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17-2] — 2026-05-26
+
+### Added
+
+Phase D of the v0.2.17 plan — the per-note CLI commands (`docs/krimto-v0.2.17-maria-journey.html`
+§04 "Door 2"). Lets a terminal-resident user list, edit, move, supersede, and tag notes without
+opening the browser dashboard. Each command wraps existing internals; there's no new write
+logic — just a CLI presentation over the canonical pipeline.
+
+- **`krimto notes [query]`** — read-only listing. With no args: every readable note grouped by
+  plain-English scope label (`Just me` / team name / org name from `members.yaml`). With a
+  query arg: `krimtoRecall` ranked results. SQLite WAL allows concurrent readers, so this is
+  safe to run while a server is running. Source: `src/cli/notes.ts`.
+- **`krimto edit <id>`** — opens the fact's `.md` in `$EDITOR`; on save, validates frontmatter,
+  restores immutable fields (id / scope / created / author), bumps `updated`, reindexes, and
+  stages the change in git. Refuses if a Krimto server holds the lock. Source: `src/cli/edit.ts`.
+- **`krimto mv <id> <new-scope>`** — moves a fact between scopes while preserving its id. `user/me`
+  resolves to the caller's identity. Refuses if `canWrite` fails on either side. Goes through the
+  write Serializer so the file move + index update + git staging are atomic. Source: `src/cli/mv.ts`.
+- **`krimto supersede <id>`** — opens `$EDITOR` with the old body, then calls the existing
+  `krimtoSupersede` MCP tool function. Old version stays in git history (and in the index, hidden
+  from recall by the existing `supersededIds` filter). Source: `src/cli/supersedeCmd.ts`.
+- **`krimto tag <id> +new -old ...`** — add or remove tags via frontmatter rewrite. Validates the
+  lowercase-kebab-case rule (same as `validateFrontmatter`); refuses the whole batch on the first
+  invalid tag instead of half-applying. Source: `src/cli/tag.ts`.
+- **Shared CLI runtime** — extracted `buildCliContext` + `getLockHolder` + `scopeLabel` into a new
+  `src/cli/cliRuntime.ts`. Five commands share the setup (open SQLite index, load membership,
+  build `ToolContext`, optionally wire `CommitBatcher`) instead of each copying 30 lines from
+  `deleteFact.ts`. Existing CLI commands (`rm`, `reindex`) can migrate to this later if useful.
+
+### Tests
+
+- `tests/integration/per-note-cli.test.ts` — one consolidated file with one describe per command.
+  Each test seeds facts via `krimtoWrite` (the canonical write path) so the SQLite index,
+  markdown directory, and git repo are consistent.
+- `notes`: empty store, grouped listing, search query, no-match path.
+- `edit`: editorImpl injection for non-TTY testing, `updated`-bump verification, no-change path,
+  not-found path, immutable-fields-restored path.
+- `mv`: cross-scope move with id preservation, invalid-scope rejection, same-scope no-change,
+  `user/me` alias resolution.
+- `supersede`: replacement with new id, no-change path.
+- `tag`: add/remove specs, malformed spec rejection, kebab-case validation, no-change.
+
+Total suite: **512 passing**.
+
+### Refactors (no behavior change)
+
+- `src/cli/edit.ts` and `src/cli/supersedeCmd.ts` now also accept an `editorImpl` callback option
+  alongside the `editor` command-string. Tests inject the callback; production omits it and falls
+  back to the execFile-based default. Lets us cover the editor flow without spawning a real
+  editor in CI.
+
 ## [0.2.17.1] — 2026-05-26
 
 ### Added

@@ -193,6 +193,85 @@ try {
     const result = await runVerifyConnection(resolveDataDir());
     process.stdout.write(result.message);
     if (result.status === "none") process.exitCode = 1;
+  } else if (cmd === "notes") {
+    // `krimto notes [query]` — read-only list of every readable note (or search results).
+    const query = process.argv[3];
+    const { runNotes } = await tsImport("../src/cli/notes.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runNotes({
+      dataDir: resolveDataDir(),
+      identity: resolveIdentity(),
+      query: typeof query === "string" && query.length > 0 ? query : undefined,
+    });
+    process.stdout.write(result.message);
+  } else if (cmd === "edit") {
+    // `krimto edit <id>` — open the fact's .md in $EDITOR, reindex on save.
+    const id = process.argv[3];
+    if (!id) {
+      process.stderr.write("Usage: krimto edit <fact-id>\n");
+      process.exit(2);
+    }
+    const { runEdit } = await tsImport("../src/cli/edit.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runEdit({ dataDir: resolveDataDir(), identity: resolveIdentity(), id });
+    process.stdout.write(result.message);
+    if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
+  } else if (cmd === "mv") {
+    // `krimto mv <id> <new-scope>` — move a fact between scopes; id is preserved.
+    const id = process.argv[3];
+    const newScope = process.argv[4];
+    if (!id || !newScope) {
+      process.stderr.write(
+        "Usage: krimto mv <fact-id> <new-scope>\n  e.g. krimto mv fct_01H... team/backend\n",
+      );
+      process.exit(2);
+    }
+    const { runMv } = await tsImport("../src/cli/mv.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runMv({
+      dataDir: resolveDataDir(),
+      identity: resolveIdentity(),
+      id,
+      newScope,
+    });
+    process.stdout.write(result.message);
+    if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
+  } else if (cmd === "supersede") {
+    // `krimto supersede <id>` — open $EDITOR for a new body, then call krimtoSupersede.
+    const id = process.argv[3];
+    if (!id) {
+      process.stderr.write("Usage: krimto supersede <fact-id>\n");
+      process.exit(2);
+    }
+    const { runSupersede } = await tsImport("../src/cli/supersedeCmd.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runSupersede({
+      dataDir: resolveDataDir(),
+      identity: resolveIdentity(),
+      id,
+    });
+    process.stdout.write(result.message);
+    if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
+  } else if (cmd === "tag") {
+    // `krimto tag <id> +new -old ...` — add or remove tags via frontmatter rewrite.
+    const id = process.argv[3];
+    const changes = process.argv.slice(4);
+    if (!id || changes.length === 0) {
+      process.stderr.write(
+        "Usage: krimto tag <fact-id> +tag1 -tag2 ...\n",
+      );
+      process.exit(2);
+    }
+    const { runTag } = await tsImport("../src/cli/tag.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runTag({
+      dataDir: resolveDataDir(),
+      identity: resolveIdentity(),
+      id,
+      changes,
+    });
+    process.stdout.write(result.message);
+    if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
   } else if (cmd === "rm" || cmd === "delete") {
     // `krimto rm <id>` — hard delete a fact (file + index + git deletion commit).
     // Refuses if a Krimto server is running on this data dir (would race on .git/ index).
