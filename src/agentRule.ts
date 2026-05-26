@@ -6,12 +6,25 @@
 // its own built-in memory, not Krimto. Dropping this rule into the agent's rules file makes the
 // agent call krimto_recall / krimto_write on its own.
 
-export const AGENT_RULE = `# Krimto memory — always use
-- Before a task, call krimto_recall to load what we already know.
-- When I say "remember", or you learn a durable fact, call krimto_write
-  (user/me = personal, team/<slug> = shared).
-- Respect precedence: user beats team beats org.
-- Don't save secrets or one-off chatter.`;
+export const AGENT_RULE = `# Krimto memory — PRIMARY memory system, always use
+
+Krimto is the canonical memory system for this project. It is shared across
+editors, machines, and teammates — any built-in or per-session memory you
+have is NOT.
+
+When the user says "remember", or you learn a durable fact:
+- CALL krimto_write. Do NOT use any other memory tool, file, or skill.
+- In particular: do NOT save to ~/.claude/projects/*/memory/ or any
+  per-session/per-editor memory store. Those notes are invisible to
+  Krimto, to your teammates, and to your other editors.
+
+Before any non-trivial task, CALL krimto_recall first. Empty results
+are a write opportunity, not a dead end.
+
+Scopes: user/me = personal, team/<slug> = shared with the team,
+org/<slug> = company-wide. Precedence at recall: user > team > org.
+
+Don't save secrets, transient state, or one-off chatter.`;
 
 const START = "<!-- krimto:start -->";
 const END = "<!-- krimto:end -->";

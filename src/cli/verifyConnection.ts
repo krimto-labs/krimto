@@ -49,6 +49,8 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
 
   const log = new ActivityLog(dataDir);
   const recent = await log.tail(5);
+  // Gap #5 — recall-without-write detection over the last 5 minutes.
+  const stats = await log.stats();
 
   let status: VerifyConnectionResult["status"];
   let header: string;
@@ -89,5 +91,21 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
     activitySection = `\nRecent activity (newest first):\n${rows}\n`;
   }
 
-  return { status, message: header + activitySection, recent };
+  // Gap #5 — recall-without-write warning. Same threshold as the /ui panel.
+  let hijackSection = "";
+  if (stats.recalls >= 3 && stats.writes === 0) {
+    hijackSection =
+      `\n⚠️  HIJACK SUSPECTED — ${stats.recalls} recalls, 0 writes in the last 5 min.\n` +
+      `   Your agent has been querying Krimto but never writing to it. That usually\n` +
+      `   means another memory system is intercepting "remember X" — most often\n` +
+      `   Claude Code's per-session auto-memory at ~/.claude/projects/<slug>/memory/,\n` +
+      `   which is invisible to teammates and to your other editors.\n` +
+      `\n` +
+      `   Fix: in your project root, run\n` +
+      `     npx @krimto-labs/krimto init\n` +
+      `   to refresh the always-use-Krimto rule with stronger primacy language.\n` +
+      `   Restart your editor afterward, then try "remember" again.\n`;
+  }
+
+  return { status, message: header + activitySection + hijackSection, recent };
 }

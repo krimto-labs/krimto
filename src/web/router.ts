@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factDetail, keysBody, newKeyBody, adminBody, howItWorksPanel, behindTheScenesPanel, statusPanel, activityPanel, hijackWarningPanel, connectPanel, gettingStartedPanel, type FactView, type StatusPanelOpts } from "./views";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -100,9 +100,12 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         }
         // Pull recent activity (best-effort — empty list when no log file yet).
         const recent = deps.ctx.activity ? await deps.ctx.activity.tail(5) : [];
+        // Gap #5 — detect the recall-without-write hijack pattern (Claude Code's auto-memory winning).
+        const stats = deps.ctx.activity ? await deps.ctx.activity.stats() : { recalls: 0, writes: 0, total: 0 };
         const body =
           howItWorksPanel() +
           behindTheScenesPanel(deps.ctx.store.dataDir()) +
+          hijackWarningPanel(stats) + // shown ONLY when threshold met; "" otherwise
           (deps.status ? statusPanel(deps.status()) : "") +
           activityPanel(recent) +
           searchBox(q) +

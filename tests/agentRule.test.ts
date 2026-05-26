@@ -7,6 +7,13 @@ describe("agentRule", () => {
     expect(AGENT_RULE).toContain("krimto_write");
   });
 
+  it("claims primacy over Claude Code's per-session auto-memory (Gap #1+#2)", () => {
+    expect(AGENT_RULE).toContain("PRIMARY memory system");
+    expect(AGENT_RULE).toContain("canonical memory system");
+    expect(AGENT_RULE).toContain("~/.claude/projects/*/memory/");
+    expect(AGENT_RULE).toContain("Do NOT use any other memory tool");
+  });
+
   it("inserts the marker-wrapped block into an empty/absent file", () => {
     const out = applyRule(null);
     expect(out).toContain("<!-- krimto:start -->");

@@ -254,6 +254,33 @@ export interface ActivityRow {
 }
 
 /**
+ * Gap #5+#6 — recall-without-write warning. When the activity log shows many recalls but no
+ * writes in the recent window, that's the signature of another memory system (Claude Code's
+ * per-session auto-memory at `~/.claude/projects/<slug>/memory/`) intercepting "remember X"
+ * before krimto_write gets a chance. Surface it to the user so they don't have to grep JSONL.
+ *
+ * Returns "" when the threshold isn't met — caller renders nothing in the healthy case.
+ */
+export function hijackWarningPanel(stats: { recalls: number; writes: number; total: number }): string {
+  // Threshold: 3+ recalls AND zero writes in the window. Below 3 it's normal "just-started" noise.
+  if (stats.recalls < 3 || stats.writes > 0) return "";
+  return (
+    `<section style="border:1px solid #c44a3a;border-left-width:4px;border-radius:6px;` +
+    `padding:1rem;margin:0 0 1rem;background:#fdf3f0">` +
+    `<h2 style="margin-top:0;color:#a82c1c">⚠️ ${stats.recalls} recalls, 0 writes — your agent may be saving facts somewhere else</h2>` +
+    `<p>Krimto received ${stats.recalls} <code>krimto_recall</code> call(s) but no writes ` +
+    `recently. That usually means another memory system is intercepting "remember X" requests — ` +
+    `most often Claude Code's per-session auto-memory at <code>~/.claude/projects/*/memory/</code>, ` +
+    `which is invisible to teammates and to your other editors.</p>` +
+    `<p><strong>Fix:</strong> in your project root, run:</p>` +
+    `<pre>npx @krimto-labs/krimto init</pre>` +
+    `<p class="muted">That refreshes the always-use-Krimto rule with stronger primacy language. ` +
+    `Restart your editor afterward, then try "remember" again.</p>` +
+    `</section>`
+  );
+}
+
+/**
  * G5 — "Recent activity" panel on /ui/facts. Shows the last few MCP tool calls so a user can see
  * at a glance whether her agent is actually hitting Krimto, and what scope/title each call touched.
  * Critical for diagnosing the silent-no-call failure mode (DEFAULT mode without the "use krimto" prefix).

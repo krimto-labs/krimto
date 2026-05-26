@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel, behindTheScenesPanel, connectPanel, factDetail, gettingStartedPanel, adminBody, statusPanel, activityPanel } from "../../src/web/views";
+import { keysBody, howItWorksPanel, behindTheScenesPanel, connectPanel, factDetail, gettingStartedPanel, adminBody, statusPanel, activityPanel, hijackWarningPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -47,7 +47,7 @@ describe("connectPanel", () => {
     expect(h).toContain("Any other MCP client");        // generic section
     expect(h).toContain("krimto_recall");               // tool names listed
     expect(h).toContain("3. Make it automatic");         // Door 3
-    expect(h).toContain("krimto_recall to load");         // the standing rule text
+    expect(h).toContain("PRIMARY memory system");         // the standing rule text (v0.2.12: stronger language)
     expect(h).toContain("CLAUDE.md");                     // where to paste the rule
     expect(h).toContain("@krimto-labs/krimto init");      // one-command make-it-automatic
     expect(h).toContain("Connected? Do these three things"); // next-step verification loop (Gap #5)
@@ -176,6 +176,25 @@ describe("activityPanel (G5)", () => {
     ]);
     expect(h).not.toContain("<script>alert(1)</script>");
     expect(h).toContain("&lt;script&gt;");
+  });
+});
+
+describe("hijackWarningPanel (Gap #5+#6)", () => {
+  it("renders nothing in the healthy case (writes > 0)", () => {
+    expect(hijackWarningPanel({ recalls: 10, writes: 2, total: 12 })).toBe("");
+    expect(hijackWarningPanel({ recalls: 0, writes: 5, total: 5 })).toBe("");
+  });
+
+  it("renders nothing below the recall threshold (< 3 recalls)", () => {
+    expect(hijackWarningPanel({ recalls: 2, writes: 0, total: 2 })).toBe("");
+  });
+
+  it("fires when 3+ recalls happened with no writes (the smoke-5 signature)", () => {
+    const h = hijackWarningPanel({ recalls: 6, writes: 0, total: 6 });
+    expect(h).toContain("6 recalls, 0 writes");
+    expect(h).toContain("saving facts somewhere else");
+    expect(h).toContain("auto-memory");
+    expect(h).toContain("npx @krimto-labs/krimto init");
   });
 });
 

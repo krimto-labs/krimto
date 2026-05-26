@@ -79,4 +79,21 @@ describe("runVerifyConnection", () => {
     const r = await runVerifyConnection(dir);
     expect(r.status).toBe("none");
   });
+
+  it("flags HIJACK SUSPECTED when many recalls landed with no writes (Gap #5)", async () => {
+    const log = new ActivityLog(dir);
+    for (let i = 0; i < 5; i++) await log.record("krimto_recall", "maria@acme.com", `try ${i}`);
+    const r = await runVerifyConnection(dir);
+    expect(r.message).toContain("HIJACK SUSPECTED");
+    expect(r.message).toContain("5 recalls, 0 writes");
+    expect(r.message).toContain("npx @krimto-labs/krimto init");
+  });
+
+  it("does NOT flag a hijack when at least one write happened recently", async () => {
+    const log = new ActivityLog(dir);
+    for (let i = 0; i < 5; i++) await log.record("krimto_recall", "maria@acme.com", `try ${i}`);
+    await log.record("krimto_write", "maria@acme.com", "user/me: a fact");
+    const r = await runVerifyConnection(dir);
+    expect(r.message).not.toContain("HIJACK SUSPECTED");
+  });
 });

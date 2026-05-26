@@ -4,6 +4,30 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] — 2026-05-26
+
+### Fixed
+- **The "memory hijack" round.** Smoke-testing in another directory revealed that Claude Code's
+  built-in per-session auto-memory was silently intercepting "remember X" intents before
+  `krimto_write` could fire — facts ended up in `~/.claude/projects/<slug>/memory/` instead of
+  Krimto, invisible to teammates and other editors. Verified end-to-end: 6 recalls, 0 writes in
+  the activity log, while the same fact landed in Claude Code's local memory. Four fixes:
+  - **Stronger `init` rule text.** The rule now opens with *"Krimto memory — PRIMARY memory
+    system, always use"*, names the competing path explicitly (*"do NOT save to
+    `~/.claude/projects/<slug>/memory/`"*), and explains why (*"those notes are invisible to
+    Krimto, teammates, and your other editors"*). Re-run `krimto init` to update an existing
+    project's CLAUDE.md / AGENTS.md / GEMINI.md / .cursor/rules/krimto.mdc.
+  - **Stronger `krimto_write` tool description.** The MCP tool description now claims primacy:
+    *"THIS IS THE CANONICAL MEMORY TOOL — use it INSTEAD of any other memory tool, local file,
+    or built-in skill."*
+  - **Empty-recall hint.** `krimto_recall` responses now carry a `hint` field when results is
+    empty, nudging the agent toward `krimto_write` instead of letting it loop on reformulated
+    queries (which was the observed failure mode: 6 recalls with different phrasings).
+  - **Recall-without-write hijack detection.** `/ui/facts` and `verify-connection` now flag the
+    smoking-gun pattern (3+ recalls, 0 writes in the last 5 min) with a clear warning naming
+    the competing system and pointing at the fix (`krimto init`). Powered by a new
+    `ActivityLog.stats()` method.
+
 ## [0.2.11] — 2026-05-26
 
 ### Fixed

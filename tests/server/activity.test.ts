@@ -63,4 +63,33 @@ describe("ActivityLog", () => {
     // Should NOT throw — activity logging must never break a tool call.
     await expect(log.record("krimto_write", "x@y.z")).resolves.toBeUndefined();
   });
+
+  it("stats() counts recalls vs writes in the recent window (Gap #5)", async () => {
+    const log = new ActivityLog(dir);
+    // Simulate the smoke-5 failure: 6 recalls, 0 writes
+    for (let i = 0; i < 6; i++) await log.record("krimto_recall", "maria@acme.com", `try ${i}`);
+    const s1 = await log.stats();
+    expect(s1).toEqual({ recalls: 6, writes: 0, total: 6 });
+
+    // After one write, the ratio shifts
+    await log.record("krimto_write", "maria@acme.com", "user/me: First fact");
+    const s2 = await log.stats();
+    expect(s2).toEqual({ recalls: 6, writes: 1, total: 7 });
+
+    // A krimto_supersede also counts as a write
+    await log.record("krimto_supersede", "maria@acme.com", "updated");
+    const s3 = await log.stats();
+    expect(s3.writes).toBe(2);
+  });
+
+  it("stats() ignores entries outside the window", async () => {
+    const log = new ActivityLog(dir);
+    // Write three entries then ask for a 1-ms window in the past — none should match.
+    await log.record("krimto_recall", "x", "old");
+    await log.record("krimto_recall", "x", "old");
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    const s = await log.stats(1, future); // window of 1ms, now is 1h from real now
+    expect(s.recalls).toBe(0);
+    expect(s.total).toBe(0);
+  });
 });

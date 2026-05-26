@@ -74,6 +74,12 @@ export interface RecallHit {
 }
 export interface RecallResult {
   results: RecallHit[];
+  /**
+   * Gap #4 — when results is empty, nudges the agent toward `krimto_write` instead of letting
+   * it loop on reformulated queries. Critical for the "remember X" intent that ended up routed
+   * to a competing memory system after a series of empty recalls.
+   */
+  hint?: string;
 }
 
 export interface ReadResult {
@@ -227,7 +233,7 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
     params: input.limit !== undefined ? { resultLimit: input.limit } : undefined,
   });
   if (ctx.activity) await ctx.activity.record("krimto_recall", ctx.requester.identity, `"${input.query}" → ${ranked.length} hit(s)`);
-  return {
+  const result: RecallResult = {
     results: ranked.map((r) => ({
       id: r.id,
       scope: r.scope,
@@ -238,6 +244,15 @@ export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promis
       updated: r.updated,
     })),
   };
+  if (result.results.length === 0) {
+    // Gap #4 — convert empty recall from a dead end into a write opportunity. Without this hint,
+    // agents tend to reformulate the query several times instead of pivoting to `krimto_write`.
+    result.hint =
+      `No Krimto facts match "${input.query}". If the user said "remember", call krimto_write to ` +
+      `save this fact to Krimto — do NOT fall back to local per-session memory ` +
+      `(~/.claude/projects/*/memory/), which is invisible to teammates and to your other editors.`;
+  }
+  return result;
 }
 
 /** Fetch one fact by id, including its full frontmatter (git history lands in Gap 08). */

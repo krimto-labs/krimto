@@ -53,6 +53,33 @@ export class ActivityLog {
     }
   }
 
+  /**
+   * Gap #5 — count calls by category within a recent window. Used to detect "many recalls, zero
+   * writes" which is the smell of another memory system (Claude Code's per-session auto-memory)
+   * intercepting "remember X" before krimto_write gets a chance.
+   */
+  async stats(windowMs: number = 5 * 60 * 1000, now: Date = new Date()): Promise<{ recalls: number; writes: number; total: number }> {
+    const since = now.getTime() - windowMs;
+    let recalls = 0;
+    let writes = 0;
+    let total = 0;
+    try {
+      const text = await fs.readFile(this.file, "utf8");
+      for (const line of text.split("\n")) {
+        if (!line) continue;
+        const entry = JSON.parse(line) as ActivityEntry;
+        const t = Date.parse(entry.timestamp);
+        if (Number.isNaN(t) || t < since) continue;
+        total++;
+        if (entry.tool === "krimto_recall") recalls++;
+        else if (entry.tool === "krimto_write" || entry.tool === "krimto_supersede") writes++;
+      }
+    } catch {
+      /* no file yet */
+    }
+    return { recalls, writes, total };
+  }
+
   /** Drop everything older than the most recent MAX_ENTRIES to keep the file bounded. */
   private async trim(): Promise<void> {
     const text = await fs.readFile(this.file, "utf8");

@@ -123,6 +123,23 @@ describe("krimto_write", () => {
   });
 });
 
+describe("krimto_recall empty-hint (Gap #4)", () => {
+  it("populates a 'no hits — call krimto_write' hint when results is empty", async () => {
+    const empty = await krimtoRecall(ctx, { query: "nothing-matches-this-yet-xyz123" });
+    expect(empty.results).toHaveLength(0);
+    expect(empty.hint).toBeDefined();
+    expect(empty.hint!).toContain("krimto_write");
+    expect(empty.hint!).toContain("~/.claude/projects/*/memory/"); // explicit primacy claim
+  });
+
+  it("omits the hint when results is non-empty", async () => {
+    await krimtoWrite(ctx, { scope: "user/alice@acme.com", title: "Stripe webhook signing", body: "verify signed_secret" });
+    const hit = await krimtoRecall(ctx, { query: "stripe webhook" });
+    expect(hit.results.length).toBeGreaterThan(0);
+    expect(hit.hint).toBeUndefined();
+  });
+});
+
 describe("krimto_recall", () => {
   it("returns ranked hits with attribution", async () => {
     await krimtoWrite(ctx, {
