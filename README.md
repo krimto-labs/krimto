@@ -9,18 +9,21 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2** surface. Here today: the markdown-in-git storage layer, the
-> `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, and the
-> MCP server over **both stdio and HTTP — the HTTP transport has `Bearer` API-key auth and
-> `/health` endpoints**. On the near-term roadmap: a single-Docker image and the web UI. We claim the
-> team-memory position now and fulfil it in the open — see [ROADMAP.md](ROADMAP.md).
+> **Where we are:** this is the **v0.2.8** surface. Here today: the markdown-in-git storage layer, the
+> `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, the MCP
+> server over **stdio + HTTP** (Bearer API-key auth on HTTP), a **published multi-arch Docker image**
+> (`ghcr.io/krimto-labs/krimto`), a **web UI** with browse/search/admin/diagnostics, and a complete
+> **CLI** (`serve`, `connect`, `init`, `usage`, `storage`, `setup-remote`, `setup-embeddings`,
+> `verify-connection`, `uninit`, `where`, `--help`). We claim the team-memory position now and fulfil
+> it in the open — see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) for what each release adds.
 
 ## Try it in 2 minutes (solo, no account)
 
-1. **Run it** (data stays in `~/.krimto`):
+1. **Run it** — one command, no clone, no Docker (data stays in `~/.krimto`):
    ```bash
-   docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest    # or, from a clone: pnpm dev
+   npx @krimto-labs/krimto serve
    ```
+   *Prefer Docker?* `docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest`
 2. **Point Claude Code at it — one line, no key:**
    ```json
    { "mcpServers": { "krimto": { "url": "http://localhost:8080/mcp" } } }
@@ -28,9 +31,10 @@ timestamp, reviewer).
    (or run `claude mcp add --transport http krimto http://localhost:8080/mcp`)
 3. Tell your agent: **"remember that our staging DB resets every Sunday."** Then ask in a *new* chat:
    **"what do you know about staging?"** — it remembers.
-4. Open **http://localhost:8080** to browse. That's your *personal* layer — Krimto's point is the
-   **team** layer: restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com` to turn on accounts and invite
-   teammates.
+4. Open **http://localhost:8080** to browse. The dashboard shows your facts, a *Status* row (git
+   remote + embeddings health), and a *Recent activity* feed (so you can see your agent calling
+   Krimto in real time). That's the *personal* layer — Krimto's point is the **team** layer:
+   restart with `KRIMTO_BOOTSTRAP_ADMIN=you@acme.com` to turn on accounts and invite teammates.
 
 ## Connect your agent
 
@@ -62,9 +66,20 @@ mode); those are best-effort and not yet individually verified.
 
 ### Make it automatic
 
-By default your agent uses Krimto only when you ask. To make it recall and save **on its own**, add a
-standing rule to your agent's rules file — Claude Code: `CLAUDE.md`; Cursor: `.cursor/rules/krimto.mdc`;
-Codex: `AGENTS.md`; Gemini CLI: `GEMINI.md`:
+By default your agent uses Krimto only when you ask ("use krimto to remember X"). One command, run
+once in your project, makes it call Krimto **on its own** (recall before tasks, write when you say
+"remember"):
+
+```bash
+npx @krimto-labs/krimto init
+```
+
+`init` auto-detects which editor you're using (`.cursor/`, `.claude/`, existing `CLAUDE.md` /
+`AGENTS.md` / `GEMINI.md`, `gemini-extension.json`) and writes the rule only into the files that
+match. Pass `--all` to write to every supported rules file. Change your mind later? Run
+`npx @krimto-labs/krimto uninit` to cleanly strip the rule (and delete files that held only it).
+
+The rule it writes:
 
 ```
 # Krimto memory — always use
@@ -76,6 +91,29 @@ Codex: `AGENTS.md`; Gemini CLI: `GEMINI.md`:
 ```
 
 The in-product **Connect** page (`/ui/connect`) shows this same rule with a copy button.
+
+### The CLI surface
+
+Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the full list. Briefly:
+
+| Command | What it does |
+|---|---|
+| (no args) | Start the stdio MCP server (default; for MCP clients to launch) |
+| `serve` | Start the HTTP server (port 8080) — `/ui` dashboard, no clone, no Docker |
+| `connect` | Print copy-paste Claude Code + Cursor config snippets |
+| `init [--all]` | Switch this project to AUTO MODE — write the always-use rule (auto-detects editor; `--all` writes every file) |
+| `uninit` | Switch back to DEFAULT MODE — remove the rule, delete files it created |
+| `usage` | Show the five `krimto_*` tools with chat examples for both modes |
+| `storage` | Explain where Krimto keeps your data (markdown / git / index), how to verify, optional add-ons |
+| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push |
+| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config |
+| `verify-connection` | Diagnose "is my agent calling Krimto?" (lock status + last 5 calls) |
+| `where` | Print the data directory |
+| `--help`, `-h` | Show the full CLI surface |
+
+The stdio entrypoint enforces a **single-writer lock** on the data dir (`.krimto/lock.json`) — two
+Krimto processes can no longer race on the same `~/.krimto`. A second `serve`/stdio launch is
+refused with a precise error pointing at the holder's PID.
 
 ## How it works
 
@@ -129,8 +167,8 @@ OpenClaw, Cline use the same shape):
 
 The first run downloads dependencies (including `better-sqlite3`, which ships prebuilt binaries), then
 starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`; run
-`npx @krimto-labs/krimto where` to print the exact path). This is the solo path; HTTP/team mode uses
-Docker (Option C) or the server below.
+`npx @krimto-labs/krimto where` to print the exact path). Want the browser dashboard too? Stop the
+stdio process and run `npx @krimto-labs/krimto serve` (Option B) — same data folder, plus `/ui`.
 
 **Make your agent actually use Krimto.** By default an editor's agent routes "remember X" to its own
 built-in memory. Run this once in your project so it calls Krimto instead:
@@ -139,8 +177,10 @@ built-in memory. Run this once in your project so it calls Krimto instead:
 npx @krimto-labs/krimto init
 ```
 
-It writes an idempotent "always use Krimto" rule into your agent's rules files (`CLAUDE.md`, `AGENTS.md`,
-`GEMINI.md`, `.cursor/rules/krimto.mdc`) — restart your editor afterward.
+It auto-detects which editor you're using and writes the idempotent "always use Krimto" rule into the
+matching rules file (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules/krimto.mdc`). Pass
+`--all` to write all four. Run `npx @krimto-labs/krimto uninit` to cleanly remove the rule later.
+Restart your editor afterward.
 
 From a clone instead of npm, swap the command for `pnpm`:
 
@@ -159,15 +199,22 @@ From a clone instead of npm, swap the command for `pnpm`:
 `KRIMTO_IDENTITY` is who the agent writes as (fact author + access scope). Stdio mode has **no network
 auth** — run it locally/trusted.
 
-### Option B — over HTTP, with bearer auth (teams)
+### Option B — over HTTP (browser dashboard + optional team auth)
 
-For a shared/networked deployment. Start the HTTP server; the first run prints an admin API key once:
+For solo with a browser UI, or a shared/networked deployment with bearer auth. **No clone, no
+Docker** — `npx` starts the HTTP server (default port 8080):
 
 ```bash
-KRIMTO_HTTP_PORT=8080 KRIMTO_BOOTSTRAP_ADMIN=you@acme.com pnpm dev
+# Solo, local-only (no auth, no login on /ui)
+npx @krimto-labs/krimto serve
+
+# Team mode (first run prints an admin API key once)
+KRIMTO_BOOTSTRAP_ADMIN=you@acme.com npx @krimto-labs/krimto serve
 # → "issued admin API key for you@acme.com (shown once): krm_live_…"
 # MCP at http://localhost:8080/mcp ; health at http://localhost:8080/health/ready
 ```
+
+(`pnpm dev` is the dev-mode equivalent — only useful when working on Krimto itself.)
 
 Then point your agent at it with that key:
 
@@ -236,12 +283,25 @@ docker run -d --name krimto -p 8080:8080 \
 
 ### Web UI (humans)
 
-When the HTTP server is running, open `http://localhost:8080/ui` and **sign in with any Krimto API
-key**. You can browse and search the facts you're allowed to see, open a fact, and manage your own API
-keys (issue / revoke). It reuses the same access control as the MCP tools, so you only ever see facts
-you can read. Set `KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random
-per-boot secret is used). The UI is read-only for facts; editing with a review/approval flow lands in
-v0.3.
+When the HTTP server is running, open `http://localhost:8080/ui`. In local mode (no
+`KRIMTO_BOOTSTRAP_ADMIN`), there's no login. In team mode, sign in with any Krimto API key.
+
+The dashboard shows:
+
+- **How Krimto works** — personal → team → org explainer for first-time users.
+- **Behind the scenes — your data, your files** — names the data folder; reminds you it's just
+  markdown in git that you can open in any editor.
+- **Status** — green/gold/red dots for the two optional add-ons (git remote sync; semantic embeddings).
+- **Recent activity** — last 5 MCP tool calls (tool, detail, caller, relative timestamp). Critical
+  for diagnosing "did my agent actually search?" without grepping stderr.
+- **Fact list / detail** — browse and search the facts you're allowed to see; the detail page shows
+  the absolute source-file path so you can open the underlying `.md` in any editor.
+- **API keys** — issue/revoke your own keys (team mode).
+- **Team admin** (`/ui/admin`, org admins only) — add members, manage teams, issue keys for others.
+
+The UI reuses the same access control as the MCP tools — you only ever see what you can read. Set
+`KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random per-boot secret is
+used). The UI is read-only for facts; editing with a review/approval flow lands in v0.3.
 
 ## The eight promises (current status)
 
@@ -251,9 +311,9 @@ v0.3.
 | 2 | Hierarchical scope (`user`/`team`/`org`) as primary primitive | ✓ v0.2 |
 | 3 | Cross-vendor SDK (MCP server + per-marketplace plugins) | ✓ MCP server over stdio + HTTP v0.2; native plugins planned |
 | 4 | Attribution baked into every fact | ✓ v0.2 |
-| 5 | Self-hostable, single Docker | ✓ v0.2 — stdio, HTTP, or **Docker** (`docker build` + `docker run`); a published pull-image is next |
+| 5 | Self-hostable, single Docker | ✓ v0.2 — published multi-arch image at `ghcr.io/krimto-labs/krimto`; also `npx krimto serve` (no Docker needed) and `pnpm dev` |
 | 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
-| 7 | Web interface for humans, on top of git | ✓ minimal v0.2 (`/ui` — login, browse/search, fact detail, API keys); full UI + PR approval in v0.3 |
+| 7 | Web interface for humans, on top of git | ✓ v0.2.8 — `/ui` with browse/search, fact detail (with source-file path), status panel, recent-activity feed, API keys, team admin; full editing + PR approval in v0.3 |
 | 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |
 
 ## How Krimto compares
