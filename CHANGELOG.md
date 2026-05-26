@@ -4,6 +4,23 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] — 2026-05-26
+
+### Fixed
+- **Gap #5 — post-connect dead-end.** The previous releases left users stranded after `claude mcp add`
+  succeeded: tools were technically available but the agent kept defaulting to its built-in memory,
+  and nothing pointed at `krimto init`. Three fixes close the loop:
+  - **`/ui/connect` now ends with "✅ Connected? Do these three things"** — a copy-pasteable verification
+    flow: (1) run `npx @krimto-labs/krimto init`, (2) test write (`"Remember that we use pnpm in this
+    repo"`), (3) test recall (`"What do you know about this repo?"`), then check `/ui/facts` Recent
+    activity to confirm both calls landed. Points at `verify-connection` if the loop fails.
+  - **`krimto connect` CLI output mirrors the same three-step verification** so the terminal-only path
+    has the same call-to-action.
+  - **First `/mcp` request prints a one-time stderr banner** — *"🟢 Client connected — first MCP
+    request received on /mcp. If your agent isn't auto-using Krimto, run `npx @krimto-labs/krimto
+    init`."* Single-shot per process, fires on any verb (initialize / tools/list / tools/call). Wired
+    via a new `onFirstClient` callback on `buildHttpApp` so it's test-clean.
+
 ## [0.2.9] — 2026-05-26
 
 ### Fixed

@@ -39,6 +39,8 @@ export interface HttpAppDeps {
   requireAuth: boolean;
   /** Live status snapshot for the /ui dashboard status panel. */
   status?: () => StatusPanelOpts;
+  /** Called once, on the first request to /mcp (any verb). Powers the "🟢 client connected" boot hint. */
+  onFirstClient?: () => void;
 }
 
 export function buildHttpApp(deps: HttpAppDeps): Express {
@@ -64,7 +66,18 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
   });
 
   const auth = requireBearerAuth({ verifier: new KrimtoTokenVerifier(deps.keys, deps.membership) });
+  let firstClientFired = false;
   const handleMcp = async (req: Request, res: Response): Promise<void> => {
+    // Gap #5c — fire the "client connected" hook on the FIRST /mcp request (any verb), so a user
+    // running `serve` sees one stderr line confirming the agent attached. Per-process, single-shot.
+    if (!firstClientFired) {
+      firstClientFired = true;
+      try {
+        deps.onFirstClient?.();
+      } catch {
+        /* the hook is observational — never let it break a tool call */
+      }
+    }
     const mcp = deps.requireAuth
       ? buildServer(deps.ctx, (extra) => requesterFromAuth(extra.authInfo))
       : buildServer(deps.ctx); // local mode: no resolver → uses ctx.requester (the local identity)

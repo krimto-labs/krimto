@@ -200,7 +200,23 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     `<li>Tools: <code>${escapeHtml(contract.tools.join(", "))}</code></li>` +
     `</ul>` +
     `<p class="muted">See your client's own MCP-server docs for where to paste this.</p>` +
-    `<p><strong>Next:</strong> <a href="/ui/facts">save your first memory →</a></p>`
+    `<h2>✅ Connected? Do these three things</h2>` +
+    `<p>Pasting the snippet above only makes the five tools <em>available</em> to your agent. To make ` +
+    `your agent actually use them — and to confirm the whole loop end-to-end — do these in order:</p>` +
+    `<ol>` +
+    `<li><strong>Make it auto.</strong> In your project root, run:` +
+    `<pre id="verify-init">npx @krimto-labs/krimto init</pre>${copy("verify-init")}` +
+    `Restart your editor afterward so the rule takes effect.</li>` +
+    `<li><strong>Test the write path.</strong> Paste this into your AI chat:` +
+    `<pre id="verify-write">Remember that we use pnpm in this repo (not npm).</pre>${copy("verify-write")}` +
+    `Your agent should call <code>krimto_write</code> and confirm it saved.</li>` +
+    `<li><strong>Test the recall path.</strong> Open a <em>new</em> chat and paste:` +
+    `<pre id="verify-recall">What do you know about this repo?</pre>${copy("verify-recall")}` +
+    `Your agent should call <code>krimto_recall</code>, find the pnpm fact, and use it.</li>` +
+    `</ol>` +
+    `<p>Then come back here → <a href="/ui/facts">/ui/facts</a> — the <strong>Recent activity</strong> panel ` +
+    `should show both calls within a few seconds. If it's empty, run ` +
+    `<code>npx @krimto-labs/krimto verify-connection</code> in your terminal to diagnose.</p>`
   );
 }
 

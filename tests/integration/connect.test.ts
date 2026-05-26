@@ -45,6 +45,15 @@ describe("formatConnect", () => {
     expect(out).toContain("krimto setup-remote");
     expect(out).toContain("krimto setup-embeddings");
   });
+
+  it("ends with the 'Connected? Do these three things' verification loop (Gap #5b)", () => {
+    const out = formatConnect();
+    expect(out).toContain("CONNECTED? DO THESE THREE THINGS");
+    expect(out).toContain("npx @krimto-labs/krimto init");
+    expect(out).toContain("Remember that we use pnpm in this repo");
+    expect(out).toContain("What do you know about this repo?");
+    expect(out).toContain("verify-connection");
+  });
 });
 
 describe("krimto connect (bin dispatch)", () => {

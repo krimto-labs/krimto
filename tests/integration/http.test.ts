@@ -75,4 +75,30 @@ describe("HTTP transport + bearer auth", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  it("fires onFirstClient on the first /mcp request and only once (Gap #5c)", async () => {
+    // Spin up a small HTTP server just for this test so we can capture the callback count cleanly.
+    let calls = 0;
+    const keys = new ApiKeyStore(path.join(root, "keys2.json"));
+    const localApp = buildHttpApp({
+      ctx: { store: new FactStore(root), index: new FactIndex(openIndexDb(":memory:", { provider: "none", dimensions: 0 })), writeQueue: new Serializer(), membership, requester: { identity: "unused", teams: [] } },
+      keys, membership: () => membership, db: openIndexDb(":memory:", { provider: "none", dimensions: 0 }),
+      index: new FactIndex(openIndexDb(":memory:", { provider: "none", dimensions: 0 })),
+      version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none",
+      requireAuth: false, // simpler — no auth needed for this test
+      onFirstClient: () => { calls += 1; },
+    });
+    const localServer: Server = await new Promise((r) => { const s = localApp.listen(0, () => r(s)); });
+    const localPort = (localServer.address() as { port: number }).port;
+    // Hit /mcp three times. Even malformed bodies count — we're testing the request-counter hook.
+    for (let i = 0; i < 3; i++) {
+      await fetch(`http://localhost:${localPort}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: i, method: "tools/list" }),
+      }).catch(() => undefined);
+    }
+    expect(calls).toBe(1); // single-shot per process
+    await new Promise<void>((r) => localServer.close(() => r()));
+  });
 });

@@ -50,7 +50,7 @@ describe("connectPanel", () => {
     expect(h).toContain("krimto_recall to load");         // the standing rule text
     expect(h).toContain("CLAUDE.md");                     // where to paste the rule
     expect(h).toContain("@krimto-labs/krimto init");      // one-command make-it-automatic
-    expect(h).toContain("save your first memory");        // next-step link
+    expect(h).toContain("Connected? Do these three things"); // next-step verification loop (Gap #5)
     expect(h).not.toContain("Authorization");           // no key in local mode
   });
 
@@ -73,6 +73,20 @@ describe("connectPanel", () => {
   it("team: omits the stdio guidance (HTTP IS the only path in team mode)", () => {
     const h = connectPanel({ host: "memory.acme.com", requireAuth: true });
     expect(h).not.toContain("Already connected via stdio");
+  });
+
+  it("ends with the 'Connected? Do these three things' verification loop (Gap #5a)", () => {
+    const h = connectPanel({ host: "localhost:8080", requireAuth: false });
+    expect(h).toContain("Connected? Do these three things");
+    // (1) Run init
+    expect(h).toContain("npx @krimto-labs/krimto init");
+    // (2) Test write — copy-pasteable prompt
+    expect(h).toContain("Remember that we use pnpm in this repo");
+    // (3) Test recall — copy-pasteable prompt
+    expect(h).toContain("What do you know about this repo?");
+    // The "go check the activity panel" loop-closer
+    expect(h).toContain("Recent activity");
+    expect(h).toContain("verify-connection");
   });
 });
 

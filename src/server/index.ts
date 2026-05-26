@@ -48,7 +48,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.9";
+export const KRIMTO_VERSION = "0.2.10";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -384,6 +384,13 @@ export async function main(): Promise<void> {
           ? { provider: embeddingProvider.name, dimensions: embeddingProvider.dimensions }
           : undefined,
       }),
+      // Gap #5c — print a one-time confirmation banner when an MCP client first hits /mcp.
+      onFirstClient: () => {
+        process.stderr.write(
+          `\n🟢 Client connected — first MCP request received on /mcp.\n` +
+            `   If your agent isn't auto-using Krimto, run \`npx @krimto-labs/krimto init\` in your project.\n\n`,
+        );
+      },
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
