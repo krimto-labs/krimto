@@ -7,7 +7,7 @@
 // Refuses to run when another Krimto server holds the lock — the running server is the authority
 // over both the markdown directory and the git index, and a CLI write here would race over both.
 
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
@@ -149,23 +149,22 @@ export async function runEdit(opts: EditOptions): Promise<EditResult> {
 }
 
 async function spawnEditor(editor: string, file: string): Promise<void> {
-  // `child_process.execFile` runs the editor inheriting the parent's stdio so the user sees the
-  // editor's TUI directly. Resolve when the editor exits, regardless of exit code (the user may
-  // have :cq'd to discard — we still re-read the file).
+  // Use `spawn` (not `execFile`) so the `stdio: "inherit"` option actually takes effect — the
+  // child editor needs the parent's TTY for its UI. Resolve on exit regardless of exit code
+  // (vim's `:cq` is normal: discard signaling). The "ENOENT on the binary itself" case still
+  // surfaces as a clear error.
   const [cmd, ...args] = editor.split(/\s+/);
   if (!cmd) throw new Error(`Empty $EDITOR command`);
   await new Promise<void>((resolve, reject) => {
-    const child = execFile(cmd, [...args, file], { stdio: "inherit" } as unknown as object, (err) => {
-      // Non-zero exit is normal for editors like vim (`:cq`). We swallow and resolve.
-      if (err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    const child = spawn(cmd, [...args, file], { stdio: "inherit" });
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") {
         reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR or pass --editor=...`));
         return;
       }
-      resolve();
+      reject(err);
     });
-    // execFile with stdio: "inherit" requires us to also configure it explicitly via the child;
-    // node's typings put `stdio` on options but it works at runtime. Belt-and-braces fallback:
-    if (child.stdin) child.stdin.pipe(process.stdin); // no-op when inherit already wired it
+    child.on("exit", () => resolve());
   });
 }
 

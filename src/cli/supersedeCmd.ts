@@ -5,7 +5,7 @@
 // then call the existing `krimtoSupersede` MCP-tool function with the result. Reuses everything
 // from the canonical write pipeline — no new write logic.
 
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -126,14 +126,18 @@ async function editInTempFile(
   } else {
     const [cmd, ...args] = editor.split(/\s+/);
     if (!cmd) throw new Error(`Empty $EDITOR command`);
+    // `spawn` (not `execFile`) so `stdio: "inherit"` actually takes effect — the child editor
+    // needs the parent's TTY for its UI. Resolve on exit regardless of exit code (vim's `:cq`).
     await new Promise<void>((resolve, reject) => {
-      execFile(cmd, [...args, tmpFile], { stdio: "inherit" } as unknown as object, (err) => {
-        if (err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      const child = spawn(cmd, [...args, tmpFile], { stdio: "inherit" });
+      child.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") {
           reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR or pass --editor=...`));
           return;
         }
-        resolve();
+        reject(err);
       });
+      child.on("exit", () => resolve());
     });
   }
 
