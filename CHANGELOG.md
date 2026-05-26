@@ -4,6 +4,16 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] — 2026-05-26
+
+### Fixed
+- **README** now reflects the v0.2.8 / v0.2.9 reality. The previous README still described the
+  v0.2.7 surface and called several already-shipped v0.2 features ("single Docker image", "web
+  UI") "near-term roadmap." Updates: "Try it in 2 minutes" leads with `npx @krimto-labs/krimto
+  serve` (no Docker required); new "CLI surface" table lists every subcommand; Option B is rewritten
+  around `npx krimto serve`; Web UI section enumerates the new panels (Behind the scenes, Status,
+  Recent activity); Promise 5 drops the stale "published pull-image is next" line. No code changes.
+
 ## [0.2.8] — 2026-05-26
 
 ### Added

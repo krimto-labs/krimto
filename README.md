@@ -9,7 +9,7 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** this is the **v0.2.8** surface. Here today: the markdown-in-git storage layer, the
+> **Where we are:** this is the **v0.2.9** surface. Here today: the markdown-in-git storage layer, the
 > `user → team → org` hierarchy, hybrid retrieval, server-enforced access, two-way git sync, the MCP
 > server over **stdio + HTTP** (Bearer API-key auth on HTTP), a **published multi-arch Docker image**
 > (`ghcr.io/krimto-labs/krimto`), a **web UI** with browse/search/admin/diagnostics, and a complete
