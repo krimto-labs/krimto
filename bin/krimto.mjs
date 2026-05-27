@@ -415,6 +415,30 @@ try {
     if (!process.env.KRIMTO_HTTP_PORT) process.env.KRIMTO_HTTP_PORT = "8080";
     const mod = await tsImport("../src/server/index.ts", import.meta.url);
     await mod.main();
+  } else if (cmd === "ui") {
+    // `krimto ui` — open the browser dashboard. The Maria-journey doc names this as one of the
+    // four user-facing verbs; the implementation is a one-liner over the platform "open this URL"
+    // command. If no krimto server is running, the browser will hit ECONNREFUSED — surface a
+    // pointer rather than a cryptic error.
+    const port = process.env.KRIMTO_HTTP_PORT ?? "8080";
+    const url = `http://localhost:${port}/ui`;
+    const { spawn } = await import("node:child_process");
+    const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
+    process.stdout.write(`Opening ${url}\n`);
+    process.stdout.write(`If the page doesn't load, start the server first:  $ krimto serve\n`);
+  } else if (cmd === "open") {
+    // `krimto open` — reveal the notes folder in the OS file manager. Companion to `krimto ui`
+    // for users who want to inspect / back up the markdown directly. macOS uses `open`, Linux
+    // `xdg-open`, Windows `explorer`. We deliberately do NOT do this from a browser button on
+    // /ui (cross-origin POST + a process running as the user can `open arbitrary://` URLs);
+    // the CLI is the right surface.
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const dataDir = resolveDataDir();
+    const { spawn } = await import("node:child_process");
+    const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    spawn(opener, [dataDir], { detached: true, stdio: "ignore" }).unref();
+    process.stdout.write(`Revealing ${dataDir} in your file manager.\n`);
   } else if (cmd === "usage") {
     // `krimto usage` — the long-form guide: the five tools, both modes, copy-paste examples.
     const { formatUsage } = await tsImport("../src/cli/usage.ts", import.meta.url);

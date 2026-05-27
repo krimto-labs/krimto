@@ -183,3 +183,39 @@ export class GitRepo {
   }
 }
 
+/**
+ * Read-only summary of the data-dir's git repo. Used by `krimto status` (overall health),
+ * the `/ui` dashboard (sync timestamp in the header), and any future surface that needs
+ * the same numbers. Survives a missing/uninitialised repo by returning zeros — callers
+ * don't need their own try/catch.
+ */
+export interface DataDirGitInfo {
+  commits: number;
+  lastCommitAt: Date | null;
+  remote: string | null;
+}
+
+export async function readDataDirGitInfo(dataDir: string): Promise<DataDirGitInfo> {
+  try {
+    const { stdout: countStr } = await exec("git", ["-C", dataDir, "rev-list", "--count", "HEAD"]);
+    const commits = Number(countStr.trim()) || 0;
+    let lastCommitAt: Date | null = null;
+    try {
+      const { stdout: when } = await exec("git", ["-C", dataDir, "log", "-1", "--format=%cI"]);
+      const t = Date.parse(when.trim());
+      if (!Number.isNaN(t)) lastCommitAt = new Date(t);
+    } catch {
+      /* no commits yet */
+    }
+    let remote: string | null = null;
+    try {
+      const { stdout: r } = await exec("git", ["-C", dataDir, "remote", "get-url", "origin"]);
+      remote = r.trim() || null;
+    } catch {
+      /* no remote configured */
+    }
+    return { commits, lastCommitAt, remote };
+  } catch {
+    return { commits: 0, lastCommitAt: null, remote: null };
+  }
+}

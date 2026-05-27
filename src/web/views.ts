@@ -14,25 +14,79 @@ export function loginBody(error?: string): string {
   );
 }
 
+// ── Dashboard chrome (v0.2.30) ────────────────────────────────────────────
+//
+// Matches docs/krimto-v0.2.17-maria-journey.html §04. Same function names as before, but
+// the bodies render the warm-paper notes-app aesthetic instead of the engineering table.
+// Router signatures unchanged.
+
+/**
+ * Plain-English relative time for the dashboard. Mirrors the activity-panel `humanAgo`
+ * helper further down in this file but takes no `now` arg (uses `Date.now()` directly,
+ * which is what the note-row meta and header subtitle want).
+ */
+function agoFromNow(iso?: string | null): string {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/** Emoji icon by scope kind. user/* → 📔, team/* → 📓, org/* → 🏢. */
+function scopeIcon(scope: string): string {
+  if (scope.startsWith("team/")) return "📓";
+  if (scope.startsWith("org/")) return "🏢";
+  return "📔"; // user/* (and any unknown — keeps the layout uniform)
+}
+
+/**
+ * v0.2.30 — page header on the dashboard. The mockup shows the viewer's identity at the top
+ * ("Krimto · Maria's AI memory") plus a small mono-font subtitle with totals + sync time.
+ * `syncedAgo` is computed by the caller as max(last commit, last write activity) so the
+ * headline reflects a write that happened seconds ago even before the 30s commit batch fires.
+ */
+export function dashboardHeader(viewer: string, totalNotes: number, syncedAgo: string | null): string {
+  const sub = syncedAgo
+    ? `${totalNotes} note${totalNotes === 1 ? "" : "s"} · synced ${escapeHtml(syncedAgo)}`
+    : `${totalNotes} note${totalNotes === 1 ? "" : "s"}`;
+  return (
+    `<div class="dashboard-header">` +
+    `<h1>Krimto · <em>${escapeHtml(viewer)}</em>'s AI memory</h1>` +
+    `<p class="dashboard-sub">${sub}</p>` +
+    `</div>`
+  );
+}
+
+/**
+ * Search input. Sits between the header and the scope cards. Keeps the same `/ui/facts?q=`
+ * GET shape so existing URLs still work.
+ */
 export function searchBox(q: string): string {
   return (
-    `<h1>Facts</h1><form method="get" action="/ui/facts">` +
-    `<input name="q" value="${escapeHtml(q)}" placeholder="Search facts..." style="width:60%">` +
+    `<form method="get" action="/ui/facts" style="margin:1rem 0">` +
+    `<input name="q" value="${escapeHtml(q)}" placeholder="Search notes..." style="width:60%">` +
     `<button type="submit">Search</button></form>`
   );
 }
 
 export interface RecallRow { id: string; scope: string; title: string }
 export function factResults(results: RecallRow[]): string {
-  if (results.length === 0) return `<p class="muted">No matching facts.</p>`;
-  const rows = results
+  if (results.length === 0) return `<p class="muted">No matching notes.</p>`;
+  return results
     .map(
       (r) =>
-        `<tr><td><a href="/ui/facts/${encodeURIComponent(r.id)}">${escapeHtml(r.title)}</a></td>` +
-        `<td class="muted">${escapeHtml(r.scope)}</td></tr>`,
+        `<div class="note-row">` +
+        `<div class="title"><a href="/ui/facts/${encodeURIComponent(r.id)}">${escapeHtml(r.title)}</a></div>` +
+        `<div class="meta">${escapeHtml(r.scope)}</div>` +
+        `</div>`,
     )
     .join("");
-  return `<table><thead><tr><th>Title</th><th>Scope</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 export interface FactListRow {
@@ -41,12 +95,19 @@ export interface FactListRow {
   title: string;
   author?: string;
   updated?: string;
+  /** Optional editor attribution — when set, rendered as "saved from a <source> chat". */
+  source?: string | null;
 }
 
 /**
- * Flat list of every fact the viewer can read, newest-first. v0.2.17-3: the Scope column now
- * renders plain-English labels (`Just me`, `Backend team`, `Acme`) computed from members.yaml
- * display names — fall back to the literal `<kind>/<id>` when no name is configured.
+ * v0.2.30 — vertical timeline of notes the viewer can read, newest-first. Replaces the
+ * v0.2.16 table. Each row carries a Fraunces-serif title, a mono meta line with ago +
+ * plain-English scope label + source attribution, and an action row deep-linking to the
+ * detail page (which already houses the inline Edit/Move/Delete forms — no new routes).
+ *
+ * The action row is gated by whether the viewer wrote the fact (best-effort canEdit
+ * heuristic — the detail page enforces canWrite server-side, this is purely for UI noise
+ * reduction). When the fact has someone else's author, only "View" / "View file" show.
  */
 export function factsList(
   facts: FactListRow[],
@@ -55,28 +116,30 @@ export function factsList(
   viewer: string,
 ): string {
   if (facts.length === 0) return "";
-  const ago = (iso?: string): string => {
-    if (!iso) return "—";
-    const t = Date.parse(iso);
-    if (Number.isNaN(t)) return iso;
-    const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
-    if (secs < 60) return `${secs}s ago`;
-    const mins = Math.round(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.round(hrs / 24)}d ago`;
-  };
   const rows = facts
-    .map(
-      (f) =>
-        `<tr>` +
-        `<td><a href="/ui/facts/${encodeURIComponent(f.id)}">${escapeHtml(f.title)}</a></td>` +
-        `<td class="muted">${escapeHtml(scopeLabel(f.scope, viewer, membership))}</td>` +
-        `<td class="muted" style="white-space:nowrap">${escapeHtml(ago(f.updated))}</td>` +
-        `<td class="muted">${escapeHtml(f.author === viewer ? "you" : f.author ?? "—")}</td>` +
-        `</tr>`,
-    )
+    .map((f) => {
+      const ownerLine = renderSourceAttribution(f, viewer);
+      const meta = `${escapeHtml(agoFromNow(f.updated))} · ${escapeHtml(scopeLabel(f.scope, viewer, membership))} · ${ownerLine}`;
+      // Edit/Move/Delete are deep links into the detail page's existing inline forms (anchors
+      // open the corresponding <details> block automatically via #fragment + :target CSS in v1
+      // we just route to the detail page — the user clicks the form open from there).
+      const canEdit = f.author === viewer;
+      const detail = `/ui/facts/${encodeURIComponent(f.id)}`;
+      const actions = canEdit
+        ? `<a class="btn primary" href="${detail}">Edit</a>` +
+          `<a class="btn" href="${detail}">Move</a>` +
+          `<a class="btn" href="${detail}">Delete</a>` +
+          `<a class="btn" href="${detail}">View file</a>`
+        : `<a class="btn" href="${detail}">View</a>` +
+          `<a class="btn" href="${detail}">View file</a>`;
+      return (
+        `<div class="note-row">` +
+        `<div class="title"><a href="${detail}">${escapeHtml(f.title)}</a></div>` +
+        `<div class="meta">${meta}</div>` +
+        `<div class="actions">${actions}</div>` +
+        `</div>`
+      );
+    })
     .join("");
   const moreLine =
     totalAvailable > facts.length
@@ -84,18 +147,42 @@ export function factsList(
         `Use the search box above to find a specific one.</p>`
       : "";
   return (
-    `<h2 style="margin-top:2rem">All notes <span class="muted" style="font-weight:normal;font-size:0.7em">(${totalAvailable} total)</span></h2>` +
-    `<table><thead><tr><th>Title</th><th>Scope</th><th>Updated</th><th>Author</th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>` +
+    `<div class="section-label">Recent</div>` +
+    rows +
     moreLine
   );
+}
+
+/**
+ * Render the per-note "saved from / saved by" sub-line. v0.2.30 — when frontmatter `source`
+ * is set (e.g. "cursor"), prefer "saved from a Cursor chat". MCP clients don't currently
+ * populate the field, but the slot is here so any future agent-prompt convention that does
+ * lands automatically. Fallback: "saved by you" / "saved by <author>".
+ */
+function renderSourceAttribution(f: FactListRow, viewer: string): string {
+  if (f.source && f.source.trim() !== "") {
+    const label = sourceDisplay(f.source);
+    return `saved from a ${escapeHtml(label)} chat`;
+  }
+  return f.author === viewer ? "saved by you" : `saved by ${escapeHtml(f.author ?? "—")}`;
+}
+
+/** Map a raw source slug to its display label. Adds light formatting only. */
+function sourceDisplay(source: string): string {
+  const s = source.toLowerCase();
+  if (s === "cursor") return "Cursor";
+  if (s === "claude-code" || s === "claude") return "Claude Code";
+  if (s === "codex") return "Codex";
+  if (s === "gemini-cli" || s === "gemini") return "Gemini";
+  return source;
 }
 
 export interface ScopeRow { scope: string; factCount: number }
 
 /**
- * Per-scope summary card list. v0.2.17-3: labels render in plain English. Lists the viewer's
- * own scopes first, then teams, then org — same precedence the recall pipeline uses.
+ * v0.2.30 — scope cards in a responsive grid. One card per scope, no collapsing. Each card
+ * links to `/ui/facts?scope=<encoded>` so the user can drill into a single scope (router can
+ * honour or ignore the param — v1 leaves it as a no-op page-load that still works).
  */
 export function scopeList(
   scopes: ScopeRow[],
@@ -103,14 +190,40 @@ export function scopeList(
   viewer: string,
 ): string {
   if (scopes.length === 0) return `<p class="muted">No readable scopes yet.</p>`;
-  const rows = scopes
-    .map(
-      (s) =>
-        `<tr><td>${escapeHtml(scopeLabel(s.scope, viewer, membership))}</td>` +
-        `<td class="muted">${s.factCount} note${s.factCount === 1 ? "" : "s"}</td></tr>`,
-    )
+  const cards = scopes
+    .map((s) => {
+      const label = scopeLabel(s.scope, viewer, membership);
+      const icon = scopeIcon(s.scope);
+      const count = `${s.factCount} note${s.factCount === 1 ? "" : "s"}`;
+      const href = `/ui/facts?scope=${encodeURIComponent(s.scope)}`;
+      return (
+        `<a class="scope-card" href="${href}">` +
+        `<div class="icon">${icon}</div>` +
+        `<div class="name">${escapeHtml(label)}</div>` +
+        `<div class="count">${count}</div>` +
+        `</a>`
+      );
+    })
     .join("");
-  return `<p class="muted">Your scopes — use search to find a note.</p><table><tbody>${rows}</tbody></table>`;
+  return `<div class="scope-row">${cards}</div>`;
+}
+
+/**
+ * v0.2.30 — page footer on the dashboard. Two buttons matching the mockup:
+ *   📂 Open notes folder  →  copies the absolute data-dir path to the clipboard via the
+ *                            existing `data-copy-text` hook in html.ts. Shelling out to
+ *                            `open <path>` from a browser POST is an attack surface we
+ *                            don't need; the CLI `krimto open` is the right tool.
+ *   ⚙ Settings            →  links to /ui/settings (existing route).
+ */
+export function dashboardFooter(dataDir: string): string {
+  return (
+    `<div class="dashboard-footer">` +
+    `<button class="btn" data-copy-text="${escapeHtml(dataDir)}">📂 Copy notes folder path</button>` +
+    `<a class="btn" href="/ui/settings">⚙ Settings</a>` +
+    `<span class="muted" style="margin-left:auto">${escapeHtml(dataDir)}</span>` +
+    `</div>`
+  );
 }
 
 export interface FactView {

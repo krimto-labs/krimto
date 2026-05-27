@@ -4,6 +4,80 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.30] — 2026-05-27
+
+### Added — dashboard redesign (Maria-journey §04)
+
+The `/ui/facts` dashboard previously rendered as a v0.2.16-style engineering table with
+generic blue links — Phase E of the v0.2.17 plan was specified in the Maria-journey doc
+but never visually built. This release rewrites the chrome to match
+`docs/krimto-v0.2.17-maria-journey.html` §04 ("Door 2 — She Looks At Her Notes"):
+
+- **Warm-paper aesthetic** — Fraunces serif headlines, JetBrains Mono code/meta, paper
+  palette (`--bg #f1ede4 / --paper #f7f3eb / --red #a82c1c`). Google Fonts CDN with
+  system-ui fallback. `src/web/html.ts` rewritten.
+- **Dashboard header** — `Krimto · <viewer>'s AI memory` + sub-line `N notes · synced Ns
+  ago`. Sync timestamp uses `max(last git commit, last write activity)` so a write
+  that just happened shows up immediately, even before the 30s commit batch fires.
+- **Scope cards in a grid** — one card per scope with emoji icons (📔 user / 📓 team /
+  🏢 org), plain-English label (`Just me`, team display name, org display name), and
+  count. Grid wraps for multi-team users — no collapsing, per design decision.
+- **Notes timeline** — replaces the `<table>` with vertical `note-row` divs.
+  Fraunces title, mono meta line (`<ago> · <scope label> · <attribution>`), and inline
+  action buttons (Edit / Move / Delete / View file when the viewer authored the note,
+  View / View file otherwise). All buttons deep-link to `/ui/facts/:id` where the
+  existing inline forms live — no new routes.
+- **Source attribution per note** — when a fact's frontmatter `source` is set (e.g.
+  `cursor`, `claude-code`), the meta line reads "saved from a Cursor chat" /
+  "saved from a Claude Code chat". MCP-tool callers don't currently populate this
+  field; the slot is wired up so any future agent-prompt convention that does lands
+  automatically. Fallback: "saved by you" / "saved by &lt;author&gt;".
+- **Footer** — `📂 Copy notes folder path` (copy-to-clipboard via the existing
+  `data-copy-text` infrastructure) + `⚙ Settings` link to the existing `/ui/settings`
+  page. Shelling out to OS file manager from a browser button was rejected as an
+  unnecessary attack surface; the CLI `krimto open` is the right tool for that.
+
+### Added — two CLI companions
+
+- **`krimto ui`** — spawns the platform "open URL" command (open / xdg-open /
+  explorer) at `http://localhost:${KRIMTO_HTTP_PORT ?? 8080}/ui`. Prints a one-liner
+  pointer to `krimto serve` if the server isn't running.
+- **`krimto open`** — same opener pattern, but reveals the data dir in the OS file
+  manager. Resolves the dir via the existing `resolveDataDir()` so it honours
+  `KRIMTO_DATA`.
+
+Both added to `src/cli/help.ts` under a new "Look at your notes" section.
+
+### Changed — internal helpers
+
+- `readGitInfo` promoted from `src/cli/status.ts` (private) to `src/storage/git.ts` as
+  the exported `readDataDirGitInfo(dataDir)`. `status.ts` and the new router callsite
+  both import it. One fewer `git log` exec to maintain.
+- `FactIndex.listFacts()` now returns the `source` column in addition to `id, scope,
+  title, author, updated` — the dashboard needs it for source attribution.
+
+### Tests
+
+- New: `tests/integration/dashboard.test.ts` — 19 tests covering scope card emoji
+  mapping, source-attribution branching (cursor / claude-code / fallback to "saved
+  by"), action-button gating by authorship, multi-team grid (no collapsing), footer
+  copy-button data attribute, XSS escaping on identity and data-dir.
+- Updated: `tests/web/views.test.ts` factsList assertions (new note-row layout, no
+  more "(N total)" header line — total moved to dashboardHeader).
+- Updated: `tests/integration/service-reconfigure.test.ts` — three tests now pass
+  `probePort: async () => true` so they don't hit the real `net.connect` probe (v0.2.27).
+
+Total: 603 passing. Lint+types clean. Verified end-to-end on the user's machine —
+real browser request to `/ui/facts` rendered the new chrome with all the Maria-mockup
+markers (header, scope cards with emoji, note rows with source attribution, footer).
+
+### Remaining Maria-journey gaps (deferred from this release)
+
+See `crispy-inventing-catmull.md` for the full table. Summary: editor attribution
+on writes (waiting on MCP-prompt convention), `krimto remote` / `krimto folder`,
+"Keep current" intermediate option in reconfigure, deprecation-alias forwarding for
+`verify-connection / where / storage / usage` → `krimto status`.
+
 ## [0.2.29] — 2026-05-27
 
 ### Fixed

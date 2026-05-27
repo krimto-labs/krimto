@@ -244,6 +244,8 @@ describe("factsList", () => {
   };
 
   it("renders rows with title, plain-English scope label, author, and a link", () => {
+    // v0.2.30: factsList renders a note-row timeline (no <table>, no "(N total)" header line).
+    // Total count now lives in dashboardHeader; only the "Showing X of Y" line stays when capped.
     const h = factsList(
       [
         { id: "fct_01ABC", scope: "user/maria@acme.com", title: "Deploys are Tuesdays", author: "maria@acme.com", updated: new Date().toISOString() },
@@ -257,9 +259,9 @@ describe("factsList", () => {
     expect(h).toContain("Deploys are Tuesdays");
     expect(h).toContain("Just me"); // user/maria → "Just me" (viewer is maria)
     expect(h).toContain("Backend team"); // team/backend → name from members.yaml
-    expect(h).toContain("you"); // maria viewing her own fact
-    expect(h).toContain("ben@acme.com"); // other author shown verbatim
-    expect(h).toContain("(2 total)");
+    expect(h).toContain("saved by you"); // maria viewing her own fact (new attribution copy)
+    expect(h).toContain("saved by ben@acme.com"); // other author shown verbatim
+    expect(h).toContain("note-row"); // the new layout class
   });
 
   it("returns empty string when there are no facts", () => {

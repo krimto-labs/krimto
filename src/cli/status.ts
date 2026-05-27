@@ -10,22 +10,19 @@
 // function (with a one-line deprecation note) so existing scripts keep working.
 
 import { promises as fs } from "node:fs";
-import { execFile } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
-import { promisify } from "node:util";
 
 import { ActivityLog, type ActivityEntry } from "../server/activity";
 import { type LockInfo } from "../server/lock";
 import { KRIMTO_VERSION } from "../server/index";
+import { readDataDirGitInfo, type DataDirGitInfo } from "../storage/git";
 import {
   detectEditorEnvironments,
   type EditorKind,
   type SetupSnapshot,
 } from "./init";
 import { inspectRuntime } from "./inspectRuntime";
-
-const exec = promisify(execFile);
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -77,7 +74,7 @@ export async function runStatus(
   const recent = await log.tail(5);
   const stats = await log.stats(5 * 60 * 1000, now);
   const indexStats = await readIndexStats(dataDir);
-  const gitInfo = await readGitInfo(dataDir);
+  const gitInfo = await readDataDirGitInfo(dataDir);
 
   const overall = pickOverall(snapshot, lock, stats);
   const header = headerLine(overall, lock, runtime.effectiveLaunchedBy, now);
@@ -112,36 +109,11 @@ async function readIndexStats(dataDir: string): Promise<{ exists: boolean; modif
   }
 }
 
-interface GitInfo {
-  commits: number;
-  lastCommitAt: Date | null;
-  remote: string | null;
-}
-
-async function readGitInfo(dataDir: string): Promise<GitInfo> {
-  try {
-    const { stdout: countStr } = await exec("git", ["-C", dataDir, "rev-list", "--count", "HEAD"]);
-    const commits = Number(countStr.trim()) || 0;
-    let lastCommitAt: Date | null = null;
-    try {
-      const { stdout: when } = await exec("git", ["-C", dataDir, "log", "-1", "--format=%cI"]);
-      const t = Date.parse(when.trim());
-      if (!Number.isNaN(t)) lastCommitAt = new Date(t);
-    } catch {
-      /* no commits yet */
-    }
-    let remote: string | null = null;
-    try {
-      const { stdout: r } = await exec("git", ["-C", dataDir, "remote", "get-url", "origin"]);
-      remote = r.trim() || null;
-    } catch {
-      /* no remote configured */
-    }
-    return { commits, lastCommitAt, remote };
-  } catch {
-    return { commits: 0, lastCommitAt: null, remote: null };
-  }
-}
+// v0.2.30 — `readGitInfo` moved to src/storage/git.ts as `readDataDirGitInfo`. Re-exported
+// here as a type alias so the existing call sites + render helpers compile unchanged. The
+// dashboard renderer needs the same shape, so promoting it to a shared module avoids two
+// near-identical `git log` execs per request.
+type GitInfo = DataDirGitInfo;
 
 function pickOverall(
   snapshot: SetupSnapshot,

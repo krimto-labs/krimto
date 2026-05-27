@@ -1,7 +1,8 @@
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, dashboardHeader, dashboardFooter, type FactView, type StatusPanelOpts } from "./views";
+import { readDataDirGitInfo } from "../storage/git";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
 import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "../server/tools";
@@ -136,9 +137,18 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
           .allScopes()
           .filter((s) => canRead(deps.membership(), identity, s));
         const allFacts = deps.ctx.index.listFacts(readableScopes, 50);
+
+        // v0.2.30 — header sync timestamp. Use max(last git commit, last write activity) so
+        // a write that just happened still reads "synced Ns ago" even before the 30s commit
+        // batch fires. readDataDirGitInfo handles a missing/empty repo gracefully.
+        const gitInfo = await readDataDirGitInfo(deps.ctx.store.dataDir());
+        const lastCommitIso = gitInfo.lastCommitAt ? gitInfo.lastCommitAt.toISOString() : null;
+        const lastWriteIso = await lastWriteActivityTime(deps.ctx.activity);
+        const syncedAgo = humanAgoForSync(lastCommitIso, lastWriteIso);
+
         const recentBlurb =
           recent.length > 0
-            ? `<p class="muted" style="margin:0 0 1rem">Last MCP calls: ` +
+            ? `<p class="muted" style="margin:1rem 0 0">Last MCP calls: ` +
               recent
                 .slice()
                 .reverse()
@@ -147,6 +157,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
               ` · <a href="/ui/settings">see full activity →</a></p>`
             : "";
         const body =
+          dashboardHeader(identity, totalFacts, syncedAgo) +
           hijackWarningPanel(stats) +
           searchBox(q) +
           scopeList(
@@ -155,7 +166,8 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
             identity,
           ) +
           factsList(allFacts, totalFacts, deps.membership(), identity) +
-          recentBlurb;
+          recentBlurb +
+          dashboardFooter(deps.ctx.store.dataDir());
         page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);
@@ -431,4 +443,42 @@ function writableScopeOptions(
     if (s !== currentScope) opts.push({ scope: s, label: m.org.name ?? `org/${m.org.slug}` });
   }
   return opts;
+}
+
+/**
+ * v0.2.30 — sync-timestamp helper for the dashboard header. Reads the most recent
+ * `krimto_write` (or `krimto_supersede`) from the activity log so a write that just happened
+ * is reflected immediately, even before the 30s CommitBatcher fires. Returns null when no
+ * writes have ever been recorded (a brand-new install).
+ */
+async function lastWriteActivityTime(
+  activity: ToolContext["activity"] | undefined,
+): Promise<string | null> {
+  if (!activity) return null;
+  // tail(200) covers the full bounded log; we then pick the latest write-like entry.
+  const entries = await activity.tail(200);
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (!e) continue;
+    if (e.tool === "krimto_write" || e.tool === "krimto_supersede") return e.timestamp;
+  }
+  return null;
+}
+
+/** Pick the more recent of two ISO timestamps and render as "Ns ago" / "Nm ago" / etc. */
+function humanAgoForSync(a: string | null, b: string | null): string | null {
+  const ta = a ? Date.parse(a) : NaN;
+  const tb = b ? Date.parse(b) : NaN;
+  let t: number;
+  if (Number.isFinite(ta) && Number.isFinite(tb)) t = Math.max(ta, tb);
+  else if (Number.isFinite(ta)) t = ta;
+  else if (Number.isFinite(tb)) t = tb;
+  else return null;
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
 }

@@ -173,20 +173,20 @@ export class FactIndex {
   listFacts(
     readableScopes: string[],
     limit = 50,
-  ): { id: string; scope: string; title: string; author: string; updated: string }[] {
+  ): { id: string; scope: string; title: string; author: string; updated: string; source: string | null }[] {
     if (readableScopes.length === 0) return [];
     const placeholders = readableScopes.map(() => "?").join(",");
     const superseded = this.supersededIds();
     const rows = this.db
       .prepare(
-        `SELECT id, scope, title, author, updated FROM facts
+        `SELECT id, scope, title, author, updated, source FROM facts
           WHERE scope IN (${placeholders})
             AND (expires IS NULL OR expires > ?)
           ORDER BY updated DESC
           LIMIT ?`,
       )
       .all(...readableScopes, new Date().toISOString(), limit) as {
-      id: string; scope: string; title: string; author: string; updated: string;
+      id: string; scope: string; title: string; author: string; updated: string; source: string | null;
     }[];
     return rows.filter((r) => !superseded.has(r.id));
   }

@@ -71,7 +71,9 @@ const baseConfig = (overrides: Partial<ServiceConfig> = {}): ServiceConfig => ({
 describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)", () => {
   it("first install (service NOT loaded): probes print, then bootstrap — no race possible", async () => {
     serviceLoaded = false;
-    const res = await installService(baseConfig(), { platform: "darwin" });
+    // v0.2.27 — installService now also waits for the HTTP port to accept connections.
+    // Stub the probe so it doesn't try to actually open a TCP socket during the unit test.
+    const res = await installService(baseConfig(), { platform: "darwin", probePort: async () => true });
     expect(res.activated).toBe(true);
 
     const launchctlCalls = calls.filter((c) => c.command === "launchctl");
@@ -84,7 +86,7 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
 
   it("reconfigure (service ALREADY loaded): probes print, then kickstart -k — no EIO", async () => {
     serviceLoaded = true;
-    const res = await installService(baseConfig(), { platform: "darwin" });
+    const res = await installService(baseConfig(), { platform: "darwin", probePort: async () => true });
     expect(res.activated).toBe(true);
 
     // No bootout / no bootstrap. `kickstart -k` is atomic: it SIGTERMs the running process,
@@ -102,6 +104,7 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
     serviceLoaded = false;
     const res = await installService(baseConfig({ env: { CHANGED: "value-after-reconfigure" } }), {
       platform: "darwin",
+      probePort: async () => true,
     });
 
     const plist = await fs.readFile(res.unitPath!, "utf8");
@@ -122,7 +125,7 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
   // apart from ad-hoc `krimto serve` invocations.
   it("injects KRIMTO_LAUNCHED_BY=service into the unit env (macOS)", async () => {
     serviceLoaded = false;
-    const res = await installService(baseConfig(), { platform: "darwin" });
+    const res = await installService(baseConfig(), { platform: "darwin", probePort: async () => true });
     const plist = await fs.readFile(res.unitPath!, "utf8");
     expect(plist).toContain("<key>KRIMTO_LAUNCHED_BY</key>");
     expect(plist).toContain("<string>service</string>");
