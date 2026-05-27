@@ -185,7 +185,11 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
       body: input.body,
       author: ctx.requester.identity,
       tags: input.tags,
-      source: input.source,
+      // v0.2.31 — fall back to the HTTP User-Agent-derived source when the caller didn't
+      // pass one explicitly. The HTTP MCP handler (src/server/http.ts) stamps
+      // `requester.source` with "cursor" / "claude-code" / "codex" / "gemini" based on the
+      // UA. Stdio transport has no UA, so requester.source stays undefined — back-compat.
+      source: input.source ?? ctx.requester.source,
       supersedes: input.supersedes,
       now: clock(ctx),
     });

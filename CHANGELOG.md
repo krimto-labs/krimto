@@ -4,6 +4,75 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.31] — 2026-05-27
+
+### Added — five remaining Maria-journey gaps closed
+
+This release closes everything outstanding from
+`docs/krimto-v0.2.17-maria-journey.html`. The dashboard redesign landed in v0.2.30;
+this round picks up the five remaining items the audit listed.
+
+- **Editor attribution via User-Agent (Gap A).** The HTTP MCP handler now sniffs the
+  request's `User-Agent` header and threads "cursor" / "claude-code" / "codex" / "gemini"
+  through the `Requester` as `source`. `krimtoWrite` uses `input.source ?? requester.source`,
+  so facts saved over HTTP carry the right editor attribution automatically — no
+  agent-prompt change needed. The dashboard renders "saved from a Cursor chat" instead of
+  the fallback "saved by &lt;author&gt;" once this lands. Stdio transport unaffected (no UA).
+  New file: `src/server/userAgent.ts`.
+
+- **`krimto remote` (Gap B).** Friendly one-question wrapper around `setup-remote`. Three
+  actions: show current URL / set new URL / remove. Reuses `runSetupRemote` for the set
+  path so URL validation + first-push verification stays in one place. Accepts
+  `--show / --set <url> / --remove [--yes]` for CI / scripted invocation. New file:
+  `src/cli/remoteCmd.ts`.
+
+- **`krimto folder` (Gap C).** Guided move of the data dir (`KRIMTO_DATA`). Validates the
+  destination (must be absent or an empty directory — never silently merges), uninstalls
+  the always-running service first so its plist/unit env doesn't keep pointing at the old
+  path, atomically renames the dir (cp-then-remove fallback when source and destination
+  are on different filesystems), reinstalls the service with the new env, prints the
+  `export KRIMTO_DATA=<new>` hint for the user's shell. New file: `src/cli/folderCmd.ts`.
+  Accepts `--to <path> [--yes]` for non-interactive use.
+
+- **"Keep current" reconfigure step (Gap D).** On reruns of `krimto init` from the
+  reconfigure menu, each of the three primary questions (editors, run mode, search) is
+  now wrapped in a two-stage "Keep current (&lt;currentLabel&gt;) / Reconfigure..." select.
+  Enter-Enter-Enter on a configured machine = no changes. Stopping at one question lets
+  the user change only that one. First-install runs bypass the wrapper entirely — same
+  single-prompt experience as before.
+
+- **Deprecation aliases (Gap E).** `verify-connection`, `where`, `storage`, `usage` keep
+  their existing stdout output (so existing scripts and READMEs aren't broken) but each
+  now prints a one-line stderr pointer:
+  `→ \`krimto where\` is now part of \`krimto status\` (the data-dir is in the Storage block).`
+  Stdout goes unchanged so pipes like `cd "$(krimto where)"` still work.
+
+### Internal — readDataDirGitInfo robustness
+
+The original implementation wrapped every git probe in one outer try/catch, so a brand-new
+or commit-less repo would mis-report all fields as null. Now each query (commit count, last
+commit timestamp, remote URL) is independently guarded — `krimto remote` correctly reports
+the remote URL even before the first commit lands.
+
+### Internal — Requester.source
+
+`Requester` (`src/access/scope.ts`) gained an optional `source?: string` field set by the
+HTTP MCP handler. Stdio transport leaves it undefined. Threaded through
+`buildServer(ctx, resolver)` via the existing per-tool resolver pattern.
+
+### Tests
+
+- `tests/server/userAgent.test.ts` — 5 new tests: Cursor / Claude Code / Codex / Gemini
+  recognition, unknown UA returns undefined, case-insensitive matching, claude-code wins
+  over a bare 'claude' substring.
+- `tests/integration/remote-cmd.test.ts` — 4 new tests: show none / show present / remove
+  empty / remove existing.
+- `tests/integration/folder-cmd.test.ts` — 5 new tests: atomic move, refuse non-empty
+  destination, take over empty destination, no-change on same source+dest, export hint
+  rendered.
+
+Total: 618 passing (was 603). Lint+types clean.
+
 ## [0.2.30] — 2026-05-27
 
 ### Added — dashboard redesign (Maria-journey §04)

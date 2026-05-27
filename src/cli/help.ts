@@ -36,6 +36,8 @@ export function formatHelp(version: string): string {
     "  Look at your notes:",
     "    ui                 Open the browser dashboard (http://localhost:8080/ui)",
     "    open               Reveal the notes folder in your OS file manager",
+    "    remote             Show / set / remove the git remote (sync across machines)",
+    "    folder --to <path> Move the notes folder to a new location (guided)",
     "",
     "  Manage facts:",
     "    rm <id>            Delete a fact (file + index + git deletion commit)",

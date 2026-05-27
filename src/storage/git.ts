@@ -196,26 +196,30 @@ export interface DataDirGitInfo {
 }
 
 export async function readDataDirGitInfo(dataDir: string): Promise<DataDirGitInfo> {
+  // v0.2.31 — make each query independent. The original implementation wrapped everything in
+  // one outer try/catch, so an empty repo (no HEAD) would blank out the remote field too —
+  // which the `krimto remote` command then mis-read as "no remote configured".
+  let commits = 0;
   try {
     const { stdout: countStr } = await exec("git", ["-C", dataDir, "rev-list", "--count", "HEAD"]);
-    const commits = Number(countStr.trim()) || 0;
-    let lastCommitAt: Date | null = null;
-    try {
-      const { stdout: when } = await exec("git", ["-C", dataDir, "log", "-1", "--format=%cI"]);
-      const t = Date.parse(when.trim());
-      if (!Number.isNaN(t)) lastCommitAt = new Date(t);
-    } catch {
-      /* no commits yet */
-    }
-    let remote: string | null = null;
-    try {
-      const { stdout: r } = await exec("git", ["-C", dataDir, "remote", "get-url", "origin"]);
-      remote = r.trim() || null;
-    } catch {
-      /* no remote configured */
-    }
-    return { commits, lastCommitAt, remote };
+    commits = Number(countStr.trim()) || 0;
   } catch {
-    return { commits: 0, lastCommitAt: null, remote: null };
+    /* not a repo, or no HEAD yet — commits stays 0 */
   }
+  let lastCommitAt: Date | null = null;
+  try {
+    const { stdout: when } = await exec("git", ["-C", dataDir, "log", "-1", "--format=%cI"]);
+    const t = Date.parse(when.trim());
+    if (!Number.isNaN(t)) lastCommitAt = new Date(t);
+  } catch {
+    /* no commits yet */
+  }
+  let remote: string | null = null;
+  try {
+    const { stdout: r } = await exec("git", ["-C", dataDir, "remote", "get-url", "origin"]);
+    remote = r.trim() || null;
+  } catch {
+    /* no remote configured */
+  }
+  return { commits, lastCommitAt, remote };
 }

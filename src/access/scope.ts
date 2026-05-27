@@ -58,6 +58,14 @@ export interface Requester {
   identity: string;
   /** Team slugs the requester belongs to. */
   teams: string[];
+  /**
+   * v0.2.31 — best-effort editor attribution. Set by the HTTP MCP handler from User-Agent
+   * sniffing ("Cursor/1.x" → "cursor", "claude-code/x" → "claude-code", etc.) so that fact
+   * frontmatter can record "saved from a Cursor chat" without each MCP-tool caller needing
+   * to pass `source` explicitly. Undefined over stdio transport (no UA available) and
+   * whenever the User-Agent is unrecognised.
+   */
+  source?: string;
 }
 
 export type ScopeRelation = "own-user" | "own-team" | "org" | "other";

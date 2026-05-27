@@ -154,19 +154,58 @@ async function runFreshWizard(
   const envs = await detectEditorEnvironments(cwd, opts.homeDir);
   printScan(envs, io);
 
-  const selectedEditors = await askEditors(envs, snapshot);
+  // v0.2.31 — Gap D, "Keep current" intermediate prompt. On reconfigure runs (snapshot !==
+  // null), each question is wrapped in a two-stage "Keep current / Reconfigure..." select so
+  // Enter-Enter-Enter through the wizard = no changes. First-install runs bypass the
+  // wrapper entirely (no snapshot to keep) — same one-question-per-step experience as before.
+  const selectedEditors = snapshot
+    ? await askKeepOrReconfigure(
+        "Which editors should your AI memory work with?",
+        snapshot.registeredEditors.map((e) => EDITOR_LABEL[e]).join(", ") || "(none)",
+        snapshot.registeredEditors,
+        () => askEditors(envs, snapshot),
+      )
+    : await askEditors(envs, snapshot);
   // v0.2.20 — smart default: stdio Krimto can only serve one editor at a time (single-writer
   // lock on the data dir). When the user picks 2+ editors, recommend "Always running" so they
   // can all use Krimto simultaneously over HTTP. Snapshot.runMode wins on reconfigure (respects
   // the user's prior choice). First-run with one editor → "as-needed" (simplest).
   const smartDefault: RunMode = selectedEditors.length >= 2 ? "always-running" : "as-needed";
-  const runMode = await askRunMode(snapshot?.runMode ?? smartDefault, selectedEditors.length);
+  let runMode: RunMode;
+  if (snapshot) {
+    const snap = snapshot; // pin for the closure — TS doesn't narrow non-null inside `() => ...`
+    runMode = await askKeepOrReconfigure(
+      "How should Krimto run?",
+      runModeLabel(snap.runMode),
+      snap.runMode,
+      () => askRunMode(snap.runMode, selectedEditors.length),
+    );
+  } else {
+    runMode = await askRunMode(smartDefault, selectedEditors.length);
+  }
+
+  // "Who for" — there's no snapshot field for this (team mode goes through `krimto team init`).
+  // On reconfigure, we treat it as "Keep current = Just me" since the wizard only handles solo
+  // mode at this point. No two-stage prompt needed — same as before.
   const whoFor = await askWhoFor();
   if (whoFor === "team") {
     io.out("\nGreat — team mode is set up via `krimto team init` (Phase C). Run that next.\n");
     return null;
   }
-  const search = await askSearch(snapshot?.searchProvider, io);
+  let search: WizardAnswers["search"];
+  if (snapshot) {
+    const snap = snapshot;
+    search = await askKeepOrReconfigure(
+      "Smarter search?",
+      snap.searchProvider === "openai" ? "Semantic (OpenAI)" : "Keyword (free)",
+      snap.searchProvider === "openai"
+        ? ({ provider: "openai", apiKey: "<existing>" } as WizardAnswers["search"])
+        : ({ provider: "keyword" } as WizardAnswers["search"]),
+      () => askSearch(snap.searchProvider, io),
+    );
+  } else {
+    search = await askSearch(undefined, io);
+  }
   const identity = await defaultIdentity();
 
   printSummary({ selectedEditors, runMode, whoFor, search, identity }, io);
@@ -183,6 +222,41 @@ async function runFreshWizard(
 }
 
 // === Question functions ====================================================
+
+/**
+ * v0.2.31 — "Keep current / Reconfigure..." wrapper used by the reconfigure path. Shows a
+ * two-option select where the default is "Keep current"; if picked, returns the existing
+ * value unchanged. If "Reconfigure..." is picked, calls `reAsk()` for the full question.
+ * Matches the doc §06 spec where Enter-through-everything on a configured machine = no
+ * changes, and stopping at one question lets you change only that one thing.
+ */
+async function askKeepOrReconfigure<T>(
+  fieldQuestion: string,
+  currentLabel: string,
+  current: T,
+  reAsk: () => Promise<T>,
+): Promise<T> {
+  const action = await select<"keep" | "change">({
+    message: fieldQuestion,
+    default: "keep",
+    choices: [
+      {
+        value: "keep",
+        name: `Keep current (${currentLabel})`,
+        description: "Move on without changing this. Press Enter.",
+      },
+      {
+        value: "change",
+        name: "Reconfigure...",
+        description: "Show me the choices for this question and let me change my mind.",
+      },
+    ],
+  });
+  if (action === "keep") return current;
+  return reAsk();
+}
+
+
 
 async function askEditors(
   envs: EditorEnvironment[],

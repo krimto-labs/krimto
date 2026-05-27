@@ -11,6 +11,9 @@ import { type Membership } from "../access/membership";
 import { type FactIndex } from "../index/factIndex";
 import { buildServer } from "./index";
 import { requesterFromAuth, type ToolContext } from "./tools";
+import { userAgentToSource } from "./userAgent";
+import { type Requester } from "../access/scope";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck, gitSyncCheck } from "./health";
 import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
@@ -78,9 +81,18 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
         /* the hook is observational — never let it break a tool call */
       }
     }
-    const mcp = deps.requireAuth
-      ? buildServer(deps.ctx, (extra) => requesterFromAuth(extra.authInfo))
-      : buildServer(deps.ctx); // local mode: no resolver → uses ctx.requester (the local identity)
+    // v0.2.31 — editor attribution from User-Agent. Captured BEFORE the resolver closes over
+    // it because each /mcp request gets a fresh `mcp` server and the resolver runs per tool
+    // call. The resolver enriches the Requester with `source` so krimtoWrite can stamp facts
+    // with "cursor" / "claude-code" / etc. when the caller didn't pass `source` explicitly.
+    const source = userAgentToSource(req.get("User-Agent"));
+    const baseResolver = deps.requireAuth
+      ? (extra: { authInfo?: AuthInfo }) => requesterFromAuth(extra.authInfo)
+      : (() => deps.ctx.requester) as (extra: { authInfo?: AuthInfo }) => Requester;
+    const resolver: (extra: { authInfo?: AuthInfo }) => Requester = source
+      ? (extra) => ({ ...baseResolver(extra), source })
+      : baseResolver;
+    const mcp = buildServer(deps.ctx, resolver);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       void transport.close();

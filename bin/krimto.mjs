@@ -234,9 +234,59 @@ try {
       process.stderr.write(body);
     }
   } else if (cmd === "where") {
-    // `krimto where` — print the data directory (honors KRIMTO_DATA), so files aren't a surprise.
+    // `krimto where` — print the data directory. v0.2.31: deprecated in favour of
+    // `krimto status` (which shows the data dir + everything else in one screen). Output is
+    // preserved for scripts that grep for the path; deprecation hint goes to stderr so it
+    // doesn't break pipes like `cd "$(krimto where)"`.
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
     process.stdout.write(`${resolveDataDir()}\n`);
+    process.stderr.write("\n→ `krimto where` is now part of `krimto status` (the data-dir is in the Storage block).\n");
+  } else if (cmd === "folder") {
+    // `krimto folder` — guided move of the data dir. v0.2.31. Stops the service (if any),
+    // moves the dir (atomic when same filesystem; cp+rm fallback for EXDEV), reinstalls the
+    // service with the new KRIMTO_DATA env, prints an export hint for the user's shell.
+    const flags = process.argv.slice(3);
+    const toIdx = flags.indexOf("--to");
+    const to = toIdx >= 0 ? flags[toIdx + 1] : undefined;
+    const yes = flags.includes("--yes");
+    const { runFolderCmd } = await tsImport("../src/cli/folderCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runFolderCmd({
+      from: resolveDataDir(),
+      ...(to ? { to } : {}),
+      yes,
+    });
+    if (result !== null) {
+      process.stdout.write(result.message);
+      if (result.status === "error") process.exitCode = 1;
+    }
+  } else if (cmd === "remote") {
+    // `krimto remote` — friendly wrapper around setup-remote: show current / set new / remove.
+    // v0.2.31. Reuses runSetupRemote for the set path so URL validation + first-push verification
+    // happen in one place.
+    const flags = process.argv.slice(3);
+    const action = flags.includes("--show")
+      ? "show"
+      : flags.includes("--remove")
+        ? "remove"
+        : flags.includes("--set")
+          ? "set"
+          : undefined;
+    const setIdx = flags.indexOf("--set");
+    const url = setIdx >= 0 ? flags[setIdx + 1] : undefined;
+    const yes = flags.includes("--yes");
+    const { runRemoteCmd } = await tsImport("../src/cli/remoteCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runRemoteCmd({
+      dataDir: resolveDataDir(),
+      ...(action ? { action } : {}),
+      ...(url ? { url } : {}),
+      yes,
+    });
+    if (result !== null) {
+      process.stdout.write(result.message);
+      if (result.setupResult && result.setupResult.status !== "ok") process.exitCode = 1;
+    }
   } else if (cmd === "setup-remote") {
     // `krimto setup-remote <url>` — point the data dir's git repo at a remote and verify a push.
     // Krimto must NOT be running while this is invoked (locks the .git/ index).
@@ -260,12 +310,14 @@ try {
     process.stdout.write(result.message);
     if (result.status === "error") process.exitCode = 1;
   } else if (cmd === "verify-connection") {
-    // `krimto verify-connection` — read the lockfile + activity JSONL to answer "is my agent
-    // actually calling Krimto right now?" Works from any terminal regardless of how Krimto launched.
+    // `krimto verify-connection` — v0.2.31: deprecated in favour of `krimto status` (which
+    // includes the same lock + activity + sync info as one of its blocks). Existing output
+    // preserved verbatim so existing scripts/READMEs keep working; deprecation hint to stderr.
     const { runVerifyConnection } = await tsImport("../src/cli/verifyConnection.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runVerifyConnection(resolveDataDir());
     process.stdout.write(result.message);
+    process.stderr.write("\n→ `krimto verify-connection` is now part of `krimto status` (one command, four answers).\n");
     if (result.status === "none") process.exitCode = 1;
   } else if (cmd === "editors") {
     // `krimto editors` — one-question shortcut to add/remove editor connections (Phase B).
@@ -403,11 +455,12 @@ try {
     process.stdout.write(result.message + "\n");
     if (result.status !== "ok") process.exitCode = 1;
   } else if (cmd === "storage") {
-    // `krimto storage` — explain where Krimto keeps data (markdown / git / index) in plain English,
-    // so the "you own your data" half of Krimto's pitch is reachable without reading the README.
+    // `krimto storage` — v0.2.31: deprecated in favour of `krimto status` (Storage block).
+    // Existing output preserved; deprecation hint to stderr.
     const { formatStorage } = await tsImport("../src/cli/storage.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
     process.stdout.write(formatStorage(resolveDataDir()));
+    process.stderr.write("\n→ `krimto storage` is now part of `krimto status` (look for the Storage block).\n");
   } else if (cmd === "serve") {
     // `krimto serve` — boot the HTTP server (with /ui and /ui/connect) from the npx on-ramp,
     // so a stranger doesn't have to clone the repo or install Docker just to see the dashboard.
@@ -440,10 +493,13 @@ try {
     spawn(opener, [dataDir], { detached: true, stdio: "ignore" }).unref();
     process.stdout.write(`Revealing ${dataDir} in your file manager.\n`);
   } else if (cmd === "usage") {
-    // `krimto usage` — the long-form guide: the five tools, both modes, copy-paste examples.
+    // `krimto usage` — the long-form guide. v0.2.31: kept (the guide is genuinely long and
+    // doesn't fit in `krimto status`) but still flagged so users who want the dashboard know
+    // where to find it.
     const { formatUsage } = await tsImport("../src/cli/usage.ts", import.meta.url);
     const { KRIMTO_VERSION } = await tsImport("../src/server/index.ts", import.meta.url);
     process.stdout.write(formatUsage(KRIMTO_VERSION));
+    process.stderr.write("\n→ For runtime status (is Krimto running, recent calls, where data lives) use `krimto status`.\n");
   } else if (cmd === "connect") {
     // `krimto connect` — print stdio connect snippets (the npx on-ramp shape), so a solo user
     // doesn't have to chase the README. Honors KRIMTO_IDENTITY when set.
