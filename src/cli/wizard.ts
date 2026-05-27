@@ -388,7 +388,10 @@ function printApplyResult(res: ApplyResult, io: WizardIO): void {
     }
   }
 
-  io.out("Restart your editor once so it picks up the new rule.\n");
+  io.out(
+    "Restart your editor once so it loads the new MCP server (the krimto_*\n" +
+      "tools won't appear in chat until you do) and picks up the standing rule.\n",
+  );
 }
 
 function printRefreshSummary(res: ApplyResult, io: WizardIO): void {

@@ -36,8 +36,10 @@ describe("runVerifyConnection", () => {
     const r = await runVerifyConnection(dir);
     expect(r.status).toBe("running");
     expect(r.message).toContain("🟢");
-    expect(r.message).toContain(`PID:     ${process.pid}`);
-    expect(r.message).toContain("Mode:    stdio");
+    expect(r.message).toContain(`PID:        ${process.pid}`);
+    expect(r.message).toContain("Mode:       stdio");
+    // v0.2.25 — `Launched by:` line is required (Gap 8 provenance).
+    expect(r.message).toContain("Launched by:");
   });
 
   it("reports 'stale' when the lock PID is dead", async () => {

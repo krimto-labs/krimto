@@ -56,11 +56,11 @@ describe("cursorDeeplink", () => {
 });
 
 describe("genericContract", () => {
-  it("returns the URL and the five tool names; header only in team mode", () => {
+  it("returns the URL and the six tool names; header only in team mode", () => {
     const local = genericContract({ host: "localhost:8080", requireAuth: false });
     expect(local.url).toBe("http://localhost:8080/mcp");
     expect(local.tools).toEqual([...MCP_TOOL_NAMES]);
-    expect(local.tools).toHaveLength(5);
+    expect(local.tools).toHaveLength(6);
     expect(local.header).toBeUndefined();
 
     const team = genericContract({ host: "memory.acme.com", requireAuth: true });

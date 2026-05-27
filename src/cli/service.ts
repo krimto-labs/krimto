@@ -132,9 +132,17 @@ export async function installService(
   const platform = opts.platform ?? detectPlatform();
   const homeDir = config.homeDir ?? os.homedir();
 
-  if (platform === "darwin") return installLaunchd(config, homeDir, opts);
-  if (platform === "linux") return installSystemd(config, homeDir, opts);
-  if (platform === "win32") return installSchtasks(config, opts);
+  // v0.2.25 — Gap 8 provenance. Every service-launched Krimto stamps `launchedBy: "service"`
+  // into its lock file. We inject the marker env var here (vs every caller remembering to)
+  // so the wizard, the `service` shortcut, and any future installer share the same shape.
+  const configWithMarker: ServiceConfig = {
+    ...config,
+    env: { KRIMTO_LAUNCHED_BY: "service", ...(config.env ?? {}) },
+  };
+
+  if (platform === "darwin") return installLaunchd(configWithMarker, homeDir, opts);
+  if (platform === "linux") return installSystemd(configWithMarker, homeDir, opts);
+  if (platform === "win32") return installSchtasks(configWithMarker, opts);
 
   throw new Error(
     `Krimto's "Always running" mode isn't supported on platform "${process.platform}" yet. ` +

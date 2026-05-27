@@ -74,13 +74,14 @@ export function cursorDeeplink(host: string): string {
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=krimto&config=${config}`;
 }
 
-/** The five MCP tools Krimto exposes (kept in lockstep with src/server/index.ts registrations). */
+/** The six MCP tools Krimto exposes (kept in lockstep with src/server/index.ts registrations). */
 export const MCP_TOOL_NAMES = [
   "krimto_write",
   "krimto_recall",
   "krimto_read",
   "krimto_supersede",
   "krimto_list_scopes",
+  "krimto_whoami",
 ] as const;
 
 /** The transport-level contract for wiring up any MCP client we haven't shipped a verified snippet for. */

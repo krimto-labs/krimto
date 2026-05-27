@@ -39,7 +39,12 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
     const raw = await fs.readFile(lockPath, "utf8");
     const parsed = JSON.parse(raw) as Partial<LockInfo>;
     if (typeof parsed.pid === "number" && typeof parsed.started === "string" && (parsed.mode === "stdio" || parsed.mode === "http")) {
-      lock = { pid: parsed.pid, started: parsed.started, mode: parsed.mode };
+      lock = {
+        pid: parsed.pid,
+        started: parsed.started,
+        mode: parsed.mode,
+        launchedBy: parsed.launchedBy === "service" ? "service" : "ad-hoc",
+      };
     } else {
       lockMalformed = true;
     }
@@ -56,12 +61,17 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
   let header: string;
   if (lock && isProcessAlive(lock.pid)) {
     status = "running";
+    const launchedByLabel =
+      lock.launchedBy === "service"
+        ? "service (launchd/systemd/schtasks — survives reboot)"
+        : "ad-hoc (started by `krimto serve` or an editor's stdio launcher)";
     header =
       `\n🟢 Krimto running\n` +
-      `   PID:     ${lock.pid}\n` +
-      `   Mode:    ${lock.mode}\n` +
-      `   Started: ${humanAgo(lock.started, now)}\n` +
-      `   Data:    ${dataDir}\n`;
+      `   PID:        ${lock.pid}\n` +
+      `   Mode:       ${lock.mode}\n` +
+      `   Started:    ${humanAgo(lock.started, now)}\n` +
+      `   Launched by: ${launchedByLabel}\n` +
+      `   Data:       ${dataDir}\n`;
   } else if (lock) {
     status = "stale";
     header =

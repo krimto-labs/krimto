@@ -108,7 +108,12 @@ async function readLock(dataDir: string): Promise<{ info: LockInfo; alive: boole
       typeof parsed.started === "string" &&
       (parsed.mode === "stdio" || parsed.mode === "http")
     ) {
-      const info: LockInfo = { pid: parsed.pid, started: parsed.started, mode: parsed.mode };
+      const info: LockInfo = {
+        pid: parsed.pid,
+        started: parsed.started,
+        mode: parsed.mode,
+        launchedBy: parsed.launchedBy === "service" ? "service" : "ad-hoc",
+      };
       return { info, alive: isProcessAlive(info.pid) };
     }
   } catch {
@@ -175,7 +180,7 @@ function headerLine(
 ): string {
   if (status === "ok") {
     if (lock?.alive) {
-      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}), started ${humanAgo(lock.info.started, now)}\n`;
+      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}, ${lock.info.launchedBy}), started ${humanAgo(lock.info.started, now)}\n`;
     }
     return `\n✅ Krimto is configured · v${KRIMTO_VERSION}\n   No active server right now — it will be launched on demand by your editor.\n`;
   }

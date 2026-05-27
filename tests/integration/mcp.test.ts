@@ -54,13 +54,14 @@ afterEach(async () => {
 });
 
 describe("MCP server", () => {
-  it("advertises exactly the five Krimto tools", async () => {
+  it("advertises exactly the six Krimto tools", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "krimto_list_scopes",
       "krimto_read",
       "krimto_recall",
       "krimto_supersede",
+      "krimto_whoami",
       "krimto_write",
     ]);
   });

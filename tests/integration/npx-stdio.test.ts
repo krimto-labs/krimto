@@ -38,13 +38,14 @@ afterEach(async () => {
 });
 
 describe("npx launcher (stdio)", () => {
-  it("boots via the bin and advertises exactly the five tools", async () => {
+  it("boots via the bin and advertises exactly the six tools", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "krimto_list_scopes",
       "krimto_read",
       "krimto_recall",
       "krimto_supersede",
+      "krimto_whoami",
       "krimto_write",
     ]);
   }, 30000);

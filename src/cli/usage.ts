@@ -13,6 +13,7 @@ const EXPECTED: readonly string[] = [
   "krimto_read",
   "krimto_supersede",
   "krimto_list_scopes",
+  "krimto_whoami",
 ];
 if (MCP_TOOL_NAMES.length !== EXPECTED.length || MCP_TOOL_NAMES.some((t, i) => t !== EXPECTED[i])) {
   throw new Error("src/cli/usage.ts examples are out of sync with src/server/connect.ts MCP_TOOL_NAMES");
@@ -24,13 +25,14 @@ export function formatUsage(version: string): string {
     "",
     `✅ How to use Krimto (v${version})`,
     "",
-    "━━ The 5 tools ━━",
+    "━━ The 6 tools ━━",
     "",
     "  krimto_write        Save a fact",
     "  krimto_recall       Search facts",
     "  krimto_read         Open one fact by id",
     "  krimto_supersede    Replace a fact with a new version (old kept in git)",
     "  krimto_list_scopes  See which scopes you can read",
+    "  krimto_whoami       Ask Krimto which identity you're writing as (and your scopes)",
     "",
     "━━ DEFAULT MODE — explicit (\"use krimto to ...\") ━━",
     "",

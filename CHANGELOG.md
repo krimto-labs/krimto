@@ -4,6 +4,50 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.25] — 2026-05-27
+
+### Added
+
+- **`krimto_whoami` MCP tool** (Gap 3). The smoke-6 transcript caught an agent in chat
+  inventing the identity `lpd.themes@gmail.com` from the real `lpdthemes@gmail.com`, with
+  no MCP-side way to ask Krimto for the truth. `krimto_whoami` returns the resolved
+  identity plus the caller's readable and writable scopes — so the agent stops guessing.
+  Tool count is now six (`krimto_write`, `_recall`, `_read`, `_supersede`, `_list_scopes`,
+  `_whoami`). MCP_TOOL_NAMES, the usage guide, the bin help, and three test fixtures all
+  updated in lockstep.
+
+### Fixed
+
+- **Gap 6 — restart wording.** Wizard summary used to say "Restart your editor once so it
+  picks up the new rule." That implied the rule was the only thing reloading; in fact the
+  MCP tools also need a restart to appear in chat. New wording calls both out explicitly.
+- **Gap 7 — legacy init's "wrote N files" opacity.** When two of four targets were
+  already current, the output silently listed only the two we wrote. Now also prints an
+  "Already current (no change)" block enumerating skipped files, so "2 of 4" stops being
+  surprising.
+- **Gap 8 — server provenance unknown after the fact.** `LockInfo` gained a `launchedBy`
+  field (`"service"` vs `"ad-hoc"`). The wizard's service installers inject
+  `KRIMTO_LAUNCHED_BY=service` into the launchd plist / systemd unit / Task Scheduler
+  command so the running server stamps the right value into its lock file. `verify-connection`
+  and `status` both display it, so the user can finally tell "this is a launchd-started
+  process that survives reboot" apart from "someone ran `krimto serve` in a terminal."
+- **Gap 9 — rules written for tools that don't exist.** When the legacy rule-only init
+  runs and no editor has Krimto wired into its MCP config, the rules instructed the AI to
+  use `krimto_*` tools that wouldn't actually be available. Now legacy init runs
+  `detectExistingSetup` after writing and prints a warning naming the two recovery
+  commands (`init` interactive / `connect`).
+
+### Tests
+
+- `tests/server/tools.test.ts` — 2 new `krimto_whoami` tests (identity + scopes returned;
+  always non-empty on a clean dir).
+- `tests/integration/service-reconfigure.test.ts` — 3 new tests for the `KRIMTO_LAUNCHED_BY`
+  env injection (macOS plist + Linux unit + preservation of caller's other env keys).
+- `tests/integration/verify-connection.test.ts` — updated to assert the new "Launched by:"
+  line and the wider PID/Mode alignment.
+- `tests/integration/mcp.test.ts`, `npx-stdio.test.ts`, `tests/server/connect.test.ts`,
+  `tests/integration/usage.test.ts` — tool count assertions updated from 5 to 6.
+
 ## [0.2.24] — 2026-05-27
 
 ### Fixed (four UX gaps surfaced in the smoke-6 SpecStory transcript)

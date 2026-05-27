@@ -106,4 +106,35 @@ describe("installService — macOS reconfigure-safe (v0.2.23)", () => {
     // Plist still written so the user can inspect it.
     await expect(fs.access(res.unitPath!)).resolves.toBeUndefined();
   });
+
+  // v0.2.25 — Gap 8. Every service-launched Krimto stamps `launchedBy: "service"` in its
+  // lock file by reading KRIMTO_LAUNCHED_BY from its env. installService injects that env
+  // marker into the unit file so verify-connection / status can tell launchd-started runs
+  // apart from ad-hoc `krimto serve` invocations.
+  it("injects KRIMTO_LAUNCHED_BY=service into the unit env (macOS)", async () => {
+    bootoutShouldFail = true;
+    const res = await installService(baseConfig(), { platform: "darwin" });
+    const plist = await fs.readFile(res.unitPath!, "utf8");
+    expect(plist).toContain("<key>KRIMTO_LAUNCHED_BY</key>");
+    expect(plist).toContain("<string>service</string>");
+  });
+
+  it("injects KRIMTO_LAUNCHED_BY=service into the unit env (Linux)", async () => {
+    const res = await installService(baseConfig(), { platform: "linux", dryRun: true });
+    const unit = await fs.readFile(res.unitPath!, "utf8");
+    expect(unit).toContain("Environment=KRIMTO_LAUNCHED_BY=service");
+  });
+
+  it("caller-supplied env keys are preserved alongside the launchedBy marker", async () => {
+    bootoutShouldFail = true;
+    const res = await installService(
+      baseConfig({ env: { KRIMTO_DATA: "/x/y", KRIMTO_HTTP_PORT: "9090" } }),
+      { platform: "darwin" },
+    );
+    const plist = await fs.readFile(res.unitPath!, "utf8");
+    expect(plist).toContain("<key>KRIMTO_LAUNCHED_BY</key>");
+    expect(plist).toContain("<key>KRIMTO_DATA</key>");
+    expect(plist).toContain("<string>/x/y</string>");
+    expect(plist).toContain("<key>KRIMTO_HTTP_PORT</key>");
+  });
 });

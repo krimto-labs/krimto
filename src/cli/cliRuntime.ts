@@ -54,6 +54,7 @@ export async function getLockHolder(dataDir: string): Promise<LockInfo | null> {
         pid: parsed.pid,
         started: typeof parsed.started === "string" ? parsed.started : "unknown",
         mode: (parsed.mode as LockInfo["mode"]) ?? "stdio",
+        launchedBy: parsed.launchedBy === "service" ? "service" : "ad-hoc",
       };
     }
   } catch {

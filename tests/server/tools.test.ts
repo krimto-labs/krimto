@@ -11,6 +11,7 @@ import {
   krimtoRead,
   krimtoRecall,
   krimtoSupersede,
+  krimtoWhoami,
   krimtoWrite,
   type ToolContext,
 } from "../../src/server/tools";
@@ -237,5 +238,33 @@ describe("krimto_list_scopes", () => {
     const result = await krimtoListScopes(ctx);
     expect(result.scopes.length).toBeGreaterThan(0);
     expect(result.hint).toBeUndefined();
+  });
+});
+
+// v0.2.25 — Gap 3. The chat-side identity-introspection tool. Replaces the agent's habit of
+// guessing the identity from out-of-band signals (the smoke-6 transcript caught one inventing
+// `lpd.themes@gmail.com` from the real `lpdthemes@gmail.com`).
+describe("krimto_whoami", () => {
+  it("returns the resolved identity, readable scopes, and writable scopes", async () => {
+    // Seed: alice writes to her personal scope + a team she's a member of, so the readable
+    // set has something to enumerate.
+    await krimtoWrite(ctx, { scope: "user/me", title: "p", body: "personal" });
+    await krimtoWrite(ctx, { scope: "team/payments", title: "t", body: "team" });
+
+    const r = await krimtoWhoami(ctx);
+    expect(r.identity).toBe("alice@acme.com");
+    expect(r.writable_scopes).toContain("user/alice@acme.com");
+    expect(r.writable_scopes).toContain("team/payments");
+    // alice is an org admin per the fixture, so org/<slug> must be writable too.
+    expect(r.writable_scopes).toContain("org/acme");
+    expect(r.readable_scopes).toContain("user/alice@acme.com");
+    expect(r.readable_scopes).toContain("team/payments");
+  });
+
+  it("never returns null/empty identity even on a clean data dir", async () => {
+    const r = await krimtoWhoami(ctx);
+    expect(r.identity).toBeTruthy();
+    expect(typeof r.identity).toBe("string");
+    expect(r.writable_scopes.length).toBeGreaterThan(0); // user/<identity> always writable
   });
 });

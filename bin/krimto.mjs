@@ -92,18 +92,51 @@ try {
           : !minimal
             ? `   Default: wrote all 4 supported rule files (safer than detecting one editor and\n   missing the actual one). Pass --minimal to write only matched editors next time.\n\n`
             : "";
+
+        // v0.2.25 — show both the files we wrote AND the files we skipped (already current).
+        // Before, "wrote 2 of 4" was opaque: the user couldn't tell whether the other 2 were
+        // intentionally skipped or silently failed. `res.considered` is the full target list
+        // for this invocation, so the skipped set is just considered \ written.
+        const writtenSet = new Set(res.written);
+        const skipped = res.considered.filter((f) => !writtenSet.has(f));
+        const skippedBlock = skipped.length > 0
+          ? "\n   Already current (no change):\n" + skipped.map((f) => `     • ${f}`).join("\n") + "\n"
+          : "";
+
+        // v0.2.25 — Gap 9. Rules-only init writes "always use krimto_*" instructions, but if
+        // no editor has Krimto wired into its MCP config, those instructions reference tools
+        // that won't exist in chat. Detect and warn so the user doesn't think the chat side
+        // is mysteriously broken later.
+        let mcpWarning = "";
+        try {
+          const { detectExistingSetup } = await tsImport("../src/cli/init.ts", import.meta.url);
+          const snap = await detectExistingSetup(process.cwd());
+          if (snap.registeredEditors.length === 0) {
+            mcpWarning =
+              "\n⚠️  Rule files written, but NO editor is wired to Krimto yet.\n" +
+              "   The rules tell your AI to use krimto_*, but those tools won't be available\n" +
+              "   until you register the MCP server. From a terminal:\n" +
+              "     $ npx @krimto-labs/krimto init        # full interactive wizard\n" +
+              "     $ npx @krimto-labs/krimto connect     # print copy-paste snippets\n";
+          }
+        } catch {
+          /* best-effort — don't block the success path if detection fails */
+        }
+
         process.stderr.write(
           "\n✅ AUTO MODE on — rule written to " + res.written.length + " file" +
             (res.written.length === 1 ? "" : "s") + "\n" +
             "\n" +
             res.written.map((f) => `   ${f}`).join("\n") + "\n" +
+            skippedBlock +
             "\n" +
             detectedLine +
             "━━ Next steps ━━\n" +
             "\n" +
-            "  1. Restart your editor (so it loads the new rule)\n" +
+            "  1. Restart your editor (so it loads the new rule + MCP tools)\n" +
             "  2. Test in chat: \"Remember that we use pnpm in this repo\"\n" +
             "  3. Verify it landed: $ npx @krimto-labs/krimto verify-connection\n" +
+            mcpWarning +
             "\n" +
             "To undo:  $ npx @krimto-labs/krimto uninit\n" +
             "Manual:   delete the block between <!-- krimto:start --> and <!-- krimto:end -->\n\n",

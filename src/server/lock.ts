@@ -16,11 +16,19 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 export type LockMode = "stdio" | "http";
+/**
+ * How this Krimto process was launched. "service" = via launchd / systemd / schtasks (the
+ * always-running setup); "ad-hoc" = direct invocation (`krimto serve`, editor-spawned stdio,
+ * tests). The service installers inject KRIMTO_LAUNCHED_BY=service into the unit env, so this
+ * field is just `process.env.KRIMTO_LAUNCHED_BY` at acquire time with a safe default.
+ */
+export type LaunchedBy = "service" | "ad-hoc";
 
 export interface LockInfo {
   pid: number;
   started: string;
   mode: LockMode;
+  launchedBy: LaunchedBy;
 }
 
 export interface LockHandle {
@@ -73,6 +81,7 @@ export async function acquireLock(dataDir: string, mode: LockMode): Promise<Lock
           pid: existing.pid,
           started: typeof existing.started === "string" ? existing.started : "unknown",
           mode: (existing.mode as LockMode) ?? "stdio",
+          launchedBy: existing.launchedBy === "service" ? "service" : "ad-hoc",
         },
         file,
       );
@@ -83,7 +92,8 @@ export async function acquireLock(dataDir: string, mode: LockMode): Promise<Lock
     // File missing / unreadable / malformed — treat as no lock and continue.
   }
 
-  const info: LockInfo = { pid: process.pid, started: new Date().toISOString(), mode };
+  const launchedBy: LaunchedBy = process.env.KRIMTO_LAUNCHED_BY === "service" ? "service" : "ad-hoc";
+  const info: LockInfo = { pid: process.pid, started: new Date().toISOString(), mode, launchedBy };
   await fs.writeFile(file, JSON.stringify(info, null, 2), "utf8");
 
   return {

@@ -113,6 +113,18 @@ export interface ListScopesResult {
   hint?: string;
 }
 
+/**
+ * v0.2.25 — Gap 3. The smoke-6 transcript showed an agent in chat inventing a wrong identity
+ * (`lpd.themes@gmail.com` instead of `lpdthemes@gmail.com`) because it had no MCP-side way to
+ * ask "who am I writing as?". `krimto_whoami` returns the resolved identity plus the scopes
+ * the caller can read and write, so the agent never has to guess.
+ */
+export interface WhoamiResult {
+  identity: string;
+  readable_scopes: string[];
+  writable_scopes: string[];
+}
+
 function clock(ctx: ToolContext): Date {
   return ctx.now ? ctx.now() : new Date();
 }
@@ -329,6 +341,21 @@ export async function krimtoSupersede(
       commit_sha: null,
     };
   });
+}
+
+/**
+ * Return the caller's identity plus the scopes they can read and write. The agent in chat uses
+ * this to avoid hallucinating identity (Gap 3 from the smoke-6 transcript audit).
+ */
+export async function krimtoWhoami(ctx: ToolContext): Promise<WhoamiResult> {
+  const readable = readableScopesFor(ctx);
+  const writable = writableScopesFor(ctx);
+  if (ctx.activity) await ctx.activity.record("krimto_whoami", ctx.requester.identity, ctx.requester.identity);
+  return {
+    identity: ctx.requester.identity,
+    readable_scopes: readable,
+    writable_scopes: writable,
+  };
 }
 
 /** Discover the scopes that exist and what they contain. */

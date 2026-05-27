@@ -41,6 +41,7 @@ import {
   krimtoRead,
   krimtoRecall,
   krimtoSupersede,
+  krimtoWhoami,
   krimtoWrite,
   type ToolContext,
 } from "./tools";
@@ -48,7 +49,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.24";
+export const KRIMTO_VERSION = "0.2.25";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -186,6 +187,24 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
       try {
         const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
         return ok(await krimtoListScopes({ ...ctx, requester }));
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "krimto_whoami",
+    {
+      description:
+        "Report the caller's identity plus the scopes they can read and write. Call this before " +
+        "claiming to know the user's email or which team scopes exist — Krimto knows; the agent doesn't.",
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try {
+        const requester = resolveRequester ? resolveRequester(extra) : ctx.requester;
+        return ok(await krimtoWhoami({ ...ctx, requester }));
       } catch (e) {
         return fail(e);
       }
