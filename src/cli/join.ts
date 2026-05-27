@@ -180,11 +180,14 @@ async function askEditors(envs: EditorEnvironment[]): Promise<EditorKind[]> {
       value: env.editor,
       name: EDITOR_LABEL[env.editor],
       description: env.present
-        ? "detected on this machine"
-        : env.mcpWire === null
-          ? "not detected — manual snippet only"
-          : "not detected — toggle on if you want anyway",
-      checked: env.present,
+        ? "detected in this project"
+        : env.installed
+          ? "installed on this machine (not in this project yet)"
+          : env.mcpWire === null
+            ? "not detected — manual snippet only"
+            : "not detected — toggle on if you want anyway",
+      // v0.2.21: preselect on either signal — installed-on-machine still counts.
+      checked: env.present || env.installed,
     })),
   });
 }

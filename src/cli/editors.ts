@@ -126,10 +126,12 @@ async function askEditorsList(
       description: current.includes(env.editor)
         ? "currently connected"
         : env.present
-          ? "detected on this machine"
-          : env.mcpWire === null
-            ? "not detected — manual snippet only"
-            : "not detected — toggle on if you want anyway",
+          ? "detected in this project"
+          : env.installed
+            ? "installed on this machine (not in this project yet)"
+            : env.mcpWire === null
+              ? "not detected — manual snippet only"
+              : "not detected — toggle on if you want anyway",
       checked: current.includes(env.editor),
     })),
   });

@@ -164,6 +164,48 @@ describe("detectEditorEnvironments (v0.2.17 — adds MCP-wire info to detection)
     });
   });
 
+  // v0.2.21: machine-level installation signals — catches the case where the user is editing
+  // in Cursor but the project folder has no editor-specific files yet.
+  it("Cursor `installed=true` when homeDir has `.cursor/` (no project signal)", async () => {
+    await fs.mkdir(path.join(dir, "some-other-marker"));
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-fake-home-"));
+    await fs.mkdir(path.join(fakeHome, ".cursor"));
+    try {
+      const envs = await detectEditorEnvironments(dir, fakeHome);
+      const cursor = envs.find((e) => e.editor === "cursor")!;
+      expect(cursor.present).toBe(false); // no `.cursor/` in cwd
+      expect(cursor.installed).toBe(true); // but `.cursor/` in homeDir
+    } finally {
+      await fs.rm(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it("Claude Code `installed=true` when homeDir has `.claude.json` (no project signal)", async () => {
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-fake-home-"));
+    await fs.writeFile(path.join(fakeHome, ".claude.json"), "{}");
+    try {
+      const envs = await detectEditorEnvironments(dir, fakeHome);
+      const claude = envs.find((e) => e.editor === "claude-code")!;
+      expect(claude.present).toBe(false);
+      expect(claude.installed).toBe(true);
+    } finally {
+      await fs.rm(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it("all editors `installed=false` when homeDir has no editor footprints (existing test envs)", async () => {
+    // The earlier "all present=false in a clean dir" test used a temp homeDir without any of
+    // ~/.cursor/, ~/.claude.json, etc. — pin that behaviour explicitly so a future change to the
+    // `installed` heuristic doesn't accidentally flip baseline cleanliness.
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-fake-home-"));
+    try {
+      const envs = await detectEditorEnvironments(dir, fakeHome);
+      expect(envs.every((e) => e.installed === false)).toBe(true);
+    } finally {
+      await fs.rm(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   it("multiple signals → multiple present=true entries", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
     await fs.writeFile(path.join(dir, "CLAUDE.md"), "");

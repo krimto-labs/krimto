@@ -106,12 +106,50 @@ export type McpWireMethod =
 
 export interface EditorEnvironment {
   editor: EditorKind;
-  /** True when local signals (file/dir presence) indicate this editor is in use here. */
+  /**
+   * True when local **project-level** signals (file/dir presence inside `cwd`) indicate this
+   * editor is in use *for this project*. Narrow scope — `.cursor/`, `CLAUDE.md`, etc.
+   */
   present: boolean;
+  /**
+   * v0.2.21: True when **machine-level** signals (files/dirs in `homeDir`) indicate this editor
+   * is installed and has been used at least once on this machine. Broader than `present` — catches
+   * the case where a user is editing in Cursor but the project folder hasn't acquired a `.cursor/`
+   * directory yet. The wizard preselects an editor when `present || installed`.
+   */
+  installed: boolean;
   /** Project-relative rules-file path (the CLAUDE.md / .cursor/rules/krimto.mdc / etc.). */
   rulesPath: string;
   /** How to wire MCP config for this editor, or `null` when wiring isn't automated yet. */
   mcpWire: McpWireMethod | null;
+}
+
+/**
+ * v0.2.21: Machine-level installation check. Returns true when this editor's home-dir footprint
+ * suggests it's been installed + run on this machine. Used by `detectEditorEnvironments` to
+ * populate `EditorEnvironment.installed` so the wizard can preselect editors even when the
+ * current project folder has no editor-specific signals yet.
+ *
+ * The home-dir paths checked are well-known per editor: each is created on first launch.
+ *   • Cursor       — `~/.cursor/`
+ *   • Claude Code  — `~/.claude.json` (user config) or `~/.claude/` (project data)
+ *   • Codex        — `~/.codex/`
+ *   • Gemini CLI   — `~/.gemini/`
+ *
+ * False positives (folder exists from a previous uninstalled tool) are harmless: the user can
+ * untoggle. False negatives (editor installed but never launched) are equally rare in practice.
+ */
+async function isInstalledOnMachine(editor: EditorKind, homeDir: string): Promise<boolean> {
+  if (editor === "cursor") return exists(path.join(homeDir, ".cursor"));
+  if (editor === "claude-code") {
+    return (
+      (await exists(path.join(homeDir, ".claude.json"))) ||
+      (await exists(path.join(homeDir, ".claude")))
+    );
+  }
+  if (editor === "codex") return exists(path.join(homeDir, ".codex"));
+  if (editor === "gemini-cli") return exists(path.join(homeDir, ".gemini"));
+  return false;
 }
 
 /**
@@ -136,10 +174,18 @@ export async function detectEditorEnvironments(
     (await exists(path.join(cwd, ".gemini")));
   const cursorPresent = await exists(path.join(cwd, ".cursor"));
 
+  // v0.2.21: machine-level installation signals — catch the case where the user is editing in
+  // Cursor (or Claude Code) but the project folder hasn't acquired editor-specific files yet.
+  const cursorInstalled = await isInstalledOnMachine("cursor", homeDir);
+  const claudeInstalled = await isInstalledOnMachine("claude-code", homeDir);
+  const codexInstalled = await isInstalledOnMachine("codex", homeDir);
+  const geminiInstalled = await isInstalledOnMachine("gemini-cli", homeDir);
+
   return [
     {
       editor: "cursor",
       present: cursorPresent,
+      installed: cursorInstalled,
       rulesPath: path.join(".cursor", "rules", "krimto.mdc"),
       mcpWire: {
         method: "json",
@@ -150,6 +196,7 @@ export async function detectEditorEnvironments(
     {
       editor: "claude-code",
       present: claudePresent,
+      installed: claudeInstalled,
       rulesPath: "CLAUDE.md",
       // `claude mcp add krimto ...` is the supported invocation. Shelling out to the editor's
       // own CLI sidesteps the question of which exact file Claude Code persists MCP config in
@@ -163,6 +210,7 @@ export async function detectEditorEnvironments(
     {
       editor: "gemini-cli",
       present: geminiPresent,
+      installed: geminiInstalled,
       rulesPath: "GEMINI.md",
       // Deferred — Gemini CLI's MCP config path needs empirical confirmation before we write
       // to it. v0.2.17 prints a copy-paste snippet instead.
@@ -171,6 +219,7 @@ export async function detectEditorEnvironments(
     {
       editor: "codex",
       present: codexPresent,
+      installed: codexInstalled,
       rulesPath: "AGENTS.md",
       // Deferred — Codex's config is TOML (`~/.codex/config.toml`); writing TOML safely needs
       // a parser we haven't added yet. v0.2.17 prints a copy-paste snippet instead.

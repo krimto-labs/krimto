@@ -24,6 +24,7 @@ import {
   type WizardAnswers,
 } from "./init";
 import { runSetupEmbeddings } from "./setupEmbeddings";
+import { KRIMTO_VERSION } from "../server/index";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -149,7 +150,7 @@ async function runFreshWizard(
   io: WizardIO,
   snapshot: SetupSnapshot | null = null,
 ): Promise<ApplyResult | null> {
-  io.out("\nKrimto — Setting up your AI's memory · v0.2.17\n\n");
+  io.out(`\nKrimto — Setting up your AI's memory · v${KRIMTO_VERSION}\n\n`);
   const envs = await detectEditorEnvironments(cwd, opts.homeDir);
   printScan(envs, io);
 
@@ -193,13 +194,16 @@ async function askEditors(
       value: env.editor,
       name: EDITOR_LABEL[env.editor],
       description: env.present
-        ? "detected on this machine"
-        : env.mcpWire === null
-          ? "not detected — manual snippet only"
-          : "not detected — toggle on if you want anyway",
+        ? "detected in this project"
+        : env.installed
+          ? "installed on this machine (not in this project yet)"
+          : env.mcpWire === null
+            ? "not detected — manual snippet only"
+            : "not detected — toggle on if you want anyway",
+      // v0.2.21: preselect on either project-level (present) OR machine-level (installed) signal.
       checked: snapshot
         ? snapshot.registeredEditors.includes(env.editor)
-        : env.present,
+        : env.present || env.installed,
     })),
   });
 }
@@ -317,8 +321,14 @@ async function askSearch(
 function printScan(envs: EditorEnvironment[], io: WizardIO): void {
   io.out("  Scanning your machine ...\n\n");
   for (const env of envs) {
-    const dot = env.present ? "✓" : "–";
-    io.out(`    ${dot} ${EDITOR_LABEL[env.editor].padEnd(14)} ${env.present ? "detected" : "not found"}\n`);
+    // v0.2.21: three states — project-level, machine-level only, not found.
+    const dot = env.present ? "✓" : env.installed ? "~" : "–";
+    const note = env.present
+      ? "detected (in this project)"
+      : env.installed
+        ? "installed (machine-wide)"
+        : "not found";
+    io.out(`    ${dot} ${EDITOR_LABEL[env.editor].padEnd(14)} ${note}\n`);
   }
   io.out("\n");
 }
@@ -430,7 +440,9 @@ export async function runInitNonInteractive(
   opts: NonInteractiveOptions = {},
 ): Promise<ApplyResult> {
   const envs = await detectEditorEnvironments(cwd, opts.homeDir);
-  const detected = envs.filter((e) => e.present).map((e) => e.editor);
+  // v0.2.21: count both project-level (`present`) AND machine-level (`installed`) signals so
+  // the --yes path matches the interactive wizard's preselect logic.
+  const detected = envs.filter((e) => e.present || e.installed).map((e) => e.editor);
   const editors = opts.editors ?? (detected.length > 0 ? detected : envs.map((e) => e.editor));
   const runMode = opts.runMode ?? (editors.length >= 2 ? "always-running" : "as-needed");
   const search = opts.search ?? "keyword";

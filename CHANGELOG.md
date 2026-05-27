@@ -4,6 +4,44 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.21] — 2026-05-27
+
+### Fixed
+
+- **Wizard header showed `v0.2.17` regardless of the actual installed version.** A hardcoded
+  version string survived every bump from v0.2.18 through v0.2.20. `src/cli/wizard.ts` now imports
+  `KRIMTO_VERSION` from `src/server/index.ts` and renders it dynamically. Same hardcoded literal
+  fix applied to `src/cli/status.ts` (three places: "✅ Krimto is working", "✅ Krimto is configured",
+  "⚠️ Krimto needs attention").
+
+### Added
+
+- **Machine-level editor detection** (`EditorEnvironment.installed`). Catches the case where
+  the user is editing in Cursor (or Claude Code) but the project folder hasn't picked up an
+  editor-specific marker file yet — e.g. a fresh `krimto-smoke-N` dir.
+  - Each editor now has TWO signals:
+    - `present`: project-level file marker (existing — `.cursor/`, `CLAUDE.md`, etc. in cwd)
+    - `installed`: home-dir footprint (new — `~/.cursor/`, `~/.claude.json`, `~/.codex/`,
+      `~/.gemini/`)
+  - The wizard's checkbox preselects an editor when `present || installed`. The non-interactive
+    `--yes` path uses the same combined signal, so multi-editor users land on the right
+    auto-tick set even before they've worked in the project.
+  - Scan output now has three states instead of two:
+    - `✓ Editor — detected in this project`
+    - `~ Editor — installed (machine-wide)`
+    - `– Editor — not found`
+- Same preselect logic propagated to `editors.ts` (Phase B shortcut) and `join.ts` (teammate
+  flow). All four wizards now agree on detection rules.
+
+### Tests
+
+- `tests/integration/init.test.ts` — three new tests for `installed`:
+  - Cursor `installed=true` via `~/.cursor/` in homeDir, with no project-level signal
+  - Claude Code `installed=true` via `~/.claude.json` in homeDir
+  - Baseline: empty homeDir → all editors `installed=false` (regression-locks the heuristic)
+
+Total suite: **550 passing**. Typecheck + lint clean.
+
 ## [0.2.20] — 2026-05-27
 
 ### Changed (smart default for multi-editor users)

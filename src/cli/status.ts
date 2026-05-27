@@ -17,6 +17,7 @@ import { promisify } from "node:util";
 
 import { ActivityLog, type ActivityEntry } from "../server/activity";
 import { isProcessAlive, type LockInfo } from "../server/lock";
+import { KRIMTO_VERSION } from "../server/index";
 import {
   detectEditorEnvironments,
   detectExistingSetup,
@@ -174,12 +175,12 @@ function headerLine(
 ): string {
   if (status === "ok") {
     if (lock?.alive) {
-      return `\n✅ Krimto is working · v0.2.17\n   PID ${lock.info.pid} (${lock.info.mode}), started ${humanAgo(lock.info.started, now)}\n`;
+      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}), started ${humanAgo(lock.info.started, now)}\n`;
     }
-    return `\n✅ Krimto is configured · v0.2.17\n   No active server right now — it will be launched on demand by your editor.\n`;
+    return `\n✅ Krimto is configured · v${KRIMTO_VERSION}\n   No active server right now — it will be launched on demand by your editor.\n`;
   }
   if (status === "warning") {
-    return `\n⚠️  Krimto needs attention · v0.2.17\n`;
+    return `\n⚠️  Krimto needs attention · v${KRIMTO_VERSION}\n`;
   }
   return `\n🔴 Krimto isn't set up on this machine\n   Run: $ npx @krimto-labs/krimto init\n`;
 }
