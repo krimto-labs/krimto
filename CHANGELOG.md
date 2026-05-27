@@ -4,6 +4,38 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.24] — 2026-05-27
+
+### Fixed (four UX gaps surfaced in the smoke-6 SpecStory transcript)
+
+- **Gap 1 — wizard silently skipped on non-TTY runs.** When an AI assistant's Bash tool
+  ran `npx @krimto-labs/krimto init`, the code fell through to the legacy rule-only writer
+  because `process.stdin.isTTY` is false in spawned shells. No editor wiring, no service
+  install — but the user thought they ran "the wizard". `bin/krimto.mjs` now prints a clear
+  notice up front when this happens, naming the two ways to actually get the full setup
+  (real terminal, or `--yes`).
+- **Gap 2 — `krimto_list_scopes` returned bare `[]` and looked broken.** The smoke
+  transcript shows the agent inventing an explanation ("scopes aren't configured for your
+  identity") that the user understood as "Krimto is broken". `krimtoListScopes` now
+  attaches a `hint` field when scopes is empty, telling the agent verbatim that scopes are
+  created on first write and to try `krimto_write` to make one appear.
+- **Gap 4 — `krimto connect` printed `"KRIMTO_IDENTITY": "you@acme.com"` regardless of
+  who ran it.** Pasting the snippet wrote facts under the literal placeholder identity.
+  Now reads `git config --global user.email` and substitutes (same lookup the wizard
+  uses). Falls back to `you@acme.com` only when git is missing or unconfigured.
+- **Gap 5 — `claude mcp add krimto` exit-1 on re-paste.** The wizard's MCP writer got
+  this fix in v0.2.19, but the snippet `krimto connect` PRINTS still hit the same
+  "already exists in local config" error when an AI agent ran the line verbatim a second
+  time. The printed snippet now starts with a guarded `claude mcp remove krimto 2>/dev/null;
+  true`, so re-runs are silent no-ops.
+
+### Tests
+
+- `tests/server/tools.test.ts` — two new tests for the v0.2.24 list_scopes hint.
+- `tests/integration/connect.test.ts` — rewrote existing tests to `await formatConnect()`
+  (now async because it shells out to `git config`); added a new test asserting the
+  `claude mcp remove` line precedes the `claude mcp add` line in printed output.
+
 ## [0.2.23] — 2026-05-27
 
 ### Fixed

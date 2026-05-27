@@ -56,6 +56,21 @@ try {
     const minimal = flags.includes("--minimal");
     const yes = flags.includes("--yes");
     const isTty = process.stdin.isTTY === true;
+
+    // v0.2.24 — fix for the "AI agent runs krimto init and silently gets the legacy writer"
+    // gap. When invoked from a non-TTY context (e.g. Claude Code's Bash tool) with no flags,
+    // the interactive wizard CAN'T run; the legacy rule-only writer would proceed silently
+    // and the caller wouldn't realize MCP wiring + service install were skipped. Print a
+    // clear notice up front so the user (or AI relaying the result) knows what just happened.
+    if (!isTty && !all && !minimal && !yes) {
+      process.stderr.write(
+        "ℹ️  No interactive terminal detected — running lightweight init (rules only).\n" +
+          "   For the FULL setup (editor wiring + service install), either:\n" +
+          "     • Run from a real terminal:   $ npx @krimto-labs/krimto init\n" +
+          "     • Or pass --yes here:         $ npx @krimto-labs/krimto init --yes\n\n",
+      );
+    }
+
     const legacyMode = all || minimal || (!isTty && !yes);
 
     if (legacyMode) {
@@ -362,7 +377,7 @@ try {
     // `krimto connect` — print stdio connect snippets (the npx on-ramp shape), so a solo user
     // doesn't have to chase the README. Honors KRIMTO_IDENTITY when set.
     const { formatConnect } = await tsImport("../src/cli/connect.ts", import.meta.url);
-    process.stdout.write(formatConnect({ identity: process.env.KRIMTO_IDENTITY }));
+    process.stdout.write(await formatConnect({ identity: process.env.KRIMTO_IDENTITY }));
   } else if (cmd === "whoami") {
     // `krimto whoami` — show the active KRIMTO_IDENTITY and every place it's currently set
     // (each editor's MCP config + the always-running service unit). Surfaces drift between

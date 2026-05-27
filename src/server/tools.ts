@@ -109,6 +109,8 @@ export interface SupersedeResult {
 
 export interface ListScopesResult {
   scopes: { path: string; fact_count: number; last_updated: string | null }[];
+  /** Present only when `scopes` is empty — tells the calling agent how to make a scope appear. */
+  hint?: string;
 }
 
 function clock(ctx: ToolContext): Date {
@@ -333,13 +335,23 @@ export async function krimtoSupersede(
 export async function krimtoListScopes(ctx: ToolContext): Promise<ListScopesResult> {
   const scopes = ctx.index.listScopes(readableScopesFor(ctx));
   if (ctx.activity) await ctx.activity.record("krimto_list_scopes", ctx.requester.identity, `${scopes.length} scope(s)`);
-  return {
+  const result: ListScopesResult = {
     scopes: scopes.map((s) => ({
       path: s.path,
       fact_count: s.factCount,
       last_updated: s.lastUpdated,
     })),
   };
+  // v0.2.24 — empty result is the #1 first-impression confuser ("Krimto must be broken").
+  // Surface the next step in the response itself, so an agent in chat can relay it verbatim
+  // instead of inventing a hallucinated explanation about "scopes aren't configured".
+  if (result.scopes.length === 0) {
+    result.hint =
+      `No scopes exist yet for ${ctx.requester.identity}. Scopes are created on the first ` +
+      `write — try krimto_write with a small fact (e.g. "we use pnpm in this repo") and ` +
+      `your user/<email> scope will appear here.`;
+  }
+  return result;
 }
 
 /** Build a Requester from a validated bearer token's AuthInfo (its `extra` carries identity+teams). */

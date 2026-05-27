@@ -220,4 +220,22 @@ describe("krimto_list_scopes", () => {
     expect(payments).toMatchObject({ path: "team/payments", fact_count: 2 });
     expect(payments!.last_updated).toBeTypeOf("string");
   });
+
+  // v0.2.24 — the smoke-6 transcript showed an agent inventing an explanation for the
+  // empty `[]` response ("scopes aren't configured for your identity"). Hint payload
+  // gives the agent the right answer to relay verbatim instead.
+  it("attaches a 'no scopes yet' hint when nothing has been written (v0.2.24)", async () => {
+    const result = await krimtoListScopes(ctx);
+    expect(result.scopes).toHaveLength(0);
+    expect(result.hint).toBeDefined();
+    expect(result.hint).toContain("krimto_write");
+    expect(result.hint).toContain(ctx.requester.identity);
+  });
+
+  it("does NOT include the hint when at least one scope exists", async () => {
+    await krimtoWrite(ctx, { scope: "team/payments", title: "A", body: "x" });
+    const result = await krimtoListScopes(ctx);
+    expect(result.scopes.length).toBeGreaterThan(0);
+    expect(result.hint).toBeUndefined();
+  });
 });
