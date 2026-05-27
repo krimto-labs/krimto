@@ -24,7 +24,7 @@ import {
   writeMcpConfig,
   type WriteAction,
 } from "./mcpConfig";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -89,6 +89,13 @@ export async function applyEditors(
 
 export async function runEditors(opts: EditorsOptions = {}): Promise<EditorsResult | null> {
   const io = opts.io ?? defaultIO;
+  // v0.2.34 — when no editor list was supplied programmatically, we'd open the checkbox
+  // prompt. Without a TTY (AI-agent Bash, CI) that prompt would hang then crash with the
+  // cryptic "unsettled top-level await" warning. Detect and surface the right flags
+  // instead, so agents get a clean exit + actionable usage.
+  if (!opts.editors) {
+    assertInteractiveOrUsage(EDITORS_USAGE);
+  }
   try {
     const cwd = opts.cwd ?? process.cwd();
     const envs = await detectEditorEnvironments(cwd, opts.homeDir);
@@ -112,6 +119,62 @@ export async function runEditors(opts: EditorsOptions = {}): Promise<EditorsResu
     }
     throw e;
   }
+}
+
+/** Non-interactive usage shown by the TTY guard when an agent runs `krimto editors` cold. */
+const EDITORS_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto editors --add cursor [--yes]            Connect one editor (repeat or comma-list ok)\n" +
+  "  krimto editors --remove cursor [--yes]         Disconnect one editor\n" +
+  "  krimto editors --set cursor,claude-code [--yes]  Replace the full connected set\n" +
+  "  krimto editors --list                          Print current connections (one per line)";
+
+/**
+ * v0.2.34 — parse a comma-separated / repeated CLI value into a deduped EditorKind list.
+ * Accepts the canonical slugs plus common variants. Throws (with a clear message) on
+ * unknown names so an agent passing a typo learns immediately instead of silently no-op'ing.
+ */
+export function parseEditorList(values: string[]): EditorKind[] {
+  const aliases: Record<string, EditorKind> = {
+    cursor: "cursor",
+    "claude-code": "claude-code",
+    claudecode: "claude-code",
+    claude_code: "claude-code",
+    claude: "claude-code",
+    codex: "codex",
+    gemini: "gemini-cli",
+    "gemini-cli": "gemini-cli",
+    geminicli: "gemini-cli",
+  };
+  const out: EditorKind[] = [];
+  const seen = new Set<EditorKind>();
+  for (const raw of values) {
+    for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+      const key = part.toLowerCase();
+      const kind = aliases[key];
+      if (!kind) {
+        throw new Error(
+          `Unknown editor "${part}". Expected one of: cursor, claude-code, codex, gemini-cli.`,
+        );
+      }
+      if (!seen.has(kind)) {
+        out.push(kind);
+        seen.add(kind);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * v0.2.34 — programmatic helpers the bin uses to compute the target editor set without
+ * spawning the checkbox prompt. `--add` / `--remove` are merge ops over the current
+ * snapshot; `--set` replaces the list outright.
+ */
+export async function listConnectedEditors(opts: { cwd?: string; homeDir?: string } = {}): Promise<EditorKind[]> {
+  const cwd = opts.cwd ?? process.cwd();
+  const snapshot = await detectExistingSetup(cwd, opts.homeDir);
+  return snapshot.registeredEditors;
 }
 
 async function askEditorsList(

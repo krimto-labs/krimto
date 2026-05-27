@@ -6,6 +6,24 @@
 import process from "node:process";
 import { tsImport } from "tsx/esm/api";
 
+/**
+ * v0.2.34 — collect every value passed via a repeating flag. Used by `editors --add cursor
+ * --add codex` and similar. Accepts both `--flag value` and `--flag=value` forms; ignores
+ * the flag itself.
+ */
+function collectFlagValues(flags, name) {
+  const values = [];
+  for (let i = 0; i < flags.length; i++) {
+    const f = flags[i];
+    if (f === name) {
+      if (typeof flags[i + 1] === "string") values.push(flags[i + 1]);
+    } else if (typeof f === "string" && f.startsWith(`${name}=`)) {
+      values.push(f.slice(name.length + 1));
+    }
+  }
+  return values;
+}
+
 try {
   // Two-word command support (v0.2.17.1): `team init`, `team disband`. Collapse argv[2]+argv[3]
   // into one cmd string when argv[2] is one of the namespaced verbs.
@@ -363,16 +381,84 @@ try {
     process.stderr.write("\n→ `krimto verify-connection` is now part of `krimto status` (one command, four answers).\n");
     if (result.status === "none") process.exitCode = 1;
   } else if (cmd === "editors") {
-    // `krimto editors` — one-question shortcut to add/remove editor connections (Phase B).
-    const { runEditors } = await tsImport("../src/cli/editors.ts", import.meta.url);
-    const result = await runEditors();
-    if (result === null) process.exitCode = 1;
+    // `krimto editors` — Phase B shortcut. v0.2.34 added flag forms for AI-agent + CI use:
+    //   --add <name>       Connect one editor (merge with current set). Repeatable.
+    //   --remove <name>    Disconnect one editor (merge with current set). Repeatable.
+    //   --set <list>       Replace the entire connected set (comma-separated).
+    //   --list             Print current connected editors, one per line.
+    // No flags + TTY → interactive checkbox wizard (unchanged).
+    // No flags + no TTY → the new assertInteractiveOrUsage guard prints flag usage and exits 2.
+    const flags = process.argv.slice(3);
+    if (flags.includes("--list")) {
+      const { listConnectedEditors } = await tsImport("../src/cli/editors.ts", import.meta.url);
+      const connected = await listConnectedEditors();
+      for (const e of connected) process.stdout.write(`${e}\n`);
+    } else {
+      const adds = collectFlagValues(flags, "--add");
+      const removes = collectFlagValues(flags, "--remove");
+      const setIdx = flags.indexOf("--set");
+      const setValue = setIdx >= 0 ? flags[setIdx + 1] : undefined;
+      const yes = flags.includes("--yes");
+      const { runEditors, parseEditorList, listConnectedEditors } = await tsImport(
+        "../src/cli/editors.ts",
+        import.meta.url,
+      );
+      if (adds.length > 0 || removes.length > 0 || setValue !== undefined) {
+        // Programmatic path — compute the target set and call applyEditors directly through
+        // the wrapper. `editors` option short-circuits the prompt.
+        let target;
+        try {
+          if (setValue !== undefined) {
+            target = parseEditorList([setValue]);
+          } else {
+            const current = await listConnectedEditors();
+            const toAdd = parseEditorList(adds);
+            const toRemove = new Set(parseEditorList(removes));
+            target = [...current];
+            for (const a of toAdd) if (!target.includes(a)) target.push(a);
+            target = target.filter((e) => !toRemove.has(e));
+          }
+        } catch (err) {
+          process.stderr.write(`krimto editors: ${err instanceof Error ? err.message : String(err)}\n`);
+          process.exit(2);
+        }
+        const result = await runEditors({ editors: target, ...(yes ? { yes: true } : {}) });
+        if (result === null) process.exitCode = 1;
+      } else {
+        // No flags — TTY user gets the interactive checkbox; agents get the guard's usage.
+        const result = await runEditors();
+        if (result === null) process.exitCode = 1;
+      }
+    }
   } else if (cmd === "search") {
     // `krimto search` — change the search provider (Keyword vs OpenAI) without re-running the
-    // whole setup wizard (Phase B).
+    // whole setup wizard (Phase B). v0.2.34 added flag forms for agent / CI use:
+    //   --keyword                   Switch to keyword search (default, no API key).
+    //   --openai --api-key sk-...   Switch to OpenAI semantic search (key verified first).
+    // No flags + TTY → interactive select; no flags + no TTY → guard prints usage + exit 2.
+    const flags = process.argv.slice(3);
+    const keyword = flags.includes("--keyword");
+    const openai = flags.includes("--openai");
+    const apiKeyIdx = flags.indexOf("--api-key");
+    const keyIdx = flags.indexOf("--key");
+    const apiKey =
+      apiKeyIdx >= 0 ? flags[apiKeyIdx + 1] : keyIdx >= 0 ? flags[keyIdx + 1] : undefined;
     const { runSearchSettings } = await tsImport("../src/cli/searchSettings.ts", import.meta.url);
-    const result = await runSearchSettings();
-    if (result === null) process.exitCode = 1;
+    if (keyword) {
+      const result = await runSearchSettings({ provider: "keyword" });
+      if (result === null) process.exitCode = 1;
+    } else if (openai) {
+      if (!apiKey) {
+        process.stderr.write("krimto search --openai requires --api-key <sk-...>\n");
+        process.exit(2);
+      }
+      const result = await runSearchSettings({ provider: "openai", apiKey });
+      if (result === null) process.exitCode = 1;
+    } else {
+      // No flags — TTY user gets the interactive select; agents get the guard's usage.
+      const result = await runSearchSettings();
+      if (result === null) process.exitCode = 1;
+    }
   } else if (cmd === "service") {
     // `krimto service` — change run mode (as-needed / always-running / manual). Installs or
     // uninstalls the platform service to match (Phase B). v0.2.32: accepts `--as-needed`,

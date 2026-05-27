@@ -18,7 +18,7 @@ import {
   type UninstallResult,
 } from "./service";
 import { defaultIdentity, type RunMode } from "./init";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
 export interface ServiceCmdOptions {
   io?: WizardIO;
@@ -75,6 +75,12 @@ export async function applyService(
 
 export async function runServiceCmd(opts: ServiceCmdOptions = {}): Promise<ServiceCmdResult | null> {
   const io = opts.io ?? defaultIO;
+  // v0.2.34 — guard against agents calling `krimto service` cold. Without a mode flag we
+  // would spawn a select prompt; without a TTY that hangs and then crashes with "unsettled
+  // top-level await". Surface the flag forms instead.
+  if (!opts.mode) {
+    assertInteractiveOrUsage(SERVICE_USAGE);
+  }
   try {
     const platform = detectPlatform();
     const current = await isServiceInstalled(platform, opts.homeDir);
@@ -144,3 +150,10 @@ function runModeLabel(m: RunMode): string {
       return "Manual (`krimto serve`)";
   }
 }
+
+/** v0.2.34 — non-interactive usage shown by the TTY guard. */
+const SERVICE_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto service --as-needed                    Editor launches Krimto on demand (stdio)\n" +
+  "  krimto service --always                       Run continuously as a background service\n" +
+  "  krimto service --manual                       Don't auto-start; user runs `krimto serve`";

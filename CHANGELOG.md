@@ -4,6 +4,66 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.34] — 2026-05-27 — agent-friendly Phase B (no more hang traps)
+
+### Fixed
+
+- **Phase B commands hung indefinitely when an AI-agent's Bash tool ran them.** The
+  smoke-6 transcript (`2026-05-27_11-05-43Z-install-krimto.md`) caught a Claude Code
+  agent trying `npx @krimto-labs/krimto service` and `… editors`; each opened an
+  `@inquirer/prompts` UI that waited for input that would never come (the Bash tool has
+  no stdin TTY), then crashed with `Detected unsettled top-level await … Aborted.` The
+  agent had to fall back to `AskUserQuestion` for the user, then manually hand-write
+  `~/.cursor/mcp.json` via Bash heredoc after the Write tool was blocked.
+
+  Fix: `editors`, `service`, `search`, `reset`, `remote`, `folder` each detect
+  `!process.stdin.isTTY` at the top of their `run*` function and exit 2 cleanly with
+  copy-pasteable flag-form usage instead of opening an unfulfillable prompt. New
+  shared helper `assertInteractiveOrUsage(usage)` in `src/cli/promptHelpers.ts`.
+
+### Added — non-interactive flags for the two commands that lacked them
+
+- **`krimto editors`** gained `--add <editor>`, `--remove <editor>`, `--set <list>`,
+  `--list`. The `--add` / `--remove` flags merge over the current connected set; `--set`
+  replaces it. Editor names are normalized (accepts `cursor` / `claude-code` / `claude`
+  / `codex` / `gemini` / `gemini-cli`); typos throw before the apply step.
+- **`krimto search`** gained `--keyword` and `--openai --api-key <sk-...>`. The OpenAI
+  path still runs the existing `runSetupEmbeddings` verification before persisting.
+- `service`, `remote`, `folder`, `reset` already had flag forms; the guard pattern now
+  applies to them too when invoked cold.
+
+### Added — discovery improvements
+
+- **`krimto --help`** has a new `━━ For AI agents (no TTY) ━━` block near the top
+  naming the canonical programmatic verbs (`init --yes`, `status`, `editors --add`,
+  `service --always`, `search --keyword`, `stop` / `start` / `restart`). Agents that
+  read help first land on the right path.
+- **`krimto status`** prints a one-line nudge when Krimto is running ad-hoc (not as a
+  service): `→ To run continuously across reboots: krimto service --always`. Same line
+  fires when there's no active server (configured-but-not-running case).
+
+### Tests
+
+- New: `tests/integration/non-tty-guard.test.ts` — 7 tests. Each Phase B command run
+  via `spawn` with `stdio: "ignore"` (forces non-TTY) exits 2 within 5s with
+  flag-usage on stderr and no `"unsettled top-level await"`. Plus a sanity check that
+  `--keyword` (with flag) bypasses the guard.
+- `tests/integration/shortcuts.test.ts` — added one line to simulate `process.stdin.isTTY
+  = true` (the existing tests mock `@inquirer/prompts`, so they're simulating an
+  interactive run; the guard would otherwise fire before the mocks).
+
+Total: 634 passing (was 627). Lint + types clean.
+
+### Verified live on the user's machine
+
+The three friction points from the smoke-6 transcript:
+- `krimto service` (no flags, no TTY) → exits 2 with usage. No "unsettled top-level
+  await". The agent reads it and runs `service --always` directly.
+- `krimto editors` (no flags, no TTY) → same. Agent reads it and runs
+  `editors --add cursor --yes`. No manual mcp.json write needed.
+- `krimto status` → prints `→ To run continuously across reboots: krimto service --always`
+  underneath the header when running ad-hoc.
+
 ## [0.2.33] — 2026-05-27 — `reset --wipe-notes` single-prompt UX
 
 ### Fixed

@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 
 import { readDataDirGitInfo } from "../storage/git";
 import { runSetupRemote, type SetupRemoteResult } from "./setupRemote";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
 const exec = promisify(execFile);
 
@@ -39,6 +39,12 @@ export interface RemoteCmdResult {
 export async function runRemoteCmd(opts: RemoteCmdOptions): Promise<RemoteCmdResult | null> {
   const io = opts.io ?? defaultIO;
   const dataDir = opts.dataDir;
+
+  // v0.2.34 — guard against agents calling `krimto remote` cold. Without an action
+  // we open a select prompt; without a TTY that hangs. Surface the flag forms.
+  if (!opts.action) {
+    assertInteractiveOrUsage(REMOTE_USAGE);
+  }
 
   try {
     const gitInfo = await readDataDirGitInfo(dataDir);
@@ -137,3 +143,10 @@ export async function runRemoteCmd(opts: RemoteCmdOptions): Promise<RemoteCmdRes
     throw e;
   }
 }
+
+/** v0.2.34 — non-interactive usage shown by the TTY guard. */
+const REMOTE_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto remote --show                          Print the current remote URL\n" +
+  "  krimto remote --set git@host:repo.git         Wire a remote (verifies the first push)\n" +
+  "  krimto remote --remove --yes                  Unwire the remote";

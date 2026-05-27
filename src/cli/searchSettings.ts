@@ -14,7 +14,7 @@ import {
   detectExistingSetup,
   type SearchProvider,
 } from "./init";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 import { runSetupEmbeddings } from "./setupEmbeddings";
 
 export interface SearchOptions {
@@ -83,6 +83,11 @@ export async function applySearch(
 
 export async function runSearchSettings(opts: SearchOptions = {}): Promise<SearchResult | null> {
   const io = opts.io ?? defaultIO;
+  // v0.2.34 — when no provider was supplied programmatically we'd open a select prompt.
+  // Without a TTY (AI agent / CI) that prompt hangs. Surface the flag form instead.
+  if (!opts.provider) {
+    assertInteractiveOrUsage(SEARCH_USAGE);
+  }
   try {
     const snapshot = await detectExistingSetup(opts.cwd ?? process.cwd(), opts.homeDir);
     io.out("\nKrimto — Search settings\n\n");
@@ -145,3 +150,10 @@ export async function runSearchSettings(opts: SearchOptions = {}): Promise<Searc
     throw e;
   }
 }
+
+/** Non-interactive usage shown by the v0.2.34 TTY guard. */
+const SEARCH_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto search --keyword                       Use keyword search (default, free)\n" +
+  "  krimto search --openai --api-key sk-...       Use OpenAI semantic search (key verified)";
+

@@ -134,9 +134,20 @@ function headerLine(
 ): string {
   if (status === "ok") {
     if (lock?.alive) {
-      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}, ${effectiveLaunchedBy ?? lock.info.launchedBy}), started ${humanAgo(lock.info.started, now)}\n`;
+      // v0.2.34 — when the running process is ad-hoc (a foreground `krimto serve` or an
+      // editor's stdio launcher), nudge the user toward `krimto service --always` so the
+      // service survives reboots without them having to dig for the verb.
+      const adHocHint =
+        (effectiveLaunchedBy ?? lock.info.launchedBy) === "service"
+          ? ""
+          : "   → To run continuously across reboots: krimto service --always\n";
+      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}, ${effectiveLaunchedBy ?? lock.info.launchedBy}), started ${humanAgo(lock.info.started, now)}\n${adHocHint}`;
     }
-    return `\n✅ Krimto is configured · v${KRIMTO_VERSION}\n   No active server right now — it will be launched on demand by your editor.\n`;
+    return (
+      `\n✅ Krimto is configured · v${KRIMTO_VERSION}\n` +
+      `   No active server right now — it will be launched on demand by your editor.\n` +
+      `   → To run continuously across reboots: krimto service --always\n`
+    );
   }
   if (status === "warning") {
     return `\n⚠️  Krimto needs attention · v${KRIMTO_VERSION}\n`;

@@ -24,7 +24,7 @@ import {
   type EditorKind,
 } from "./init";
 import { removeMcpConfig } from "./mcpConfig";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 import { detectPlatform, uninstallService } from "./service";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
@@ -152,6 +152,11 @@ export async function applyReset(opts: ResetOptions = {}): Promise<ResetResult> 
 
 export async function runReset(opts: ResetOptions = {}): Promise<ResetResult | null> {
   const io = opts.io ?? defaultIO;
+  // v0.2.34 — when --yes was NOT passed we'd open a confirm prompt. Without a TTY (AI
+  // agent / CI) the prompt would hang. Surface the flag form instead.
+  if (!opts.yes) {
+    assertInteractiveOrUsage(RESET_USAGE);
+  }
   try {
     const dataDir = opts.dataDir ?? path.join(opts.homeDir ?? "", ".krimto");
 
@@ -276,3 +281,9 @@ function printResetResult(res: ResetResult, io: WizardIO): void {
   }
   io.out("\nRestart your editor(s) so they pick up the changes.\n");
 }
+
+/** v0.2.34 — non-interactive usage shown by the TTY guard. */
+const RESET_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto reset --yes                            Disconnect everything (notes preserved)\n" +
+  "  krimto reset --yes --wipe-notes               Also MOVE notes to a trash sibling";

@@ -27,7 +27,7 @@ import {
   type InstallResult,
 } from "./service";
 import { defaultIdentity } from "./init";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
 export interface FolderCmdOptions {
   io?: WizardIO;
@@ -55,6 +55,12 @@ export interface FolderCmdResult {
 export async function runFolderCmd(opts: FolderCmdOptions): Promise<FolderCmdResult | null> {
   const io = opts.io ?? defaultIO;
   const fromDir = path.resolve(opts.from);
+
+  // v0.2.34 — when --to was NOT supplied we'd open an input prompt for the destination.
+  // Without a TTY (AI agent / CI) that hangs. Surface the flag form.
+  if (!opts.to) {
+    assertInteractiveOrUsage(FOLDER_USAGE);
+  }
 
   try {
     io.out("\nKrimto — Move the notes folder\n\n");
@@ -214,3 +220,8 @@ async function classifyDestination(dir: string): Promise<"absent" | "empty" | "n
     return "non-empty";
   }
 }
+
+/** v0.2.34 — non-interactive usage shown by the TTY guard. */
+const FOLDER_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto folder --to /new/absolute/path --yes   Move the notes folder";

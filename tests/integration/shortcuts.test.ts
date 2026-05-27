@@ -24,6 +24,13 @@ vi.mock("@inquirer/prompts", () => ({
   password: vi.fn(async (c: { message: string }) => nextAnswer(`password:${c.message}`)),
 }));
 
+// v0.2.34 — the Phase B `run*` functions added an `assertInteractiveOrUsage` guard that
+// exits 2 when `process.stdin.isTTY` is false. Vitest runs without a TTY, so the guard
+// would fire before the mocked prompts above could be consulted. The tests in this file
+// SIMULATE an interactive run (they mock @inquirer/prompts), so we pretend isTTY=true to
+// match the simulated environment. Production behaviour is unchanged.
+Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+
 import { applyEditors, runEditors } from "../../src/cli/editors";
 import { applySearch, runSearchSettings } from "../../src/cli/searchSettings";
 import { applyService, runServiceCmd } from "../../src/cli/serviceCmd";
