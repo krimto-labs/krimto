@@ -9,28 +9,55 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.18** is the current published release — a consolidated UX redesign over
-> the v0.2.16 storage / index / access layers (which are all unchanged). Everything from v0.2.16
-> (markdown-in-git storage, `user → team → org` hierarchy, hybrid retrieval, server-enforced access,
-> two-way git sync, MCP over stdio + HTTP, the Docker image, the web UI, the complete CLI) is still
-> here, plus a substantial UX redesign on top. What's new in v0.2.18:
+> **Where we are:** **v0.2.35** is the current release — the v0.2.17 wizard redesign is now
+> shipped end-to-end, plus eighteen patch releases of correctness fixes and agent-friendly
+> surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
+> hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
+> image, the web UI) is unchanged. What you get on top of v0.2.16:
 >
-> - **One-command interactive setup wizard** (`krimto init`) — five questions with preselected
->   defaults; absorbs `connect`, `init`, `setup-remote`, and `setup-embeddings` into one flow.
-> - **Team-mode wizard** (`krimto team init` / `krimto join` / `krimto team disband`) — admins
->   onboard their team in one command; teammates join with a single line from a DM template.
-> - **Per-note CLI** (`krimto notes` / `edit` / `mv` / `supersede` / `tag`) — browse, search,
->   and edit notes from the terminal without opening the browser.
-> - **Settings shortcuts** (`krimto editors` / `search` / `service` / `reset`) — change one
->   thing without re-running the whole wizard. `reset` cleanly disconnects + uninstalls; `--wipe-notes`
->   moves data to a recoverable trash sibling, never `rm -rf`.
-> - **Notes-app `/ui`** — plain-English scope labels (Just me / Team name / Org name), inline
->   Edit + Move + Delete on every note, and a consolidated **Settings** page for the engineering
->   panels.
+> **The setup story (v0.2.17 → v0.2.21).**
+> - **One-command interactive setup wizard** (`krimto init`) — five questions, preselected
+>   defaults. Reads `git config user.email` for identity; detects editors at both project
+>   level (`.cursor/`, `CLAUDE.md`) and machine level (`~/.cursor/`, `~/.claude.json`).
+> - **Reconfigure menu** — re-runs of `krimto init` show a "Krimto on this machine:"
+>   summary with a real **Service:** line driven by lock + launchctl reality (not just
+>   config snapshot). "Keep current" prompts let you Enter-through.
 >
-> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and
-> [docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for the design
-> rationale and what each release added.
+> **The teardown story (v0.2.32 → v0.2.33).**
+> - **`krimto stop` / `start` / `restart`** — first-class verbs for the off-ramp the original
+>   wizard forgot. Idempotent. `stop` keeps the plist on disk so `start` can reload it.
+> - **`krimto reset [--yes] [--wipe-notes]`** — aggressive sweep across all editors (Cursor
+>   JSON + Claude Code CLI scopes user/project/local) + launchd/systemd uninstall + lock
+>   cleanup. `--wipe-notes` collapses to one named-consequence prompt.
+>
+> **The runtime story (v0.2.26 → v0.2.30).**
+> - **`/ui` notes-app redesign** — warm-paper Fraunces serif aesthetic, scope cards with
+>   emoji icons (📔 Just me / 📓 Team / 🏢 Org), notes timeline with per-row Edit / Move /
+>   Delete / View file. `krimto ui` opens it.
+> - **Single reconciled runtime view** (`inspectRuntime`) — every read-side command (status,
+>   verify-connection, whoami, reconfigure menu) routes through the same lock + launchctl +
+>   editor-config probe. No more "status says one thing, verify says another."
+> - **Service-first install ordering + port-ready probe** — wizard installs the service
+>   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
+>   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
+>
+> **The agent story (v0.2.34 → v0.2.35).**
+> - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
+>   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
+>   open an interactive prompt now has a flag form.
+> - **Non-TTY guards** — interactive commands without flags exit 2 with copy-pasteable
+>   usage instead of hanging on an unanswerable prompt.
+> - **`krimto whoami` + `set identity <email>`** + a **`krimto_whoami` MCP tool** so agents
+>   stop hallucinating identity.
+> - **Editor attribution via User-Agent sniffing** — facts saved over HTTP automatically
+>   carry `source: "cursor"` / `"claude-code"` / etc., so the dashboard's "saved from a
+>   Cursor chat" line works without prompting agents.
+> - **Cursor `alwaysApply: true` frontmatter** so `.cursor/rules/krimto.mdc` auto-attaches
+>   instead of requiring the user to type "krimto" first.
+>
+> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
+> diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
+> for the design rationale + what each patch caught.
 
 ## Try it in 90 seconds (solo, no account)
 
@@ -75,6 +102,33 @@ what your agent has been calling.
 
 **Power-user / CI:** `npx @krimto-labs/krimto init --yes` skips all prompts and applies
 defaults non-interactively. `--all` and `--minimal` keep their v0.2.16 meaning.
+
+### Setting Krimto up programmatically (AI agents, CI)
+
+Krimto is designed to be driven by Claude Code, Cursor, Codex, and similar AI agents that
+don't have a stdin TTY. Every interactive command has a flag form:
+
+```bash
+# The one-command full install (defaults: detected editors, as-needed run mode):
+krimto init --yes
+
+# Or pick the pieces:
+krimto editors --add cursor --add claude-code --yes    # wire editors
+krimto service --always                                # install background service
+krimto search --keyword                                # keyword search (default)
+krimto search --openai --api-key sk-...                # semantic search
+krimto remote --set git@github.com:acme/krimto.git     # cross-machine sync
+krimto status                                          # machine-readable check
+krimto stop / start / restart                          # idempotent service control
+```
+
+Run any interactive command (`editors`, `service`, `search`, `remote`, `folder`, `reset`)
+without a flag from a non-TTY shell and you get `exit 2` with copy-pasteable flag usage,
+not a hung-prompt warning. `krimto --help` has a dedicated **For AI agents (no TTY)**
+block at the top.
+
+The HTTP MCP handler also **sniffs `User-Agent`** to auto-stamp facts with `source:
+"cursor"` / `"claude-code"` / etc. — no agent-prompt convention needed.
 
 ## Connect your agent
 
@@ -136,66 +190,77 @@ The in-product **Connect** page (`/ui/connect`) shows this same rule with a copy
 
 Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the full list. All
 commands print clean, sectioned output with ✅ / ⚠️ / 🟢 status indicators and copy-paste shell
-commands. Grouped by purpose:
+commands. The seven groups below match `--help`'s structure.
 
 **Get connected (start here)**
 
 | Command | What it does |
 |---|---|
-| `init` | Interactive setup wizard — five questions, preselected defaults. Connects detected editors, applies the standing rule, optionally installs a background service. `--yes` skips prompts; legacy `--all` / `--minimal` still work. |
-| `serve` | Start the HTTP server (port 8080) + browser `/ui` dashboard |
-| `connect` | Print copy-paste config for Claude Code & Cursor (manual path) |
-| `uninit` | Strip the standing rule from this project's rules files |
+| `init [--yes]` | Interactive setup wizard — five questions, preselected defaults. Connects detected editors, applies the standing rule, optionally installs a background service. `--yes` skips prompts; legacy `--all` / `--minimal` still work. |
+| `connect` | Print copy-paste config for Claude Code & Cursor (manual path) — substitutes your real `git config user.email` for the identity. |
+| `uninit [--also-stop | --keep-running]` | Strip the standing rule from this project's rules files. Offers to stop the service too (or skip the prompt with the flags). |
 
-**Daily use** (v0.2.17-2 Phase D)
+**Look at your notes**
 
 | Command | What it does |
 |---|---|
 | `notes [query]` | List notes grouped by plain-English scope (`Just me` / team name / org name). With a query: ranked search via `krimto_recall`. |
-| `edit <id>` | Open the fact's `.md` in `$EDITOR`; reindexes on save. Validates frontmatter; restores immutable fields. |
-| `mv <id> <scope>` | Move a note between scopes (id preserved). Refuses if `canWrite` fails on either side. `user/me` resolves to the caller's identity. |
-| `supersede <id>` | Replace a note with a new version. Old version stays in git history + index (hidden from recall). |
-| `tag <id> +new -old ...` | Add or remove tags via frontmatter rewrite. Lowercase kebab-case enforced. |
+| `ui` | Open `http://localhost:8080/ui` in your browser. |
+| `open` | Reveal the notes folder in your OS file manager (`open` / `xdg-open` / `explorer`). |
+| `edit <id>` | Open the fact's `.md` in `$EDITOR`; reindexes on save. |
+| `mv <id> <scope>` | Move a note between scopes (id preserved). |
+| `supersede <id>` | Replace a note with a new version. Old stays in git. |
+| `tag <id> +new -old ...` | Add or remove tags via frontmatter rewrite. |
+| `rm <id>` | Delete a fact (file + index + git deletion commit). |
 
-**Team mode** (v0.2.17.1 Phase C)
+**Stop & reset** (v0.2.32+)
 
 | Command | What it does |
 |---|---|
-| `team init` | Admin-side wizard: admin email, team slug, optional git remote, initial teammates. Prints the admin key + per-teammate keys + a copy-paste DM template. |
+| `stop` | Stop the running krimto (uninstalls/unloads service if installed, SIGTERMs an ad-hoc PID). Plist stays on disk so `start` can reload it. Idempotent. |
+| `start` | Start krimto (re-bootstraps the existing plist). Honest message when no service is configured. |
+| `restart` | `stop` + `start`. Atomic on always-running mode via `launchctl kickstart -k`. |
+| `uninit` | Project-only undo (rule files only). Offers to stop the service too. |
+| `reset [--yes] [--wipe-notes]` | Disconnect every editor (Cursor JSON + Claude Code CLI across user/project/local scopes) + uninstall service + wipe API-key store. `--wipe-notes` collapses to one named-consequence prompt. |
+
+**Is it working?**
+
+| Command | What it does |
+|---|---|
+| `status` | One-screen consolidator: running PID + mode + launched-by, editors, storage, add-ons, recent activity, hijack warning. Nudges toward `service --always` when running ad-hoc. |
+| `whoami` | Print the active `KRIMTO_IDENTITY` and every place it's set (each editor's MCP config + the service unit env). Flags mismatches. |
+| `verify-connection` / `where` / `storage` / `usage` | Back-compat aliases — preserve their original stdout, point at `status` on stderr. |
+
+**Configure (after first run)** — every command accepts flags so agents can drive them non-interactively.
+
+| Command | What it does |
+|---|---|
+| `editors --add <name> / --remove <name> / --set <list>` | Wire / unwire editors (Cursor / Claude Code / Codex / Gemini). `--list` prints current connections. No-flag form prompts interactively when a TTY is available. |
+| `service --as-needed / --always / --manual` | Switch run mode. Flag form skips the prompt. `service stop` / `service start` are aliases for `stop` / `start`. |
+| `search --keyword / --openai --api-key sk-...` | Switch search provider. The OpenAI path verifies the key before persisting. |
+| `remote --show / --set <url> / --remove` | Manage the git remote (also reachable as `setup-remote <url>`). |
+| `folder --to <path> [--yes]` | Guided move of the data dir. Stops service, atomic rename (cross-fs fallback), reinstalls service with new env, prints `export KRIMTO_DATA=` hint. |
+| `set identity <email>` | Change `KRIMTO_IDENTITY` everywhere atomically (editor MCP configs + service env). Preserves other env keys. |
+
+**Team**
+
+| Command | What it does |
+|---|---|
+| `team init` | Admin-side wizard: admin email, team slug, optional git remote, initial teammates. Prints admin key + per-teammate keys + a DM template. |
+| `team disband [--yes]` | Per-machine step-back to solo mode. Notes / `members.yaml` / git history untouched. |
 | `join --server <url> --key <key>` | Teammate-side: detects editors, writes HTTP MCP config with the bearer header + the standing rule. |
-| `team disband [--yes]` | Per-machine step-back to solo mode: rewrites HTTP MCP entries as stdio. Notes / `members.yaml` / git history untouched. |
 
-**Change settings** (v0.2.17-4 Phase B)
-
-| Command | What it does |
-|---|---|
-| `editors` | Add or remove editor connections (checkbox prompt with current state preselected). |
-| `search` | Flip between Keyword and OpenAI search. Verifies the OpenAI key before persisting. |
-| `service` | Switch run mode (as-needed / always-running / manual). Installs or uninstalls the platform service. |
-| `reset [--yes] [--wipe-notes]` | Disconnect from all editors + uninstall service + wipe local keys. `--wipe-notes` atomically moves the data dir to a timestamped trash sibling (recoverable). |
-
-**Diagnose**
+**Advanced / scripting**
 
 | Command | What it does |
 |---|---|
-| `status` | One-screen consolidator (v0.2.17): connections, storage, optional add-ons, recent activity, hijack warning. |
-| `verify-connection` / `where` / `storage` / `usage` | Legacy verbs — still work, point at `status` for the consolidated view. |
-| `setup-remote <url>` | Wire the data dir to a git remote and verify the initial push. |
+| `serve` | Start the HTTP server in the foreground (port 8080) + browser `/ui` dashboard. |
+| `setup-remote <url>` | One-shot git remote setup (verifies the initial push). |
 | `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config. |
-
-**Storage**
-
-| Command | What it does |
-|---|---|
-| `rm <id>` | Delete a fact (file + index + git deletion commit). Refuses while a server holds the lock. |
-| `reindex` | Rebuild `index.db` from the markdown files (fixes orphans left by manual `rm` of .md files). |
-
-**Other**
-
-| Command | What it does |
-|---|---|
-| (no args) | Start the stdio MCP server (default; for MCP clients to launch) |
-| `--help`, `-h` | Show the full CLI surface |
+| `reindex` | Rebuild `index.db` from markdown (fixes orphans). |
+| `delete <id>` | Alias for `rm`. |
+| (no args) | Start the stdio MCP server (default; for MCP clients to launch). |
+| `--help`, `-h` | Show the full CLI surface — includes a `For AI agents (no TTY)` block at the top with copy-paste flag examples. |
 
 The stdio entrypoint enforces a **single-writer lock** on the data dir (`.krimto/lock.json`) — two
 Krimto processes can no longer race on the same `~/.krimto`. A second `serve`/stdio launch is
