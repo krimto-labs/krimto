@@ -4,6 +4,39 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.22] — 2026-05-27
+
+### Added
+
+- **`krimto whoami` and `krimto set identity <email>`** — two new Phase B identity commands.
+  Motivated by the v0.2.21 "data-location surprise" class of bug: users end up with two
+  scopes (`user/lpdthemes@gmail.com` + `user/user@localhost`) because different surfaces
+  saw different identities, and they only notice weeks later.
+  - `krimto whoami` reads `KRIMTO_IDENTITY` from every place it's been written (each
+    editor's MCP config + the launchd/systemd service unit) and reports the active
+    identity. Flags **mismatches** between sources — exits 1 when sources disagree.
+  - `krimto set identity <email>` changes `KRIMTO_IDENTITY` everywhere atomically:
+    surgical mutation of each editor's MCP `env` block (preserves other env keys like
+    `KRIMTO_EMBED_PROVIDER` and `KRIMTO_EMBED_API_KEY` — users don't silently lose their
+    embeddings setup), plus uninstall + reinstall of the always-running service with the
+    new env. HTTP-transport entries are left alone (identity lives in the service env).
+  - Existing notes do NOT migrate — the folder for the old identity stays put under
+    `~/.krimto/user/<old-email>/`. The summary calls this out explicitly so it's not a
+    surprise; an interactive `confirm()` prompt requires consent unless `--yes` is passed.
+- New file: `src/cli/whoami.ts`. New file: `src/cli/setIdentity.ts`.
+- Two-word dispatch added for `set identity` in `bin/krimto.mjs` (mirrors `team init` /
+  `team disband` from v0.2.17.1). `--help` now lists both commands under an "Identity"
+  section.
+
+### Tests
+
+- `tests/integration/identity.test.ts` — 11 new tests covering:
+  - whoami: empty machine, single registered editor, HTTP-entry "(uses service identity)"
+    behavior (no false mismatch on always-running setups), mismatch detection
+  - set identity: rejects non-email, refuses when Krimto isn't set up, no-change when
+    identity already matches, single-editor update, **preserves `KRIMTO_EMBED_*` keys**
+    when updating identity, leaves HTTP entries alone, honors the `confirm()` abort path
+
 ## [0.2.21] — 2026-05-27
 
 ### Fixed

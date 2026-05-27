@@ -13,7 +13,9 @@ try {
   const cmd =
     rawCmd === "team" && typeof process.argv[3] === "string"
       ? `team ${process.argv[3]}`
-      : rawCmd;
+      : rawCmd === "set" && typeof process.argv[3] === "string"
+        ? `set ${process.argv[3]}`
+        : rawCmd;
 
   // Guard: `krimto team` alone (or with an unknown subverb) shouldn't fall through to the stdio
   // MCP server. Print usage and exit instead.
@@ -23,6 +25,16 @@ try {
       "Usage: krimto team <init|disband>\n" +
         "  init     Set up team mode (admin + members + git remote)\n" +
         "  disband  Step back to solo mode on this machine\n",
+    );
+    process.exit(2);
+  }
+
+  // Same guard for `krimto set <subverb>`.
+  const knownSetCmds = ["set identity"];
+  if (rawCmd === "set" && !knownSetCmds.includes(cmd)) {
+    process.stderr.write(
+      "Usage: krimto set <identity> <value>\n" +
+        "  identity <email>   Change the identity used for new fact writes\n",
     );
     process.exit(2);
   }
@@ -351,6 +363,36 @@ try {
     // doesn't have to chase the README. Honors KRIMTO_IDENTITY when set.
     const { formatConnect } = await tsImport("../src/cli/connect.ts", import.meta.url);
     process.stdout.write(formatConnect({ identity: process.env.KRIMTO_IDENTITY }));
+  } else if (cmd === "whoami") {
+    // `krimto whoami` — show the active KRIMTO_IDENTITY and every place it's currently set
+    // (each editor's MCP config + the always-running service unit). Surfaces drift between
+    // sources so users notice before notes start splitting across two scopes.
+    const { runWhoami } = await tsImport("../src/cli/whoami.ts", import.meta.url);
+    const result = await runWhoami();
+    process.stdout.write(result.message);
+    if (result.mismatch) process.exitCode = 1;
+  } else if (cmd === "set identity") {
+    // `krimto set identity <email>` — update KRIMTO_IDENTITY across every registered editor
+    // and the always-running service. Preserves other env keys (KRIMTO_EMBED_*). Existing
+    // notes do NOT move — that's an intentional separate step.
+    const newIdentity = process.argv[4];
+    const flags = process.argv.slice(5);
+    const yes = flags.includes("--yes");
+    if (!newIdentity) {
+      process.stderr.write(
+        "Usage: krimto set identity <email> [--yes]\n  e.g. krimto set identity alice@acme.com\n",
+      );
+      process.exit(2);
+    }
+    const { runSetIdentity } = await tsImport("../src/cli/setIdentity.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runSetIdentity({
+      identity: newIdentity,
+      dataDir: resolveDataDir(),
+      yes,
+    });
+    process.stdout.write(result.message);
+    if (result.status === "error") process.exitCode = 1;
   } else {
     const mod = await tsImport("../src/server/index.ts", import.meta.url);
     await mod.main();
