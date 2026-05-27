@@ -212,6 +212,16 @@ async function installLaunchd(
   if (opts.dryRun) {
     return { platform: "darwin", unitPath, unitContents, activateCommand, activated: false };
   }
+  // v0.2.23 — reconfigure-safe: `launchctl bootstrap` errors with EIO (Input/output error)
+  // when the service is already loaded, which broke every second `krimto init` after the
+  // first install. Best-effort bootout first so the bootstrap below always starts from a
+  // clean slate. The new plist content was already written above, so the bootstrap picks
+  // up the latest env / argv when it reloads.
+  try {
+    await exec("launchctl", ["bootout", `gui/${uid}/${SERVICE_LABEL}`]);
+  } catch {
+    // Not loaded yet — happy first-install case, nothing to undo.
+  }
   await exec(activateCommand.command, activateCommand.args);
   return { platform: "darwin", unitPath, unitContents, activateCommand, activated: true };
 }

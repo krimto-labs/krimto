@@ -4,6 +4,25 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.23] — 2026-05-27
+
+### Fixed
+
+- **`krimto init` rerun crashed on macOS with `Bootstrap failed: 5: Input/output error`.**
+  Reported from a real smoke test after the v0.2.22 release. Root cause: `launchctl bootstrap`
+  returns EIO when the LaunchAgent is already loaded. The wizard's reconfigure path called
+  `bootstrap` unconditionally, so every second `krimto init` on a machine with the service
+  installed died at the install step. Fix: `installLaunchd` now runs `launchctl bootout`
+  best-effort before `bootstrap`, so the next bootstrap always starts from a clean slate.
+  First-install case (nothing loaded) → bootout errors and is silently ignored; reconfigure
+  case → bootout succeeds, bootstrap reloads the latest plist content.
+
+### Tests
+
+- `tests/integration/service-reconfigure.test.ts` — four new tests mocking `child_process`
+  to verify the bootout-then-bootstrap order on first install + reconfigure, that the plist
+  is written before any launchctl call, and that dryRun still skips both invocations.
+
 ## [0.2.22] — 2026-05-27
 
 ### Added
