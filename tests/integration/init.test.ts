@@ -437,11 +437,15 @@ describe("krimto init (bin dispatch)", () => {
   }, 30000);
 
   it("prints the AUTO MODE confirmation + next steps + how to undo", async () => {
+    // v0.2.32: the "To undo:" single-line message was replaced with three honest off-ramps
+    // ("To stop the service", "To undo this project only", "To disconnect everything") so
+    // users aren't stranded thinking `uninit` is the full stop button. Test the new shape.
     const { stderr } = await exec(process.execPath, [BIN, "init"], { cwd: dir });
     expect(stderr).toContain("AUTO MODE on");
     expect(stderr).toContain("Next steps");
-    expect(stderr).toContain("To undo:");
-    expect(stderr).toContain("<!-- krimto:start -->");
+    expect(stderr).toContain("To stop the service");
+    expect(stderr).toContain("To undo this project only");
+    expect(stderr).toContain("To disconnect everything");
   }, 30000);
 
   it("surfaces `krimto uninit` prominently on success", async () => {

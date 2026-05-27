@@ -10,12 +10,18 @@ try {
   // Two-word command support (v0.2.17.1): `team init`, `team disband`. Collapse argv[2]+argv[3]
   // into one cmd string when argv[2] is one of the namespaced verbs.
   const rawCmd = process.argv[2];
+  const sub = process.argv[3];
+  // v0.2.32 — `service stop` / `service start` are explicit, scriptable subverbs (no prompt).
+  // `service` alone still launches the interactive wizard. Mirrors the team/set two-word shape.
+  const serviceSubverbs = ["stop", "start"];
   const cmd =
-    rawCmd === "team" && typeof process.argv[3] === "string"
-      ? `team ${process.argv[3]}`
-      : rawCmd === "set" && typeof process.argv[3] === "string"
-        ? `set ${process.argv[3]}`
-        : rawCmd;
+    rawCmd === "team" && typeof sub === "string"
+      ? `team ${sub}`
+      : rawCmd === "set" && typeof sub === "string"
+        ? `set ${sub}`
+        : rawCmd === "service" && typeof sub === "string" && serviceSubverbs.includes(sub)
+          ? `service ${sub}`
+          : rawCmd;
 
   // Guard: `krimto team` alone (or with an unknown subverb) shouldn't fall through to the stdio
   // MCP server. Print usage and exit instead.
@@ -138,8 +144,13 @@ try {
             "  3. Verify it landed: $ npx @krimto-labs/krimto verify-connection\n" +
             mcpWarning +
             "\n" +
-            "To undo:  $ npx @krimto-labs/krimto uninit\n" +
-            "Manual:   delete the block between <!-- krimto:start --> and <!-- krimto:end -->\n\n",
+            // v0.2.32 — three honest off-ramps, three blast radii. The old single line said
+            // "To undo: krimto uninit" which only stripped this project's rule files; users
+            // were stranded thinking they had a working stop button when the service kept
+            // running on their machine.
+            "To stop the service:        $ npx @krimto-labs/krimto stop\n" +
+            "To undo this project only:  $ npx @krimto-labs/krimto uninit\n" +
+            "To disconnect everything:   $ npx @krimto-labs/krimto reset       (notes preserved)\n\n",
         );
       }
     } else if (yes) {
@@ -211,6 +222,16 @@ try {
   } else if (cmd === "uninit") {
     // `krimto uninit` — remove the always-use-Krimto rule from this project's rules files,
     // flipping the project back from AUTO MODE to DEFAULT MODE.
+    //
+    // v0.2.32: the smoke-6 audit caught users assuming `uninit` was the full undo button —
+    // it wasn't (the background service kept running). After rule removal, if a service
+    // and/or a live krimto process is detected on this machine, we now ask whether the
+    // user also wants to stop it. Default is No (the service is machine-wide; other
+    // projects may use it). The flag `--also-stop` skips the prompt; `--keep-running`
+    // explicitly suppresses it (for scripted runs).
+    const flags = process.argv.slice(3);
+    const alsoStopFlag = flags.includes("--also-stop");
+    const keepRunningFlag = flags.includes("--keep-running");
     const { runUninit } = await tsImport("../src/cli/uninit.ts", import.meta.url);
     const res = await runUninit(process.cwd());
     if (res.cleaned.length === 0) {
@@ -232,6 +253,28 @@ try {
       body += "  Run `krimto init` to switch back to AUTO MODE.\n";
       body += "\n  Restart your editor so it picks up the change.\n\n";
       process.stderr.write(body);
+
+      // Now offer to stop the service. Skip the prompt if either flag was passed.
+      if (!keepRunningFlag) {
+        const { isServiceInstalled, detectPlatform } = await tsImport("../src/cli/service.ts", import.meta.url);
+        const svc = await isServiceInstalled(detectPlatform());
+        if (svc.installed) {
+          let stop = alsoStopFlag;
+          if (!alsoStopFlag && process.stdin.isTTY === true) {
+            const { confirmStop } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
+            process.stderr.write(
+              "ℹ️  The background service is still running on this machine — other projects may use it.\n",
+            );
+            stop = await confirmStop();
+          }
+          if (stop) {
+            const { runStop } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
+            const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+            const stopRes = await runStop({ dataDir: resolveDataDir() });
+            process.stdout.write(stopRes.message);
+          }
+        }
+      }
     }
   } else if (cmd === "where") {
     // `krimto where` — print the data directory. v0.2.31: deprecated in favour of
@@ -332,11 +375,49 @@ try {
     if (result === null) process.exitCode = 1;
   } else if (cmd === "service") {
     // `krimto service` — change run mode (as-needed / always-running / manual). Installs or
-    // uninstalls the platform service to match (Phase B).
+    // uninstalls the platform service to match (Phase B). v0.2.32: accepts `--as-needed`,
+    // `--always` (alias for --always-running), or `--manual` to skip the prompt for scripts.
+    const flags = process.argv.slice(3);
+    const flagMode = flags.includes("--as-needed")
+      ? "as-needed"
+      : flags.includes("--always") || flags.includes("--always-running")
+        ? "always-running"
+        : flags.includes("--manual")
+          ? "manual"
+          : undefined;
     const { runServiceCmd } = await tsImport("../src/cli/serviceCmd.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runServiceCmd({ dataDir: resolveDataDir() });
+    const result = await runServiceCmd({
+      dataDir: resolveDataDir(),
+      ...(flagMode ? { mode: flagMode } : {}),
+    });
     if (result === null) process.exitCode = 1;
+  } else if (cmd === "stop" || cmd === "service stop") {
+    // `krimto stop` — v0.2.32 first-class teardown verb. Uninstalls the launchd/systemd
+    // service (if installed) and SIGTERMs whatever PID is holding the lock. Idempotent.
+    // `service stop` is the same code path, named for users coming via `service` discovery.
+    const { runStop } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runStop({ dataDir: resolveDataDir() });
+    process.stdout.write(result.message);
+  } else if (cmd === "start" || cmd === "service start") {
+    // `krimto start` — v0.2.32 counterpart to stop. If a service plist exists on disk,
+    // reinstall + bootstrap (goes through the v0.2.26 kickstart-or-bootstrap path). If no
+    // service is configured, prints an instructive message instead of doing a brittle
+    // background-detached spawn.
+    const { runStart } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runStart({ dataDir: resolveDataDir() });
+    process.stdout.write(result.message);
+    if (result.status === "no-service-configured" || result.status === "error") process.exitCode = 1;
+  } else if (cmd === "restart") {
+    // `krimto restart` — v0.2.32. stop + start. On always-running mode this is effectively
+    // `launchctl kickstart -k` via installService's v0.2.26 reload path — atomic, no
+    // port-unbound window.
+    const { runRestart } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runRestart({ dataDir: resolveDataDir() });
+    process.stdout.write(result.message);
   } else if (cmd === "reset") {
     // `krimto reset` — disconnect from all editors + uninstall service + wipe local key store.
     // `--wipe-notes` adds a second confirmation and moves the data dir to a trash sibling.

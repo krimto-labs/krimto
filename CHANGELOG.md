@@ -4,6 +4,96 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.32] — 2026-05-27 — "the stop button"
+
+### Added — zero-friction off-ramp
+
+The user's CLI audit caught Krimto with three half-overlapping teardown verbs (`uninit` /
+`service` / `reset`) and **no first-class verb for "stop the running krimto"**. Users
+guessing for the stop button found nothing — the deeper verbs that did the work were
+named after internal subsystems, not after what the user wanted to accomplish. The audit
+also surfaced that `krimto --help` advertised 14 of 28 dispatched commands. This release
+closes both gaps.
+
+- **`krimto stop` / `krimto start` / `krimto restart`** — three new top-level verbs.
+  Idempotent. No prompts. Named the way users would name them.
+  - `stop` — Unload launchd / systemd. Plist STAYS on disk so `start` can reload it.
+    SIGTERMs any ad-hoc PID that holds the lock. Deletes the lock file.
+  - `start` — Reinstall + bootstrap an existing plist (v0.2.26's kickstart-or-bootstrap
+    path). When no service is configured, prints an instructive message — refuses to do
+    a brittle background-detached `serve` spawn.
+  - `restart` — `stop` + `start`. On always-running mode this is effectively
+    `launchctl kickstart -k` (atomic, no port-unbound window).
+  New file: `src/cli/stopCmd.ts`. Internal split in `src/cli/service.ts`: new
+  `stopService` (bootout/disable only, keeps unit file) vs existing `uninstallService`
+  (bootout + delete unit file).
+- **`krimto service stop` / `krimto service start`** — two-word aliases for users coming
+  via `service` discovery. Bin dispatcher recognises them like `team init`.
+- **`krimto service --as-needed | --always | --manual`** — flag forms of the interactive
+  service-mode switcher. Existing `krimto service` (no args) still prompts.
+
+### Changed — `uninit` asks about the seam
+
+After stripping rule files, `uninit` now checks whether the always-running service is
+installed on this machine and offers (interactive mode only) to stop it too. Default is
+**No** — the service is machine-wide; other projects may use it. Flags `--also-stop` and
+`--keep-running` skip the prompt for scripted runs. Fixes the smoke-6 trust gap where
+users assumed `uninit` was the full stop button.
+
+### Changed — wizard success screen
+
+After "Try it now" and "When you want teammates in", a new block:
+```
+━━ When you want to stop / undo ━━
+
+  $ krimto stop          Stop the running krimto (start it again with `krimto start`)
+  $ krimto uninit        Switch this project back to DEFAULT MODE (rule only)
+  $ krimto reset         Disconnect every editor + service (notes preserved)
+```
+Three verbs, three blast radii, so the service-mode install never feels like a one-way
+door.
+
+### Changed — legacy init's "To undo" line
+
+Replaced the single-line, false-promise `To undo: krimto uninit` (which only stripped
+rule files) with three honest off-ramps:
+```
+To stop the service:        $ npx @krimto-labs/krimto stop
+To undo this project only:  $ npx @krimto-labs/krimto uninit
+To disconnect everything:   $ npx @krimto-labs/krimto reset       (notes preserved)
+```
+
+### Changed — `--help` reorganized into 7 groups
+
+Every dispatched command is now surfaced, grouped by what the user wants to accomplish:
+**Get connected · Look at your notes · Stop & reset · Is it working? · Configure · Team ·
+Advanced**. The 14 commands that were stranded in the source (status, editors, search,
+service, reset, stop, start, restart, edit, mv, supersede, tag, notes, join, team init,
+team disband, delete, set identity) are all advertised. Deprecated aliases
+(`verify-connection`, `where`, `storage`, `usage`) now route the user toward `krimto
+status` in the help text itself.
+
+### Tests
+
+- `tests/integration/stop-cmd.test.ts` — 4 new tests: stop on a clean machine,
+  stop deletes stale lock file even with dead PID, start reports
+  "no-service-configured" without a plist, start reinstalls when a plist exists.
+- `tests/integration/help.test.ts` — 2 new regression-guard tests: every dispatched
+  command is in `--help`, every group header from the rewrite is present.
+- `tests/integration/init.test.ts` — updated to assert the three new off-ramp lines
+  instead of the old single "To undo" message.
+
+Total: 624 passing (was 618). Lint + types clean.
+
+### Verified end-to-end on the user's machine
+
+Real launchd cycle on `/Users/paulbuiko/Desktop/krimto-smoke-6`:
+- `krimto init --yes` → service installed, port up
+- `krimto stop` → launchctl forgets the service, plist STAYS on disk (verified)
+- `krimto start` → re-bootstrap, port :8080 listening on a fresh PID
+- `krimto restart` → stop + start, new PID, port back up
+- `krimto stop` x2 → second call says "already stopped" (idempotent)
+
 ## [0.2.31] — 2026-05-27
 
 ### Added — five remaining Maria-journey gaps closed

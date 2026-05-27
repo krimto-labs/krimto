@@ -465,6 +465,13 @@ function printApplyResult(res: ApplyResult, io: WizardIO): void {
   io.out("  $ krimto ui            Open the dashboard in your browser\n\n");
   io.out("━━ When you want teammates in ━━\n\n");
   io.out("  $ krimto team init     Walks you through team mode\n\n");
+  // v0.2.32 — the smoke-6 audit caught users with no idea where the off-ramp lives. Three
+  // verbs, three blast radii, named so the user can guess them later. Always shown so the
+  // service-mode install in particular doesn't feel like a one-way door.
+  io.out("━━ When you want to stop / undo ━━\n\n");
+  io.out("  $ krimto stop          Stop the running krimto (start it again with `krimto start`)\n");
+  io.out("  $ krimto uninit        Switch this project back to DEFAULT MODE (rule only)\n");
+  io.out("  $ krimto reset         Disconnect every editor + service (notes preserved)\n\n");
 
   for (const o of res.editorOutcomes) {
     if (o.manualSnippet && o.mcpAction === "manual") {

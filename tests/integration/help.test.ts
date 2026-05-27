@@ -39,6 +39,38 @@ describe("formatHelp", () => {
     expect(out).toContain("AUTO MODE");
     expect(out).toContain("uninit"); // documented as the switch back to DEFAULT
   });
+
+  // v0.2.32 — the audit caught --help advertising 14 of 28 commands. The rewrite surfaces
+  // everything in 7 groups. These assertions guard against regression — every command the
+  // dispatch table accepts must appear in --help, or it's a discovery dead-end.
+  it("surfaces every dispatched command (regression guard for the v0.2.32 rewrite)", () => {
+    const out = formatHelp("0.2.32");
+    // Get connected
+    for (const v of ["init", "connect", "uninit"]) expect(out).toContain(v);
+    // Look at your notes
+    for (const v of ["notes", "ui", "open", "edit", "mv", "supersede", "tag", "rm"]) expect(out).toContain(v);
+    // Stop & reset — the missing piece the audit flagged
+    for (const v of ["stop", "start", "restart", "reset"]) expect(out).toContain(v);
+    // Is it working?
+    for (const v of ["status", "whoami", "verify-connection"]) expect(out).toContain(v);
+    // Configure
+    for (const v of ["editors", "service", "search", "remote", "folder", "set identity"]) expect(out).toContain(v);
+    // Team
+    for (const v of ["team init", "team disband", "join"]) expect(out).toContain(v);
+    // Advanced
+    for (const v of ["serve", "reindex", "setup-remote", "setup-embeddings"]) expect(out).toContain(v);
+  });
+
+  it("groups commands by user intent (the seven section headers from the rewrite)", () => {
+    const out = formatHelp("0.2.32");
+    expect(out).toContain("Get connected");
+    expect(out).toContain("Look at your notes");
+    expect(out).toContain("Stop & reset");
+    expect(out).toContain("Is it working?");
+    expect(out).toContain("Configure");
+    expect(out).toContain("Team");
+    expect(out).toContain("Advanced");
+  });
 });
 
 describe("krimto --help (bin dispatch)", () => {

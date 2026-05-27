@@ -307,6 +307,60 @@ export async function uninstallService(
   return { platform, removed: false };
 }
 
+/**
+ * v0.2.32 — STOP the service without removing the unit file. The Maria-journey audit caught
+ * `krimto stop` mistakenly deleting the plist (because it used `uninstallService`), which
+ * left `krimto start` with nothing to reload. Semantic split:
+ *
+ *   stopService()        — unload now. Unit file stays. `start` can reload it.
+ *   uninstallService()   — unload + delete unit file. `reset` and run-mode switches use this.
+ *
+ * Returns the same UninstallResult shape so callers can branch on `removed` uniformly.
+ * `removed` here means "the service was loaded AND we unloaded it" — NOT "the unit file
+ * was deleted" (it wasn't).
+ */
+export async function stopService(
+  opts: ServiceOptions & { homeDir?: string } = {},
+): Promise<UninstallResult> {
+  const platform = opts.platform ?? detectPlatform();
+  // homeDir intentionally unused — the bootout/disable commands address the service by its
+  // label, not by file path. We accept the param so the call signature matches uninstallService.
+  if (platform === "darwin") {
+    const uid = process.getuid?.() ?? 501;
+    const deactivateCommand = { command: "launchctl", args: ["bootout", `gui/${uid}/${SERVICE_LABEL}`] };
+    if (opts.dryRun) return { platform, removed: false, deactivateCommand };
+    try {
+      await exec(deactivateCommand.command, deactivateCommand.args);
+      return { platform, removed: true, deactivateCommand };
+    } catch {
+      return { platform, removed: false, deactivateCommand };
+    }
+  }
+  if (platform === "linux") {
+    const deactivateCommand = { command: "systemctl", args: ["--user", "stop", SERVICE_NAME] };
+    if (opts.dryRun) return { platform, removed: false, deactivateCommand };
+    try {
+      await exec(deactivateCommand.command, deactivateCommand.args);
+      return { platform, removed: true, deactivateCommand };
+    } catch {
+      return { platform, removed: false, deactivateCommand };
+    }
+  }
+  if (platform === "win32") {
+    // Task Scheduler has no "stop without delete" — there's nothing per-run holding the
+    // service open. Best we can do is `schtasks /End` to terminate the current run.
+    const deactivateCommand = { command: "schtasks", args: ["/End", "/TN", SERVICE_NAME] };
+    if (opts.dryRun) return { platform, removed: false, deactivateCommand };
+    try {
+      await exec(deactivateCommand.command, deactivateCommand.args);
+      return { platform, removed: true, deactivateCommand };
+    } catch {
+      return { platform, removed: false, deactivateCommand };
+    }
+  }
+  return { platform, removed: false };
+}
+
 // --- macOS (launchd) --------------------------------------------------------
 
 function renderPlist(config: ServiceConfig): string {
