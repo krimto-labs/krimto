@@ -357,11 +357,22 @@ function printApplyResult(res: ApplyResult, io: WizardIO): void {
     }
   }
   if (res.serviceInstall) {
-    io.out(
-      res.serviceInstall.activated
-        ? `  ✓ Background service installed and started (${res.serviceInstall.platform})\n`
-        : `  ✓ Background service configured (${res.serviceInstall.platform}; dry-run)\n`,
-    );
+    if (!res.serviceInstall.activated) {
+      io.out(`  ✓ Background service configured (${res.serviceInstall.platform}; dry-run)\n`);
+    } else if (res.serviceInstall.portReady === false) {
+      // v0.2.27 — install succeeded but the HTTP port didn't come up within the probe
+      // window. Editors that auto-reconnect on MCP-config change will hit ECONNREFUSED.
+      // Surface the warning + pointer to the log file instead of giving false confidence.
+      io.out(
+        `  ⚠ Background service installed (${res.serviceInstall.platform}) but the HTTP port\n` +
+          `    didn't come up within 10s. Check /tmp/com.krimto.server.err.log for boot errors.\n` +
+          `    Editors may fail to connect until the server binds the port.\n`,
+      );
+    } else {
+      // portReady === true OR undefined (no HTTP port configured — stdio-only install).
+      const readinessNote = res.serviceInstall.portReady === true ? " · port accepting connections" : "";
+      io.out(`  ✓ Background service installed and started (${res.serviceInstall.platform})${readinessNote}\n`);
+    }
   }
   if (res.embeddingsConfigured) io.out("  ✓ Semantic search enabled (OpenAI)\n");
   // Tell the user where their data will live. The folder itself is created lazily on first save,

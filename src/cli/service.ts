@@ -21,6 +21,7 @@
 
 import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
@@ -55,6 +56,16 @@ export interface InstallResult {
   activateCommand?: { command: string; args: string[] };
   /** True when the platform CLI was actually executed (false in dry-run mode). */
   activated: boolean;
+  /**
+   * v0.2.27 — only meaningful when `activated: true` and the service config sets
+   * `KRIMTO_HTTP_PORT`. `true` = TCP connection to `localhost:<port>` was accepted before
+   * we returned, so the server is actually serving and clients (Cursor / Claude Code) won't
+   * hit ECONNREFUSED if they reconnect immediately. `false` = the probe timed out; the
+   * service IS installed and launchd reports it running, but the server hasn't bound the
+   * port — usually a misconfig surfaced in the stderr log file. `undefined` = no probe ran
+   * (dry run, stdio mode, or no HTTP port in the env block).
+   */
+  portReady?: boolean;
 }
 
 export interface UninstallResult {
@@ -74,6 +85,14 @@ export interface ServiceOptions {
    * CI runner without `process.platform` rewiring.
    */
   platform?: ServicePlatform;
+  /**
+   * v0.2.27 — dependency-injected port probe. Default uses real `net.connect`. Tests pass
+   * a stub that resolves immediately (so they don't open real TCP sockets). When omitted,
+   * `installService` polls `localhost:<KRIMTO_HTTP_PORT>` until accept or `probeTimeoutMs`.
+   */
+  probePort?: (port: number) => Promise<boolean>;
+  /** Maximum time (ms) to wait for the HTTP port to start accepting connections. Default 10000. */
+  probeTimeoutMs?: number;
 }
 
 /** Map `process.platform` → the four service flavors Krimto knows about. */
@@ -204,14 +223,74 @@ export async function installService(
     env: { KRIMTO_LAUNCHED_BY: "service", ...(config.env ?? {}) },
   };
 
-  if (platform === "darwin") return installLaunchd(configWithMarker, homeDir, opts);
-  if (platform === "linux") return installSystemd(configWithMarker, homeDir, opts);
-  if (platform === "win32") return installSchtasks(configWithMarker, opts);
+  let result: InstallResult;
+  if (platform === "darwin") {
+    result = await installLaunchd(configWithMarker, homeDir, opts);
+  } else if (platform === "linux") {
+    result = await installSystemd(configWithMarker, homeDir, opts);
+  } else if (platform === "win32") {
+    result = await installSchtasks(configWithMarker, opts);
+  } else {
+    throw new Error(
+      `Krimto's "Always running" mode isn't supported on platform "${process.platform}" yet. ` +
+        `Use "As needed" mode (the wizard default) or run \`krimto serve\` manually.`,
+    );
+  }
 
-  throw new Error(
-    `Krimto's "Always running" mode isn't supported on platform "${process.platform}" yet. ` +
-      `Use "As needed" mode (the wizard default) or run \`krimto serve\` manually.`,
-  );
+  // v0.2.27 — port-readiness probe. The smoke-6 transcript showed Cursor failing with
+  // ECONNREFUSED in the ~3-second window between launchd accepting the bootstrap and the
+  // Node process actually binding the HTTP port. The wizard's "Background service installed
+  // and started" line ran during that window, so users restarted their editor right when
+  // the port was still unbound. Now we wait for the port to accept a TCP connection before
+  // returning success; if it doesn't come up within `probeTimeoutMs`, the wizard surfaces
+  // the warning instead of giving false confidence.
+  if (result.activated && !opts.dryRun) {
+    const portStr = configWithMarker.env?.KRIMTO_HTTP_PORT;
+    const port = portStr ? Number.parseInt(portStr, 10) : NaN;
+    if (Number.isFinite(port) && port > 0) {
+      const probe = opts.probePort ?? defaultPortProbe;
+      result.portReady = await waitForPort(port, probe, opts.probeTimeoutMs ?? 10000);
+    }
+  }
+  return result;
+}
+
+/**
+ * Poll the port via the injected probe every 250ms until it accepts or the timeout elapses.
+ * Returns true on first successful connect, false on timeout. v0.2.27.
+ */
+async function waitForPort(
+  port: number,
+  probe: (port: number) => Promise<boolean>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await probe(port)) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+/**
+ * Real port probe: open a TCP socket to 127.0.0.1:<port>, resolve true on `connect`, false on
+ * error or 500ms timeout. The probe itself is cheap (kernel-level connect refusal), so a tight
+ * 250ms poll loop over a 10s window is fine.
+ */
+async function defaultPortProbe(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const socket = net.connect({ port, host: "127.0.0.1" });
+    let done = false;
+    const finish = (ok: boolean): void => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.setTimeout(500, () => finish(false));
+  });
 }
 
 /** Uninstall the service. Removes the unit file + invokes the platform CLI to deactivate it. */

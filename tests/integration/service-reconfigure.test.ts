@@ -138,12 +138,92 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
     serviceLoaded = false;
     const res = await installService(
       baseConfig({ env: { KRIMTO_DATA: "/x/y", KRIMTO_HTTP_PORT: "9090" } }),
-      { platform: "darwin" },
+      { platform: "darwin", probePort: async () => true },
     );
     const plist = await fs.readFile(res.unitPath!, "utf8");
     expect(plist).toContain("<key>KRIMTO_LAUNCHED_BY</key>");
     expect(plist).toContain("<key>KRIMTO_DATA</key>");
     expect(plist).toContain("<string>/x/y</string>");
     expect(plist).toContain("<key>KRIMTO_HTTP_PORT</key>");
+  });
+});
+
+// v0.2.27 — port-readiness probe. The smoke-6 transcript showed Cursor failing with
+// ECONNREFUSED in the ~3-second window between launchd accepting the bootstrap and the
+// Node process actually binding :8080. installService now polls localhost:<port> after
+// the platform-specific install before returning, so the wizard never declares "started"
+// while the port is still unbound.
+describe("installService — port readiness probe (v0.2.27)", () => {
+  it("reports portReady=true when the probe succeeds immediately", async () => {
+    serviceLoaded = false;
+    const probeCalls: number[] = [];
+    const res = await installService(baseConfig(), {
+      platform: "darwin",
+      probePort: async (port) => {
+        probeCalls.push(port);
+        return true; // accepted on first poll
+      },
+    });
+    expect(res.activated).toBe(true);
+    expect(res.portReady).toBe(true);
+    expect(probeCalls).toEqual([8080]); // baseConfig sets KRIMTO_HTTP_PORT=8080
+  });
+
+  it("polls until the probe succeeds (typical 3-second window)", async () => {
+    serviceLoaded = false;
+    let attempts = 0;
+    const res = await installService(baseConfig(), {
+      platform: "darwin",
+      probePort: async () => {
+        attempts += 1;
+        return attempts >= 4; // first 3 attempts return false, 4th succeeds
+      },
+      probeTimeoutMs: 5000,
+    });
+    expect(res.portReady).toBe(true);
+    expect(attempts).toBeGreaterThanOrEqual(4);
+  });
+
+  it("reports portReady=false when the port never comes up within the timeout", async () => {
+    serviceLoaded = false;
+    const res = await installService(baseConfig(), {
+      platform: "darwin",
+      probePort: async () => false, // never accepts
+      probeTimeoutMs: 500, // short for the test
+    });
+    expect(res.activated).toBe(true);
+    expect(res.portReady).toBe(false);
+  });
+
+  it("skips the probe entirely when no KRIMTO_HTTP_PORT is in the env (stdio install)", async () => {
+    serviceLoaded = false;
+    let probed = false;
+    const res = await installService(
+      baseConfig({ env: { KRIMTO_DATA: "/x/y" } }), // no KRIMTO_HTTP_PORT
+      {
+        platform: "darwin",
+        probePort: async () => {
+          probed = true;
+          return true;
+        },
+      },
+    );
+    expect(probed).toBe(false);
+    expect(res.portReady).toBeUndefined();
+  });
+
+  it("skips the probe in dry-run mode (tests don't open real sockets)", async () => {
+    let probed = false;
+    const res = await installService(baseConfig(), {
+      platform: "darwin",
+      dryRun: true,
+      probePort: async () => {
+        probed = true;
+        return true;
+      },
+    });
+    expect(probed).toBe(false);
+    expect(res.activated).toBe(false);
+    expect(res.portReady).toBeUndefined();
   });
 });

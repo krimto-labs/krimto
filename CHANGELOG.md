@@ -4,6 +4,52 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.27] — 2026-05-27
+
+### Fixed
+
+- **Cursor / Claude Code hit ECONNREFUSED for ~3s after every `krimto init`.** Cause: the
+  wizard ran `launchctl bootstrap` (or `kickstart -k`), launchd accepted the unit and
+  returned immediately, the wizard declared "✓ Background service installed and started",
+  and the user was told to restart their editor — but the Node process spawned by launchd
+  had not yet bound `:8080`. Cursor's MCP client auto-reconnects on mcp.json change, fired
+  into the unbound-port window, got refused, and gave up. The user then thought the whole
+  install was broken when in fact restarting Cursor a few seconds later would have worked.
+
+  Fix: after the platform-specific install (`launchctl bootstrap`/`kickstart`, `systemctl
+  enable --now`, `schtasks /Create`), `installService` polls `localhost:<KRIMTO_HTTP_PORT>`
+  every 250ms until a TCP connection is accepted, or 10s elapses. Only then returns. The
+  wizard's success line now means "the server is actually serving clients" — not "launchd
+  accepted the unit". Reset → install → editor-reconnect is race-free.
+
+### Added
+
+- `InstallResult.portReady` — `true` when the probe succeeded, `false` when it timed out,
+  `undefined` when no probe ran (dry run, stdio install, no HTTP port). Surfaced in both
+  the interactive wizard summary (`✓ port accepting connections` / `⚠ port did NOT come
+  up within 10s`) and the non-interactive `--yes` output (`Run mode: always-running · port
+  ready` / `⚠ port did NOT come up within 10s`).
+- `ServiceOptions.probePort` — dependency-injected probe for tests. Default uses
+  `net.connect` to 127.0.0.1; tests pass stubs that resolve immediately. Also
+  `probeTimeoutMs` for short test windows.
+
+### Tests
+
+- `tests/integration/service-reconfigure.test.ts` — 5 new tests covering the probe:
+  succeeds immediately, polls until success (typical 3-second window), times out cleanly
+  when the port never comes up, skips when no `KRIMTO_HTTP_PORT` configured, skips in
+  dry-run mode.
+
+### Verified on the user's machine
+
+Real launchd cycle on `/Users/paulbuiko/Desktop/krimto-smoke-6`:
+- Reset → install: 1.1s wall clock, port listening when wizard returns.
+- Reset → install → install (reconfigure via kickstart): 10.6s wall clock for the second
+  install — the probe correctly waited out the kickstart's SIGTERM-async window. Port
+  listening immediately after each install completes.
+- Output now reads "Run mode: always-running · port ready" — the user knows
+  the connection will work before they restart their editor.
+
 ## [0.2.26] — 2026-05-27
 
 ### Fixed (three root-causes from the smoke-6 audit + a state-model refactor)

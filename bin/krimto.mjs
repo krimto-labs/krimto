@@ -147,9 +147,23 @@ try {
       const { runInitNonInteractive } = await tsImport("../src/cli/wizard.ts", import.meta.url);
       const result = await runInitNonInteractive(process.cwd());
       const wired = result.editorOutcomes.map((o) => o.editor).join(", ") || "(none)";
+      // v0.2.27 — surface the port-readiness probe result. If the wizard installed an
+      // always-running service AND the port came up, the editor can reconnect immediately.
+      // If portReady is false, the wizard prints a warning so the CI/agent caller knows
+      // the service is up but its HTTP listener didn't bind in time.
+      let serviceLine = `   Run mode: as-needed\n`;
+      if (result.serviceInstall) {
+        if (result.serviceInstall.portReady === false) {
+          serviceLine =
+            `   Run mode: always-running ⚠ port did NOT come up within 10s\n` +
+            `             Check /tmp/com.krimto.server.err.log for boot errors.\n`;
+        } else {
+          serviceLine = `   Run mode: always-running · port ready\n`;
+        }
+      }
       process.stderr.write(
         `\n✅ Krimto set up (non-interactive). Editors: ${wired}\n` +
-          `   Run mode: ${result.serviceInstall ? "always-running" : "as-needed"}\n` +
+          serviceLine +
           `   Search:   ${result.embeddingsConfigured ? "OpenAI" : "keyword"}\n` +
           `   Data:     ${result.dataDir}\n\n` +
           "Restart your editor so it loads the new rule.\n\n",
