@@ -8,6 +8,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 import { ActivityLog, type ActivityEntry } from "../server/activity";
+import { inspectRuntime } from "./inspectRuntime";
 import { isProcessAlive, type LockInfo } from "../server/lock";
 
 export interface VerifyConnectionResult {
@@ -61,8 +62,13 @@ export async function runVerifyConnection(dataDir: string, now: Date = new Date(
   let header: string;
   if (lock && isProcessAlive(lock.pid)) {
     status = "running";
+    // v0.2.26 — reconcile the lock's self-reported launchedBy against launchctl's actual
+    // state. Without this, a pre-v0.2.25 service-launched process reports "ad-hoc" because
+    // its lock file was written before the field existed.
+    const runtime = await inspectRuntime(dataDir);
+    const effective = runtime.effectiveLaunchedBy ?? lock.launchedBy;
     const launchedByLabel =
-      lock.launchedBy === "service"
+      effective === "service"
         ? "service (launchd/systemd/schtasks — survives reboot)"
         : "ad-hoc (started by `krimto serve` or an editor's stdio launcher)";
     header =

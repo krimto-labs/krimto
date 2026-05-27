@@ -16,14 +16,14 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 
 import { ActivityLog, type ActivityEntry } from "../server/activity";
-import { isProcessAlive, type LockInfo } from "../server/lock";
+import { type LockInfo } from "../server/lock";
 import { KRIMTO_VERSION } from "../server/index";
 import {
   detectEditorEnvironments,
-  detectExistingSetup,
   type EditorKind,
   type SetupSnapshot,
 } from "./init";
+import { inspectRuntime } from "./inspectRuntime";
 
 const exec = promisify(execFile);
 
@@ -66,9 +66,13 @@ export async function runStatus(
   const homeDir = opts.homeDir ?? os.homedir();
   const now = opts.now ?? new Date();
 
-  const snapshot = await detectExistingSetup(cwd, homeDir);
-  const envs = await detectEditorEnvironments(cwd, homeDir);
-  const lock = await readLock(dataDir);
+  // v0.2.26 — single source of truth. status used to read 4 sources separately and the
+  // results disagreed (smoke-6 transcript). Now everything flows through inspectRuntime,
+  // which reconciles lock + launchctl + editor configs into one consistent view.
+  const runtime = await inspectRuntime(dataDir, { cwd, homeDir });
+  const snapshot = runtime.snapshot;
+  const envs = runtime.editors;
+  const lock = runtime.lock ? { info: { pid: runtime.lock.pid, started: runtime.lock.started, mode: runtime.lock.mode, launchedBy: runtime.lock.launchedBy }, alive: runtime.lock.alive } : null;
   const log = new ActivityLog(dataDir);
   const recent = await log.tail(5);
   const stats = await log.stats(5 * 60 * 1000, now);
@@ -76,7 +80,7 @@ export async function runStatus(
   const gitInfo = await readGitInfo(dataDir);
 
   const overall = pickOverall(snapshot, lock, stats);
-  const header = headerLine(overall, lock, now);
+  const header = headerLine(overall, lock, runtime.effectiveLaunchedBy, now);
 
   const connectionsBlock = renderConnections(envs, snapshot, recent);
   const storageBlock = renderStorage(dataDir, gitInfo, indexStats);
@@ -98,29 +102,6 @@ export async function runStatus(
 }
 
 // === Helpers ===============================================================
-
-async function readLock(dataDir: string): Promise<{ info: LockInfo; alive: boolean } | null> {
-  try {
-    const raw = await fs.readFile(path.join(dataDir, ".krimto", "lock.json"), "utf8");
-    const parsed = JSON.parse(raw) as Partial<LockInfo>;
-    if (
-      typeof parsed.pid === "number" &&
-      typeof parsed.started === "string" &&
-      (parsed.mode === "stdio" || parsed.mode === "http")
-    ) {
-      const info: LockInfo = {
-        pid: parsed.pid,
-        started: parsed.started,
-        mode: parsed.mode,
-        launchedBy: parsed.launchedBy === "service" ? "service" : "ad-hoc",
-      };
-      return { info, alive: isProcessAlive(info.pid) };
-    }
-  } catch {
-    /* no lock file */
-  }
-  return null;
-}
 
 async function readIndexStats(dataDir: string): Promise<{ exists: boolean; modified?: Date }> {
   try {
@@ -176,11 +157,12 @@ function pickOverall(
 function headerLine(
   status: "ok" | "warning" | "error",
   lock: { info: LockInfo; alive: boolean } | null,
+  effectiveLaunchedBy: import("./inspectRuntime").RuntimeState["effectiveLaunchedBy"],
   now: Date,
 ): string {
   if (status === "ok") {
     if (lock?.alive) {
-      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}, ${lock.info.launchedBy}), started ${humanAgo(lock.info.started, now)}\n`;
+      return `\n✅ Krimto is working · v${KRIMTO_VERSION}\n   PID ${lock.info.pid} (${lock.info.mode}, ${effectiveLaunchedBy ?? lock.info.launchedBy}), started ${humanAgo(lock.info.started, now)}\n`;
     }
     return `\n✅ Krimto is configured · v${KRIMTO_VERSION}\n   No active server right now — it will be launched on demand by your editor.\n`;
   }

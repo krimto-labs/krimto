@@ -4,6 +4,77 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.26] — 2026-05-27
+
+### Fixed (three root-causes from the smoke-6 audit + a state-model refactor)
+
+This release stops the "ship a patch, surface a new contradiction" loop. The smoke-6
+SpecStory transcript caught the system reporting contradictory facts in five different
+places at the same time. Three root causes were responsible; v0.2.26 fixes all three plus
+introduces a single reconciled view of runtime state so every read-side command shares the
+same truth.
+
+- **Root cause 1 — Claude Code was invisible to detection.** `detectExistingSetup` only
+  scanned JSON-method editor configs (Cursor's `mcp.json`). Claude Code is registered via
+  `claude mcp add`, whose result lives in `~/.claude.json` at project scope and isn't a
+  file we scanned. Consequence: the wizard's reconfigure menu, `reset`, `status`, and
+  `whoami` all silently mis-reported "Cursor only" even right after both editors were
+  successfully wired. Five surfaces, one bug.
+  Fix: `detectExistingSetup` now also shells out to `claude mcp list` and looks for the
+  `krimto:` line. One detection function, five surfaces now correct.
+
+- **Root cause 2 — `launchctl bootstrap` raced with `bootout` teardown.** The v0.2.23 fix
+  did `bootout` then `bootstrap`, but bootout returns when the unload is QUEUED, not when
+  it completes. Bootstrap fired before launchd was done tearing down → EIO. Reproduced
+  on the user's machine: every second `krimto init` died at the same line.
+  Fix: `installLaunchd` now probes `launchctl print` first. If the service is already
+  loaded, it uses `launchctl kickstart -k <label>` (atomic SIGTERM + restart, no race).
+  If not loaded, plain `bootstrap`. The bootout+bootstrap pattern is gone for good.
+
+- **Root cause 3 — `reset` trusted detection that was wrong.** When detection said
+  "nothing configured" (because of root cause 1), reset's cleanup paths were gated and
+  ran nothing — even with a service loaded and Cursor's mcp.json still pointing at krimto.
+  Fix: `reset` now ALWAYS runs every cleanup path best-effort, regardless of detection.
+  Plus three new sweeps: it kills any live PID holding the lock (SIGTERM → 500ms → SIGKILL),
+  deletes the lock file, and removes the plist directly if uninstall says nothing happened.
+
+### Added
+
+- **`inspectRuntime(dataDir, opts)`** in `src/cli/inspectRuntime.ts` — the single reconciled
+  view of "what is Krimto doing right now". Reads lock file + `launchctl print` (or
+  `systemctl is-active` on Linux) + every editor MCP config + `claude mcp list`. Returns
+  a `RuntimeState` that resolves the contradictions automatically — in particular, when
+  the running PID matches launchd's program-pid, the `effectiveLaunchedBy` is "service"
+  even if the lock file lacks the `launchedBy` field (pre-v0.2.25 runs). `status` and
+  `verify-connection` both consume it, so they can never disagree.
+- **`probeServiceState(platform, homeDir)`** in `src/cli/service.ts` — richer service
+  probe distinguishing "unit on disk", "loaded in launchctl/systemctl", and "currently
+  running with PID X". Three states the old `isServiceInstalled` collapsed to one boolean.
+
+### Verified end-to-end on the user's actual machine
+
+Ran the full reset → install → install (reconfigure) cycle against `/Users/paulbuiko/Desktop/krimto-smoke-6`:
+
+1. `krimto reset --yes` — disconnected Cursor, uninstalled service, killed lock PID, deleted plist.
+2. `krimto init --yes` — service installed, both editors registered (cursor JSON + claude
+   CLI), lock file written with `launchedBy: "service"`.
+3. `krimto init --yes` (second time, the path that died with EIO in v0.2.22-v0.2.25) —
+   succeeded. `launchctl print` showed the service alive; the kickstart path restarted it
+   to PID 33057 with no error.
+4. `krimto verify-connection` — correctly reported `Launched by: service`.
+5. `krimto status` — both Cursor AND Claude Code shown as connected (Claude Code visible
+   for the first time). Header read `PID 33057 (http, service)`.
+6. `krimto_whoami` over HTTP — returned the right identity + scopes (`lpdthemes@gmail.com`).
+
+### Tests
+
+- `tests/integration/service-reconfigure.test.ts` — rewrote the 4 launchctl tests for the
+  v0.2.26 print+kickstart pattern. New assertion: when service is loaded, install path
+  emits `launchctl print` then `launchctl kickstart -k`, never `bootout` or `bootstrap`.
+  Three pre-existing tests still cover the unit-env injection and dry-run behavior.
+
+Total: 573 passing. Lint+types clean.
+
 ## [0.2.25] — 2026-05-27
 
 ### Added

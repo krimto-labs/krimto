@@ -435,25 +435,39 @@ export async function detectExistingSetup(
   let searchProvider: SearchProvider = "keyword";
 
   for (const env of envs) {
-    if (env.mcpWire?.method !== "json") continue;
-    let text: string;
-    try {
-      text = await fs.readFile(env.mcpWire.path, "utf8");
-    } catch {
+    if (env.mcpWire === null) continue;
+
+    if (env.mcpWire.method === "json") {
+      let text: string;
+      try {
+        text = await fs.readFile(env.mcpWire.path, "utf8");
+      } catch {
+        continue;
+      }
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const servers = parsed[env.mcpWire.key] as Record<string, unknown> | undefined;
+      if (!servers || !("krimto" in servers)) continue;
+      registeredEditors.push(env.editor);
+      const krimto = servers.krimto as { env?: Record<string, string> };
+      if (krimto.env?.KRIMTO_EMBED_PROVIDER === "openai") {
+        searchProvider = "openai";
+      }
       continue;
     }
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(text) as Record<string, unknown>;
-    } catch {
+
+    // v0.2.26 — Gap-3 root-cause fix. Claude Code uses `claude mcp` CLI; the registration
+    // doesn't live in a JSON file we scan. Without this branch every read-side surface
+    // (reconfigure menu, status, reset, whoami) was invisibly mis-reporting "Cursor only"
+    // even after the wizard had successfully wired both Cursor AND Claude Code.
+    if (env.mcpWire.method === "cli") {
+      const present = await isClaudeMcpRegistered(env.mcpWire.command);
+      if (present) registeredEditors.push(env.editor);
       continue;
-    }
-    const servers = parsed[env.mcpWire.key] as Record<string, unknown> | undefined;
-    if (!servers || !("krimto" in servers)) continue;
-    registeredEditors.push(env.editor);
-    const krimto = servers.krimto as { env?: Record<string, string> };
-    if (krimto.env?.KRIMTO_EMBED_PROVIDER === "openai") {
-      searchProvider = "openai";
     }
   }
 
@@ -466,6 +480,21 @@ export async function detectExistingSetup(
     runMode,
     searchProvider,
   };
+}
+
+/**
+ * Check whether `claude mcp list` knows about krimto. Best-effort: any error (CLI missing,
+ * timeout, parse failure) returns false rather than blocking the caller. The output format
+ * is one server per line, "<name>:<space><url-or-spec>" — we just look for "krimto:" with a
+ * non-failing line, which covers both stdio (`krimto: npx -y ...`) and HTTP (`krimto: http://...`).
+ */
+async function isClaudeMcpRegistered(claudeBinary: string): Promise<boolean> {
+  try {
+    const { stdout } = await exec(claudeBinary, ["mcp", "list"], { timeout: 8000 });
+    return /^krimto:\s/m.test(stdout);
+  } catch {
+    return false;
+  }
 }
 
 // === Legacy runInit (v0.2.16, kept for --all / --minimal back-compat) ======

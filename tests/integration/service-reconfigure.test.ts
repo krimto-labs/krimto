@@ -19,9 +19,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 const calls: { command: string; args: string[] }[] = [];
-// `bootoutShouldFail` simulates the "service not loaded" case for the first install. The
-// reconfigure tests flip it to `false` to assert bootout succeeded before bootstrap.
-let bootoutShouldFail = false;
+// `serviceLoaded` simulates whether the launchd label is currently registered. v0.2.26's
+// install path probes this with `launchctl print` (exit 0 = loaded) and branches:
+//   • loaded:    `launchctl kickstart -k <label>`  — atomic restart, no race
+//   • not loaded: `launchctl bootstrap gui/<uid> <plist>`
+// The bootout+bootstrap pattern from v0.2.23 is gone.
+let serviceLoaded = false;
 
 vi.mock("node:child_process", async () => {
   return {
@@ -31,11 +34,13 @@ vi.mock("node:child_process", async () => {
       cb: (err: Error | null, value: { stdout: string; stderr: string }) => void,
     ) => {
       calls.push({ command: cmd, args: [...args] });
-      // Match the real launchctl behavior: bootout errors with code 5 (EIO) when the
-      // service isn't loaded; bootstrap errors with code 5 when it IS loaded. Tests below
-      // toggle which side errors via `bootoutShouldFail`.
-      if (cmd === "launchctl" && args[0] === "bootout" && bootoutShouldFail) {
-        cb(new Error("Boot-out failed: 5: Input/output error"), { stdout: "", stderr: "" });
+      // `launchctl print` exits non-zero when the label isn't loaded.
+      if (cmd === "launchctl" && args[0] === "print") {
+        if (serviceLoaded) {
+          cb(null, { stdout: "state = running\n\tpid = 12345\n", stderr: "" });
+        } else {
+          cb(new Error("Could not find service"), { stdout: "", stderr: "" });
+        }
         return;
       }
       cb(null, { stdout: "", stderr: "" });
@@ -63,47 +68,51 @@ const baseConfig = (overrides: Partial<ServiceConfig> = {}): ServiceConfig => ({
   ...overrides,
 });
 
-describe("installService — macOS reconfigure-safe (v0.2.23)", () => {
-  it("first install: bootout is attempted (fails — nothing loaded), bootstrap then succeeds", async () => {
-    bootoutShouldFail = true;
+describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)", () => {
+  it("first install (service NOT loaded): probes print, then bootstrap — no race possible", async () => {
+    serviceLoaded = false;
     const res = await installService(baseConfig(), { platform: "darwin" });
     expect(res.activated).toBe(true);
 
-    // Order: bootout (best-effort) → bootstrap.
     const launchctlCalls = calls.filter((c) => c.command === "launchctl");
-    expect(launchctlCalls.map((c) => c.args[0])).toEqual(["bootout", "bootstrap"]);
+    expect(launchctlCalls.map((c) => c.args[0])).toEqual(["print", "bootstrap"]);
+    // `print gui/<uid>/<label>`
     expect(launchctlCalls[0]?.args[1]).toMatch(/^gui\/\d+\/com\.krimto\.server$/);
+    // `bootstrap gui/<uid> <plist-path>`
     expect(launchctlCalls[1]?.args[1]).toMatch(/^gui\/\d+$/);
   });
 
-  it("reconfigure (service already loaded): bootout succeeds, bootstrap doesn't fail", async () => {
-    bootoutShouldFail = false;
+  it("reconfigure (service ALREADY loaded): probes print, then kickstart -k — no EIO", async () => {
+    serviceLoaded = true;
     const res = await installService(baseConfig(), { platform: "darwin" });
     expect(res.activated).toBe(true);
 
-    // Both calls happen, in order. The fix guarantees bootstrap is never called against
-    // a service that's still loaded.
+    // No bootout / no bootstrap. `kickstart -k` is atomic: it SIGTERMs the running process,
+    // waits for clean exit, then re-spawns from the on-disk plist (which we already rewrote
+    // before the launchctl calls, so the new process picks up the latest env / argv).
     const launchctlCalls = calls.filter((c) => c.command === "launchctl");
-    expect(launchctlCalls.map((c) => c.args[0])).toEqual(["bootout", "bootstrap"]);
+    expect(launchctlCalls.map((c) => c.args[0])).toEqual(["print", "kickstart"]);
+    expect(launchctlCalls[1]?.args.slice(0, 2)).toEqual(["kickstart", "-k"]);
+    expect(launchctlCalls[1]?.args[2]).toMatch(/^gui\/\d+\/com\.krimto\.server$/);
+    expect(launchctlCalls.find((c) => c.args[0] === "bootout")).toBeUndefined();
+    expect(launchctlCalls.find((c) => c.args[0] === "bootstrap")).toBeUndefined();
   });
 
-  it("writes the plist BEFORE running bootout (so the bootstrap reloads new content)", async () => {
-    bootoutShouldFail = true;
+  it("writes the plist BEFORE running launchctl (so the reload picks up new content)", async () => {
+    serviceLoaded = false;
     const res = await installService(baseConfig({ env: { CHANGED: "value-after-reconfigure" } }), {
       platform: "darwin",
     });
 
-    // Plist should exist and contain the latest env value.
     const plist = await fs.readFile(res.unitPath!, "utf8");
     expect(plist).toContain("CHANGED");
     expect(plist).toContain("value-after-reconfigure");
   });
 
-  it("dryRun skips both launchctl calls (file written, no CLI invoked)", async () => {
+  it("dryRun skips all launchctl calls (file written, no CLI invoked)", async () => {
     const res = await installService(baseConfig(), { platform: "darwin", dryRun: true });
     expect(res.activated).toBe(false);
     expect(calls.filter((c) => c.command === "launchctl")).toHaveLength(0);
-    // Plist still written so the user can inspect it.
     await expect(fs.access(res.unitPath!)).resolves.toBeUndefined();
   });
 
@@ -112,7 +121,7 @@ describe("installService — macOS reconfigure-safe (v0.2.23)", () => {
   // marker into the unit file so verify-connection / status can tell launchd-started runs
   // apart from ad-hoc `krimto serve` invocations.
   it("injects KRIMTO_LAUNCHED_BY=service into the unit env (macOS)", async () => {
-    bootoutShouldFail = true;
+    serviceLoaded = false;
     const res = await installService(baseConfig(), { platform: "darwin" });
     const plist = await fs.readFile(res.unitPath!, "utf8");
     expect(plist).toContain("<key>KRIMTO_LAUNCHED_BY</key>");
@@ -126,7 +135,7 @@ describe("installService — macOS reconfigure-safe (v0.2.23)", () => {
   });
 
   it("caller-supplied env keys are preserved alongside the launchedBy marker", async () => {
-    bootoutShouldFail = true;
+    serviceLoaded = false;
     const res = await installService(
       baseConfig({ env: { KRIMTO_DATA: "/x/y", KRIMTO_HTTP_PORT: "9090" } }),
       { platform: "darwin" },

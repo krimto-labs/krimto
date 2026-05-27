@@ -121,6 +121,70 @@ export async function isServiceInstalled(
 }
 
 /**
+ * v0.2.26 — richer probe than {@link isServiceInstalled}. Distinguishes three states the
+ * smoke-6 transcript proved we needed:
+ *   • `unitPresent: true, loaded: false`    — plist on disk but not bootstrapped (failed install left over)
+ *   • `unitPresent: true, loaded: true`     — fully active service
+ *   • `unitPresent: false, loaded: false`   — clean machine (or service was uninstalled)
+ *
+ * Also returns the PID launchd is currently running, so the caller can correlate it against
+ * the lock file — when the running Krimto PID equals launchd's `pid`, the process IS the
+ * service-launched one, even if its lock file is missing the `launchedBy` field (because the
+ * process started under an old version).
+ */
+export async function probeServiceState(
+  platform: ServicePlatform = detectPlatform(),
+  homeDir: string = os.homedir(),
+): Promise<{
+  platform: ServicePlatform;
+  unitPresent: boolean;
+  loaded: boolean;
+  runningPid: number | null;
+}> {
+  const base = await isServiceInstalled(platform, homeDir);
+  const unitPresent = base.installed;
+
+  if (platform === "darwin") {
+    const uid = process.getuid?.() ?? 501;
+    try {
+      const { stdout } = await exec("launchctl", ["print", `gui/${uid}/${SERVICE_LABEL}`]);
+      const pidMatch = stdout.match(/\bpid\s*=\s*(\d+)/);
+      const pid = pidMatch && pidMatch[1] ? Number.parseInt(pidMatch[1], 10) : null;
+      return { platform, unitPresent, loaded: true, runningPid: pid };
+    } catch {
+      return { platform, unitPresent, loaded: false, runningPid: null };
+    }
+  }
+  if (platform === "linux") {
+    try {
+      // `systemctl --user is-active <name>` exits 0 with "active" when running.
+      const { stdout } = await exec("systemctl", ["--user", "is-active", SERVICE_NAME]);
+      const active = stdout.trim() === "active";
+      if (!active) return { platform, unitPresent, loaded: false, runningPid: null };
+      // Best-effort PID lookup.
+      try {
+        const { stdout: pidOut } = await exec("systemctl", ["--user", "show", "--property=MainPID", "--value", SERVICE_NAME]);
+        const pid = Number.parseInt(pidOut.trim(), 10);
+        return { platform, unitPresent, loaded: true, runningPid: Number.isFinite(pid) && pid > 0 ? pid : null };
+      } catch {
+        return { platform, unitPresent, loaded: true, runningPid: null };
+      }
+    } catch {
+      return { platform, unitPresent, loaded: false, runningPid: null };
+    }
+  }
+  if (platform === "win32") {
+    try {
+      await exec("schtasks", ["/Query", "/TN", SERVICE_NAME]);
+      return { platform, unitPresent: true, loaded: true, runningPid: null };
+    } catch {
+      return { platform, unitPresent: false, loaded: false, runningPid: null };
+    }
+  }
+  return { platform, unitPresent: false, loaded: false, runningPid: null };
+}
+
+/**
  * Install the service for the current platform. Writes the unit file (where applicable) and
  * activates the service via the platform's CLI. Pass `opts.dryRun=true` to skip activation
  * (used by tests so CI doesn't actually register a service).
@@ -220,15 +284,30 @@ async function installLaunchd(
   if (opts.dryRun) {
     return { platform: "darwin", unitPath, unitContents, activateCommand, activated: false };
   }
-  // v0.2.23 — reconfigure-safe: `launchctl bootstrap` errors with EIO (Input/output error)
-  // when the service is already loaded, which broke every second `krimto init` after the
-  // first install. Best-effort bootout first so the bootstrap below always starts from a
-  // clean slate. The new plist content was already written above, so the bootstrap picks
-  // up the latest env / argv when it reloads.
-  try {
-    await exec("launchctl", ["bootout", `gui/${uid}/${SERVICE_LABEL}`]);
-  } catch {
-    // Not loaded yet — happy first-install case, nothing to undo.
+  // v0.2.26 — supersedes the v0.2.23 bootout+bootstrap pattern. The previous fix raced
+  // against launchd's still-tearing-down state: `launchctl bootout` returns when the unload
+  // is QUEUED, not when it completes, so the subsequent `bootstrap` could still hit EIO.
+  // Correct pattern:
+  //   • If the service is currently loaded → `launchctl kickstart -k gui/<uid>/<label>`
+  //     atomically kills + restarts the running process. Because we already overwrote the
+  //     plist above, the new process starts with the latest env / argv.
+  //   • If the service is NOT loaded → plain `bootstrap`. No race possible.
+  // `launchctl print` returning exit-0 is the canonical "is it loaded" probe.
+  const printRes = await exec("launchctl", ["print", `gui/${uid}/${SERVICE_LABEL}`]).then(
+    () => ({ loaded: true }),
+    () => ({ loaded: false }),
+  );
+  if (printRes.loaded) {
+    // Kickstart -k: send SIGTERM, wait for clean exit, then restart from the plist on disk.
+    // launchctl returns from kickstart only AFTER the new process is up, so no follow-on race.
+    await exec("launchctl", ["kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`]);
+    return {
+      platform: "darwin",
+      unitPath,
+      unitContents,
+      activateCommand: { command: "launchctl", args: ["kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`] },
+      activated: true,
+    };
   }
   await exec(activateCommand.command, activateCommand.args);
   return { platform: "darwin", unitPath, unitContents, activateCommand, activated: true };

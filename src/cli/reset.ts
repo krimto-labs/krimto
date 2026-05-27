@@ -20,17 +20,12 @@ import * as path from "node:path";
 import { removeRule } from "../agentRule";
 import {
   detectEditorEnvironments,
-  detectExistingSetup,
   type EditorEnvironment,
   type EditorKind,
 } from "./init";
 import { removeMcpConfig } from "./mcpConfig";
 import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
-import {
-  detectPlatform,
-  isServiceInstalled,
-  uninstallService,
-} from "./service";
+import { detectPlatform, uninstallService } from "./service";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -65,33 +60,52 @@ export async function applyReset(opts: ResetOptions = {}): Promise<ResetResult> 
   const homeDir = opts.homeDir;
   const dataDir = opts.dataDir ?? path.join(homeDir ?? "", ".krimto");
 
-  // 1. Disconnect every detected editor.
+  // v0.2.26 — reset is now "always sweep, never trust detection". The smoke-6 transcript
+  // caught reset reporting "No changes made" while a service was actually loaded and
+  // Cursor's mcp.json still had a krimto entry: detection was wrong (Claude Code was
+  // invisible to CLI-method scans), so reset's gated-by-detection cleanup ran nothing.
+  // Now every cleanup path runs best-effort regardless of what detection thinks. We can
+  // distinguish "ran but found nothing" from "intentionally skipped" by inspecting the
+  // result type — `editorsDisconnected` only includes editors whose removeMcpConfig
+  // returned removed=true, so an empty list still means "nothing to remove" cleanly.
+
   const envs = await detectEditorEnvironments(cwd, homeDir);
-  const snapshot = await detectExistingSetup(cwd, homeDir);
+
+  // 1. Try to disconnect every editor we know about, regardless of what detection says.
+  //    removeMcpConfig is already idempotent — it returns removed=false if there was nothing
+  //    to remove, so blanket-running it is safe.
   const editorsDisconnected: EditorKind[] = [];
   for (const env of envs) {
-    if (!snapshot.registeredEditors.includes(env.editor)) continue;
     const res = await removeMcpConfig(env);
     if (res.removed) editorsDisconnected.push(env.editor);
   }
 
-  // 2. Strip the standing rule from each detected rule file in CWD.
+  // 2. Strip the standing rule from each detected rule file in CWD (already idempotent).
   const rulesStripped: string[] = [];
   for (const env of envs) {
     const stripped = await stripRule(cwd, env);
     if (stripped) rulesStripped.push(env.rulesPath);
   }
 
-  // 3. Uninstall the background service if installed.
+  // 3. Uninstall the background service ALWAYS (even if isServiceInstalled said no). The
+  //    inner uninstall is best-effort: the platform CLI errors when nothing's loaded, but
+  //    we swallow them. This catches the case where a stale plist exists without an active
+  //    launchctl entry (or vice versa) — both halves get cleaned in one pass.
   const platform = detectPlatform();
-  const current = await isServiceInstalled(platform, homeDir);
   let serviceRemoved = false;
-  if (current.installed) {
+  try {
     const res = await uninstallService({ dryRun: opts.dryRun, platform, homeDir });
     serviceRemoved = res.removed;
+  } catch {
+    /* uninstall path can throw on unsupported platforms or missing CLIs — we're sweeping, not validating */
   }
 
-  // 4. Wipe the keys store (best-effort — file may not exist).
+  // 4. Kill any live ad-hoc Krimto process holding the lock — otherwise a `krimto serve`
+  //    that's still running keeps the data dir busy and the next init will conflict on the
+  //    lock. Best-effort: SIGTERM, give it 500ms, SIGKILL if still alive.
+  await terminateLockHolder(dataDir);
+
+  // 5. Wipe the keys store (best-effort — file may not exist).
   const keysPath = path.join(dataDir, ".krimto", "keys.json");
   let keysWiped = false;
   try {
@@ -99,6 +113,15 @@ export async function applyReset(opts: ResetOptions = {}): Promise<ResetResult> 
     keysWiped = true;
   } catch {
     /* no keys file — fine */
+  }
+
+  // 6. Wipe the lock file itself so the next init starts from a known-clean slate. Without
+  //    this, a stale lock from a process we just killed can confuse subsequent commands.
+  const lockPath = path.join(dataDir, ".krimto", "lock.json");
+  try {
+    await fs.unlink(lockPath);
+  } catch {
+    /* no lock — fine */
   }
 
   // 5. Optionally move the data dir to a timestamped trash sibling.
@@ -174,6 +197,37 @@ export async function runReset(opts: ResetOptions = {}): Promise<ResetResult | n
       return null;
     }
     throw e;
+  }
+}
+
+/**
+ * If the lock file points at a live PID, send SIGTERM then SIGKILL (after 500ms). Best-effort;
+ * we don't return the outcome because reset's contract is "do the cleanup, don't validate".
+ * v0.2.26 — without this step, a leftover `krimto serve` PID survived `reset` and the next
+ * init would either reuse the dead lock OR conflict on the live port (whichever came first).
+ */
+async function terminateLockHolder(dataDir: string): Promise<void> {
+  const lockPath = path.join(dataDir, ".krimto", "lock.json");
+  let pid: number | null = null;
+  try {
+    const raw = await fs.readFile(lockPath, "utf8");
+    const parsed = JSON.parse(raw) as { pid?: unknown };
+    if (typeof parsed.pid === "number" && parsed.pid > 0) pid = parsed.pid;
+  } catch {
+    return; // no lock — nothing to terminate
+  }
+  if (pid === null) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return; // already gone
+  }
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  try {
+    process.kill(pid, 0); // existence probe
+    process.kill(pid, "SIGKILL");
+  } catch {
+    /* exited cleanly on SIGTERM */
   }
 }
 
