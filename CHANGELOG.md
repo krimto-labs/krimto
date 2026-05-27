@@ -4,6 +4,40 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.20] — 2026-05-27
+
+### Changed (smart default for multi-editor users)
+
+- **`krimto init` now defaults to "Always running" when 2+ editors are selected.** Single-editor
+  setups still default to "As needed" (stdio) — that's simpler and avoids the launchd/systemd
+  install. But stdio Krimto holds a single-writer lock on the data dir, which means only ONE
+  editor can use it at a time. With 2+ editors, the second one to call wins a `Failed to
+  connect` from the MCP layer until the first exits — a footgun for any user with Cursor +
+  Claude Code (etc.) open simultaneously.
+
+  The fix applies to both interactive (`runInitWizard` → `askRunMode`) and non-interactive
+  (`runInitNonInteractive` invoked by `--yes`):
+  - The interactive prompt's choice text now warns about the lock contention when 2+ editors
+    are picked, and the recommended-asterisk moves from "As needed" to "Always running".
+  - The non-interactive `--yes` path picks `always-running` automatically when `editors.length
+    >= 2`. Tests that want the old behavior pass `runMode: "as-needed"` explicitly; CI/Docker
+    that don't want a real service install pass `dryRun: true`.
+
+  Reconfigure (`init` on a configured machine, "Change settings" option) still honors the
+  user's saved `snapshot.runMode` — we don't override an explicit prior choice.
+
+  Source: `src/cli/wizard.ts` (`askRunMode` signature now takes `editorCount`; `runFreshWizard`
+  computes `smartDefault`; `runInitNonInteractive` uses the same fallback).
+
+### Tests
+
+- `tests/integration/init-wizard.test.ts` — three new tests:
+  - 1 detected editor → `runMode = "as-needed"`, no service install
+  - 2+ detected editors → `runMode = "always-running"`, service install fires
+  - Explicit `runMode` override wins over the smart default
+
+Total suite: **547 passing**. Typecheck + lint clean.
+
 ## [0.2.19] — 2026-05-27
 
 ### Fixed

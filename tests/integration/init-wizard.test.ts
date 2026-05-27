@@ -98,6 +98,43 @@ describe("runInitNonInteractive (--yes path)", () => {
     expect(result.editorOutcomes.map((o) => o.editor)).toEqual(["claude-code"]);
   });
 
+  it("v0.2.20 smart default: 1 detected editor → as-needed (no service install)", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    const result = await runInitNonInteractive(dir, { homeDir: home, dryRun: true });
+    // Only Cursor signal present → exactly 1 detected → as-needed (no service install).
+    expect(result.editorOutcomes.map((o) => o.editor)).toEqual(["cursor"]);
+    expect(result.serviceInstall).toBeUndefined();
+  });
+
+  it("v0.2.20 smart default: 2+ detected editors → always-running (service install fires)", async () => {
+    // Two editor signals: cursor + claude-code.
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "");
+    const result = await runInitNonInteractive(dir, {
+      homeDir: home,
+      dryRun: true,
+      binPath: "/usr/bin/node",
+      serviceArgs: ["/krimto/bin/krimto.mjs", "serve"],
+    });
+    expect(result.editorOutcomes.map((o) => o.editor).sort()).toEqual([
+      "claude-code",
+      "cursor",
+    ]);
+    expect(result.serviceInstall).toBeDefined();
+    expect(result.serviceInstall?.activated).toBe(false); // dryRun
+  });
+
+  it("v0.2.20 smart default: explicit runMode override wins over the smart default", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await fs.writeFile(path.join(dir, "CLAUDE.md"), "");
+    const result = await runInitNonInteractive(dir, {
+      homeDir: home,
+      runMode: "as-needed", // explicit override on a 2-editor setup
+      dryRun: true,
+    });
+    expect(result.serviceInstall).toBeUndefined(); // override honored
+  });
+
   it("respects runMode=always-running with dryRun=true", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
     const result = await runInitNonInteractive(dir, {

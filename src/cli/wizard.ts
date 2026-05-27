@@ -154,7 +154,12 @@ async function runFreshWizard(
   printScan(envs, io);
 
   const selectedEditors = await askEditors(envs, snapshot);
-  const runMode = await askRunMode(snapshot?.runMode);
+  // v0.2.20 — smart default: stdio Krimto can only serve one editor at a time (single-writer
+  // lock on the data dir). When the user picks 2+ editors, recommend "Always running" so they
+  // can all use Krimto simultaneously over HTTP. Snapshot.runMode wins on reconfigure (respects
+  // the user's prior choice). First-run with one editor → "as-needed" (simplest).
+  const smartDefault: RunMode = selectedEditors.length >= 2 ? "always-running" : "as-needed";
+  const runMode = await askRunMode(snapshot?.runMode ?? smartDefault, selectedEditors.length);
   const whoFor = await askWhoFor();
   if (whoFor === "team") {
     io.out("\nGreat — team mode is set up via `krimto team init` (Phase C). Run that next.\n");
@@ -199,22 +204,38 @@ async function askEditors(
   });
 }
 
-async function askRunMode(defaultMode: RunMode = "as-needed"): Promise<RunMode> {
+async function askRunMode(
+  defaultMode: RunMode = "as-needed",
+  editorCount = 1,
+): Promise<RunMode> {
+  // v0.2.20 — when 2+ editors are selected, "as needed" is broken by Krimto's single-writer
+  // lock: only the first editor to call wins; the others fail. The choice descriptions reflect
+  // this so a user picking "as needed" with multiple editors sees the warning before they commit.
+  const multi = editorCount >= 2;
   return select<RunMode>({
     message: "How should Krimto run?",
     default: defaultMode,
     choices: [
       {
         value: "as-needed",
-        name: "As needed (recommended)",
-        description:
-          "Your editor launches Krimto when it needs it. Simplest setup —\nno background process to manage. Works for solo use on one machine.",
+        name: multi ? "As needed (⚠️  one editor at a time only)" : "As needed (recommended)",
+        description: multi
+          ? `Your editor launches Krimto when it needs it. Simple — but Krimto's single-writer\n` +
+            `lock means only one of your ${editorCount} editors can use it at a time. The second one\n` +
+            `to call will fail until the first one exits. Pick "Always running" instead if you\n` +
+            `want all of them to work simultaneously.`
+          : "Your editor launches Krimto when it needs it. Simplest setup —\nno background process to manage. Works for solo use on one machine.",
       },
       {
         value: "always-running",
-        name: "Always running (background service)",
-        description:
-          "Krimto runs continuously, even after you close your terminal.\nAuto-starts when you log in. Best if multiple editors talk to one Krimto\nor you want /ui always available.",
+        name: multi
+          ? "Always running (recommended for multi-editor)"
+          : "Always running (background service)",
+        description: multi
+          ? `ONE Krimto runs continuously in the background; ALL ${editorCount} of your editors connect\n` +
+            `to it over HTTP. No lock fights — they can all save and recall simultaneously.\n` +
+            `Installs launchd / systemd / schtasks on first use.`
+          : "Krimto runs continuously, even after you close your terminal.\nAuto-starts when you log in. Best if multiple editors talk to one Krimto\nor you want /ui always available.",
       },
       {
         value: "manual",
@@ -396,7 +417,13 @@ export interface NonInteractiveOptions extends ApplyOptions {
 
 /**
  * Skip the prompts entirely and apply with sensible defaults. Used by CI and the `--yes` flag.
- * Defaults: all detected editors, "as-needed" mode, "just-me", keyword search.
+ * Defaults: all detected editors, "just-me", keyword search.
+ *
+ * Run mode is "as-needed" for a single editor, "always-running" when 2+ editors are selected —
+ * mirrors the interactive wizard's smart default (v0.2.20). The stdio + lock combination only
+ * supports one editor at a time, so multi-editor `--yes` users should land on the HTTP-backed
+ * always-running mode by default. Tests that want the old behavior pass `runMode: "as-needed"`
+ * explicitly; CI runs that don't want a real service install pass `dryRun: true`.
  */
 export async function runInitNonInteractive(
   cwd: string,
@@ -405,7 +432,7 @@ export async function runInitNonInteractive(
   const envs = await detectEditorEnvironments(cwd, opts.homeDir);
   const detected = envs.filter((e) => e.present).map((e) => e.editor);
   const editors = opts.editors ?? (detected.length > 0 ? detected : envs.map((e) => e.editor));
-  const runMode = opts.runMode ?? "as-needed";
+  const runMode = opts.runMode ?? (editors.length >= 2 ? "always-running" : "as-needed");
   const search = opts.search ?? "keyword";
   const identity = await defaultIdentity();
   const answers: WizardAnswers = {
