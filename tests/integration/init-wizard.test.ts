@@ -239,6 +239,9 @@ describe("runInitWizard — fresh setup (no existing config)", () => {
 });
 
 describe("runInitWizard — already configured (reconfigure menu)", () => {
+  // v0.2.35 — these tests now go through `inspectRuntime` which shells out to `claude mcp
+  // list`. On dev machines with HTTP MCP servers configured (the typical case), that
+  // health-checks each one and can take up to 8s. We extend the timeout accordingly.
   it("shows the reconfigure menu and 'refresh rule' applies just the rule", async () => {
     // Pre-configure: run --yes once so the snapshot detects "configured".
     await fs.mkdir(path.join(dir, ".cursor"));
@@ -254,13 +257,13 @@ describe("runInitWizard — already configured (reconfigure menu)", () => {
       value: "refresh" as const,
     });
 
-    const result = await runInitWizard(dir, { homeDir: home, io });
+    const result = await runInitWizard(dir, { homeDir: home, io, dataDir: path.join(home, ".krimto") });
     expect(result).not.toBeNull();
     expect(io.stdout.join("")).toContain("Standing rule refreshed");
     await expect(
       fs.readFile(path.join(dir, ".cursor", "rules", "krimto.mdc"), "utf8"),
     ).resolves.toContain("krimto_recall");
-  });
+  }, 30000);
 
   it("'Quit' exits without applying anything", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
@@ -269,10 +272,10 @@ describe("runInitWizard — already configured (reconfigure menu)", () => {
     const io = captureIO();
     promptQueue.push({ name: "select:What would you like to do?", value: "quit" });
 
-    const result = await runInitWizard(dir, { homeDir: home, io });
+    const result = await runInitWizard(dir, { homeDir: home, io, dataDir: path.join(home, ".krimto") });
     expect(result).toBeNull();
     expect(io.stdout.join("")).toContain("No changes made");
-  });
+  }, 30000);
 
   it("'View status' points the user at `krimto status`", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
@@ -281,8 +284,61 @@ describe("runInitWizard — already configured (reconfigure menu)", () => {
     const io = captureIO();
     promptQueue.push({ name: "select:What would you like to do?", value: "status" });
 
-    const result = await runInitWizard(dir, { homeDir: home, io });
+    const result = await runInitWizard(dir, { homeDir: home, io, dataDir: path.join(home, ".krimto") });
     expect(result).toBeNull();
     expect(io.stdout.join("")).toContain("krimto status");
-  });
+  }, 30000);
+
+  // v0.2.35 — the smoke-6 user read "Krimto is already set up on this machine" as
+  // "Krimto is running" and was confused when the process wasn't actually serving. The
+  // menu now drops the ambiguous phrase, leads with neutral "Krimto on this machine:"
+  // chrome, and shows a real Service: line driven by inspectRuntime.
+  it("header uses 'Krimto on this machine:' (not the old 'already set up')", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await runInitNonInteractive(dir, { homeDir: home });
+
+    const io = captureIO();
+    promptQueue.push({ name: "select:What would you like to do?", value: "quit" });
+
+    await runInitWizard(dir, { homeDir: home, io, dataDir: path.join(home, ".krimto") });
+    const out = io.stdout.join("");
+    expect(out).toContain("Krimto on this machine:");
+    expect(out).not.toContain("already set up");
+    // The new Service: line is present — its exact text varies by runtime, but it MUST
+    // always appear so the user always sees runtime state, not just config snapshot.
+    expect(out).toContain("Service:");
+  }, 30000);
+
+  it("shows 'Not running' when no service AND no live process holds the lock", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    // runInitNonInteractive with the default config installs no service in dryRun. Force
+    // dryRun so the service-install path never touches the real host.
+    await runInitNonInteractive(dir, { homeDir: home, dryRun: true });
+
+    const io = captureIO();
+    promptQueue.push({ name: "select:What would you like to do?", value: "quit" });
+
+    await runInitWizard(dir, { homeDir: home, io, dataDir: path.join(home, ".krimto") });
+    expect(io.stdout.join("")).toContain("Not running");
+    expect(io.stdout.join("")).toContain("editor launches it on demand");
+  }, 30000);
+
+  it("'Start it running continuously' routes to applyService (dryRun-safe)", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    await runInitNonInteractive(dir, { homeDir: home, dryRun: true });
+
+    const io = captureIO();
+    promptQueue.push({
+      name: "select:What would you like to do?",
+      value: "start-service" as const,
+    });
+    const result = await runInitWizard(dir, {
+      homeDir: home,
+      io,
+      dryRun: true,
+      dataDir: path.join(home, ".krimto"),
+    });
+    expect(result).toBeNull();
+    expect(io.stdout.join("")).toContain("Installing background service");
+  }, 30000);
 });

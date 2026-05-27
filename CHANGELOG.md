@@ -4,6 +4,88 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.35] — 2026-05-27 — honest reconfigure menu + Claude Code reset sweep
+
+### Fixed — reset never actually removed Claude Code's registration
+
+The smoke-6 transcript caught `krimto reset --yes --wipe-notes` reporting "No editors
+were connected" while `claude mcp list` continued to show krimto. Root cause:
+`src/cli/mcpConfig.ts:removeMcpConfig` bailed at the top with
+`if (env.mcpWire?.method !== "json") return { removed: false }` — the CLI-method branch
+(Claude Code) was never written. Reset's "always sweep" rule covered the JSON editors but
+silently no-op'd on the CLI ones.
+
+Fix: `removeMcpConfig` now handles the `cli` method by shelling out to
+`claude mcp remove krimto -s <scope>` for each of the three scopes Claude Code supports
+(`local`, `user`, `project`). Each call is idempotent — "not found at this scope" errors
+are swallowed — and returns `removed: true` when at least one scope yielded a removal.
+The user's krimto entry may live in any scope depending on which directory they ran
+`claude mcp add` from; sweeping all three ensures reset's contract holds regardless.
+
+After the fix:
+- `krimto reset --yes` prints `✓ Disconnected Claude Code` (was: `– No editors were connected`)
+- `claude mcp list` shows no krimto after reset
+- `krimto status` reports `🔴 Krimto isn't set up on this machine` (was: `✅ Krimto is configured`)
+
+### Fixed — reconfigure menu wording was misleading
+
+The smoke-6 user read "Krimto is already set up on this machine" as "Krimto is running"
+and was confused when the actual process wasn't serving. The menu showed only the static
+config snapshot (which editors are wired) without ever revealing runtime state (whether a
+process is actually running RIGHT NOW). And the inferred "Run mode: As needed" line was
+internal jargon — most users read it as "Krimto's running on-demand" when in fact
+as-needed mode means there's literally no krimto process unless an editor is talking to
+it.
+
+Fix: `src/cli/wizard.ts:runReconfigureMenu` now calls `inspectRuntime` (the unified
+runtime view introduced in v0.2.26) and renders a real `Service:` line driven by lock +
+launchctl/systemctl reality, not just config-on-disk:
+
+```
+Krimto on this machine:           ← header dropped the ambiguous "set up"
+  Editors:   Claude Code
+  Service:   Not running (your editor launches it on demand via stdio)
+                                  ↑  driven by inspectRuntime: lock + launchctl reality
+  Search:    Keyword (no API key)
+```
+
+Four service states the line distinguishes:
+- `Running as background service (PID …, started Nm ago)` — service installed + loaded
+- `Running ad-hoc (PID … — started by 'krimto serve' or an editor)` — process alive, no service
+- `⚠ Installed but not running — 'krimto start' to load it` — plist exists but launchctl forgot it
+- `Not running (your editor launches it on demand via stdio)` — clean machine
+
+### Added — "Start it running continuously" menu choice
+
+When no daemon is currently active, the reconfigure menu now offers a fifth choice:
+**"Start it running continuously (install as a background service)"**. Picking it
+delegates straight to `applyService("always-running")` — the user gets a daemon
+installed without having to drop back to the shell and remember `krimto service --always`.
+The choice only appears when nothing is running (to avoid offering "start" when something
+is already serving).
+
+### Tests
+
+- `tests/integration/init-wizard.test.ts` — 3 new tests for the rewritten menu: header
+  uses "Krimto on this machine:" (not "already set up"), `Not running` text fires when no
+  service + no live PID, and the new "Start it running continuously" choice routes to
+  `applyService` (dryRun-safe).
+- Updated existing reconfigure-menu tests to pass `dataDir` explicitly so `inspectRuntime`
+  reads test temp dirs, and extended their timeouts to 30s (the new `inspectRuntime` call
+  shells out to `claude mcp list`, which on dev machines with HTTP MCP servers configured
+  can take up to 8s to health-check them).
+
+Total: 637 passing (was 634). Lint + types clean.
+
+### Verified end-to-end
+
+On the user's machine:
+- Pre: `claude mcp list` showed `krimto: http://localhost:8080/mcp (HTTP)` at project scope
+- `krimto reset --yes` → `✓ Disconnected Claude Code`
+- Post: `claude mcp list` shows no krimto
+- `krimto status` → `🔴 Krimto isn't set up on this machine`
+- `krimto init` rerun: menu header reads `Krimto on this machine:` (not "already set up")
+
 ## [0.2.34] — 2026-05-27 — agent-friendly Phase B (no more hang traps)
 
 ### Fixed

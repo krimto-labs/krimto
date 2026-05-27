@@ -148,25 +148,62 @@ export async function writeMcpConfig(
  * matching `mcp remove`, but we don't depend on it).
  */
 export async function removeMcpConfig(env: EditorEnvironment): Promise<{ removed: boolean }> {
-  if (env.mcpWire === null || env.mcpWire.method !== "json") return { removed: false };
-  let text: string;
-  try {
-    text = await fs.readFile(env.mcpWire.path, "utf8");
-  } catch {
-    return { removed: false };
+  if (env.mcpWire === null) return { removed: false };
+
+  if (env.mcpWire.method === "json") {
+    let text: string;
+    try {
+      text = await fs.readFile(env.mcpWire.path, "utf8");
+    } catch {
+      return { removed: false };
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return { removed: false };
+    }
+    const servers = parsed[env.mcpWire.key] as Record<string, unknown> | undefined;
+    if (!servers || !("krimto" in servers)) return { removed: false };
+    const { krimto: _krimto, ...rest } = servers; // eslint-disable-line @typescript-eslint/no-unused-vars
+    parsed[env.mcpWire.key] = rest;
+    await fs.writeFile(env.mcpWire.path, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+    return { removed: true };
   }
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return { removed: false };
+
+  // v0.2.35 — CLI method (Claude Code). The smoke-6 transcript caught reset reporting "No
+  // editors were connected" while `claude mcp list` still showed krimto. Root cause: this
+  // function used to bail at the top with `method !== "json"`, so the CLI path was never
+  // exercised. The reset SWEEP rule (always run cleanup, never trust detection) covers the
+  // intent here too — we shell out to `claude mcp remove krimto` across the three scopes
+  // Claude Code supports (local / user / project). Each call is idempotent: if krimto
+  // isn't registered at a scope, claude prints "MCP server krimto not found" and exits
+  // non-zero, which we swallow. We mark removed=true when ANY scope succeeds.
+  if (env.mcpWire.method === "cli") {
+    return { removed: await removeClaudeMcpAllScopes(env.mcpWire.command) };
   }
-  const servers = parsed[env.mcpWire.key] as Record<string, unknown> | undefined;
-  if (!servers || !("krimto" in servers)) return { removed: false };
-  const { krimto: _krimto, ...rest } = servers; // eslint-disable-line @typescript-eslint/no-unused-vars
-  parsed[env.mcpWire.key] = rest;
-  await fs.writeFile(env.mcpWire.path, JSON.stringify(parsed, null, 2) + "\n", "utf8");
-  return { removed: true };
+
+  return { removed: false };
+}
+
+/**
+ * v0.2.35 — try `claude mcp remove krimto -s <scope>` for each known scope. Returns true
+ * when at least one succeeds. The user's krimto entry may live in any scope depending on
+ * which directory they were in when they originally ran `claude mcp add`, so we sweep all
+ * three. Errors are best-effort (no-op when nothing's registered at that scope).
+ */
+async function removeClaudeMcpAllScopes(claudeBinary: string): Promise<boolean> {
+  const scopes = ["local", "user", "project"] as const;
+  let anyRemoved = false;
+  for (const scope of scopes) {
+    try {
+      await exec(claudeBinary, ["mcp", "remove", "krimto", "-s", scope]);
+      anyRemoved = true;
+    } catch {
+      // "MCP server krimto not found" at this scope — fine, try the next.
+    }
+  }
+  return anyRemoved;
 }
 
 // --- internal helpers -------------------------------------------------------

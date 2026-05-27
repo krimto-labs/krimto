@@ -25,6 +25,10 @@ import {
 } from "./init";
 import { runSetupEmbeddings } from "./setupEmbeddings";
 import { KRIMTO_VERSION } from "../server/index";
+import { inspectRuntime, type RuntimeState } from "./inspectRuntime";
+import { applyService } from "./serviceCmd";
+import * as os from "node:os";
+import * as path from "node:path";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -68,46 +72,88 @@ export async function runInitWizard(
   }
 }
 
-/** §06 — "Krimto is already set up on this machine. What would you like to do?" */
+/**
+ * §06 — reconfigure menu shown when `krimto init` is re-run on a configured machine.
+ *
+ * v0.2.35: drops the ambiguous "Krimto is already set up on this machine" header (users
+ * read "set up" as "running"). The new header is neutral — "Krimto on this machine:" —
+ * and adds a real **Service:** line driven by `inspectRuntime` (config-snapshot ≠ runtime).
+ * That way the user always knows whether a process is actually serving right now, not just
+ * whether a config exists on disk. A fifth menu choice — "Start it running continuously"
+ * — appears only when no service is currently loaded, so users who want a daemon find the
+ * button without leaving the menu.
+ */
 async function runReconfigureMenu(
   cwd: string,
   snapshot: SetupSnapshot,
   opts: RunWizardOptions,
   io: WizardIO,
 ): Promise<ApplyResult | null> {
+  // Match applyWizardAnswers's pattern: derive dataDir from homeDir when not explicitly
+  // passed. Tests rely on this so the runtime probe hits a test temp dir, not the user's
+  // real ~/.krimto.
+  const homeDir = opts.homeDir ?? os.homedir();
+  const dataDir = opts.dataDir ?? path.join(homeDir, ".krimto");
+  const runtime = await inspectRuntime(dataDir, { cwd, homeDir });
+
   io.out("\n");
-  io.out("Krimto is already set up on this machine.\n");
-  io.out(`  Editors:   ${snapshot.registeredEditors.map((e) => EDITOR_LABEL[e]).join(", ") || "(none)"}\n`);
-  io.out(`  Run mode:  ${runModeLabel(snapshot.runMode)}\n`);
+  io.out("Krimto on this machine:\n");
+  io.out(
+    `  Editors:   ${
+      snapshot.registeredEditors.map((e) => EDITOR_LABEL[e]).join(", ") || "(none)"
+    }\n`,
+  );
+  io.out(`  Service:   ${formatServiceLine(runtime)}\n`);
   io.out(`  Search:    ${searchLabel(snapshot.searchProvider)}\n`);
   io.out("\n");
 
+  // The "Start it running continuously" choice only makes sense when no daemon is alive.
+  // (When already running as a service, there's nothing to start; when running ad-hoc, the
+  // user is better served by `krimto service --always` AFTER stopping the ad-hoc one, which
+  // is more state than this menu wants to manage.)
+  const canStartService =
+    !runtime.service.loaded && !(runtime.lock?.alive ?? false);
+
+  const choices: Array<{
+    value: "refresh" | "reconfigure" | "status" | "start-service" | "quit";
+    name: string;
+    description: string;
+  }> = [
+    {
+      value: "refresh",
+      name: "Just refresh the standing rule in this project",
+      description:
+        "Re-applies the 'always use Krimto' rule to CLAUDE.md / .cursor/rules/ here.\nUse this when you just cloned a new repo.",
+    },
+    {
+      value: "reconfigure",
+      name: "Change settings (reconfigure)",
+      description:
+        "Re-runs the setup wizard with your current answers pre-filled.\nSkip anything you don't want to change.",
+    },
+    {
+      value: "status",
+      name: "View status",
+      description: "Show what's working, what's configured, recent activity.",
+    },
+  ];
+  if (canStartService) {
+    choices.push({
+      value: "start-service",
+      name: "Start it running continuously (install as a background service)",
+      description:
+        "Runs Krimto as a launchd / systemd-user / schtasks service so it stays up\nacross reboots. Equivalent to `krimto service --always`.",
+    });
+  }
+  choices.push({
+    value: "quit",
+    name: "Quit",
+    description: "Leave Krimto as it is.",
+  });
+
   const choice = await select({
     message: "What would you like to do?",
-    choices: [
-      {
-        value: "refresh" as const,
-        name: "Just refresh the standing rule in this project",
-        description:
-          "Re-applies the 'always use Krimto' rule to CLAUDE.md / .cursor/rules/ here.\nUse this when you just cloned a new repo.",
-      },
-      {
-        value: "reconfigure" as const,
-        name: "Change settings (reconfigure)",
-        description:
-          "Re-runs the setup wizard with your current answers pre-filled.\nSkip anything you don't want to change.",
-      },
-      {
-        value: "status" as const,
-        name: "View status",
-        description: "Show what's working, what's configured, recent activity.",
-      },
-      {
-        value: "quit" as const,
-        name: "Quit",
-        description: "Leave Krimto as it is.",
-      },
-    ],
+    choices,
   });
 
   if (choice === "quit") {
@@ -139,8 +185,68 @@ async function runReconfigureMenu(
     return null;
   }
 
+  if (choice === "start-service") {
+    // v0.2.35 — install + load the always-running service from inside the menu so users
+    // who want a daemon don't have to drop back to the shell and remember the flag name.
+    // Delegates to applyService which handles the platform-specific install + port probe.
+    io.out("\nInstalling background service...\n");
+    const installResult = await applyService("always-running", {
+      ...(opts.dataDir ? { dataDir: opts.dataDir } : {}),
+      ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
+      ...(opts.dryRun ? { dryRun: true } : {}),
+    });
+    if (installResult.install?.activated) {
+      const portMsg =
+        installResult.install.portReady === false
+          ? "  ⚠ Service installed but the HTTP port didn't come up within 10s. Check\n    /tmp/com.krimto.server.err.log.\n"
+          : "  ✓ Service started, port accepting connections.\n";
+      io.out("\n✅ Background service is now running.\n" + portMsg + "\n");
+    } else {
+      io.out("\n(Service was configured but not activated — likely a dry-run.)\n");
+    }
+    return null;
+  }
+
   // "reconfigure" — re-run the five questions with snapshot as defaults
   return runFreshWizard(cwd, opts, io, snapshot);
+}
+
+/**
+ * v0.2.35 — turn the reconciled runtime view into one human line for the reconfigure menu.
+ * Four cases (in priority order):
+ *   1. A live process holds the lock AND launched-by="service"   → "Running as background service (PID …, started Nm ago)"
+ *   2. A live process holds the lock, launched-by="ad-hoc"        → "Running ad-hoc (PID … — started by `krimto serve` or an editor)"
+ *   3. Service unit on disk but not loaded                        → "⚠ Installed but not running — `krimto start` to load it"
+ *   4. Nothing running, no unit on disk                            → "Not running (your editor launches it on demand via stdio)"
+ *
+ * This is the line that the smoke-6 user wanted: "is Krimto serving RIGHT NOW?" — driven
+ * by lock + launchctl/systemctl reality, not by the static config snapshot.
+ */
+function formatServiceLine(runtime: RuntimeState): string {
+  const lock = runtime.lock;
+  if (lock?.alive) {
+    const ago = humanAgoForLock(lock.started);
+    if (runtime.effectiveLaunchedBy === "service") {
+      return `Running as background service (PID ${lock.pid}, started ${ago})`;
+    }
+    return `Running ad-hoc (PID ${lock.pid} — started ${ago} by \`krimto serve\` or an editor)`;
+  }
+  if (runtime.service.installed) {
+    return "⚠ Installed but not running — `krimto start` to load it";
+  }
+  return "Not running (your editor launches it on demand via stdio)";
+}
+
+function humanAgoForLock(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
 }
 
 /** §03 — the fresh five-question flow. `snapshot` (when given) seeds the defaults. */
