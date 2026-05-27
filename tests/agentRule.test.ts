@@ -69,4 +69,54 @@ describe("agentRule", () => {
   it("removeRule: null in, null out", () => {
     expect(removeRule(null)).toBeNull();
   });
+
+  // v0.2.29 — Cursor's .cursor/rules/*.mdc files need `alwaysApply: true` frontmatter or
+  // they're treated as manual-attach only. The smoke-6 cross-editor test caught this:
+  // Cursor would only recall facts when the user said "krimto" in their prompt (the
+  // keyword that activates manual-attach rules). With `alwaysApply: true`, Cursor loads
+  // the rule on every prompt and the agent auto-uses krimto without the keyword.
+  describe("cursorMdc — frontmatter for Cursor .mdc rule files", () => {
+    it("prepends `alwaysApply: true` frontmatter when writing into an empty file", () => {
+      const out = applyRule(null, { cursorMdc: true });
+      expect(out.startsWith("---\nalwaysApply: true\n---\n")).toBe(true);
+      expect(out).toContain("<!-- krimto:start -->");
+      expect(out).toContain("krimto_recall");
+    });
+
+    it("preserves existing user-supplied frontmatter (doesn't double-stack `---`)", () => {
+      const userOwned = "---\ndescription: my own thing\nglobs: src/**\n---\n";
+      const out = applyRule(userOwned, { cursorMdc: true });
+      // Should NOT add our frontmatter on top of theirs.
+      expect(out.startsWith("---\ndescription: my own thing")).toBe(true);
+      // But should still append our block.
+      expect(out).toContain("<!-- krimto:start -->");
+      expect(out).toContain("krimto_recall");
+      // And no double-frontmatter (only the user's `---` opening fence).
+      expect((out.match(/^---\n/gm) ?? []).length).toBeLessThanOrEqual(2); // user's open + close
+    });
+
+    it("is idempotent — re-applying yields identical content", () => {
+      const once = applyRule(null, { cursorMdc: true });
+      const twice = applyRule(once, { cursorMdc: true });
+      expect(twice).toBe(once);
+    });
+
+    it("preserves frontmatter when refreshing the block in place", () => {
+      const stale = "---\nalwaysApply: true\n---\n<!-- krimto:start -->\nOLD\n<!-- krimto:end -->\n";
+      const out = applyRule(stale, { cursorMdc: true });
+      expect(out.startsWith("---\nalwaysApply: true\n---\n")).toBe(true);
+      expect(out).not.toContain("OLD");
+      expect(out).toContain("krimto_recall");
+    });
+
+    it("does NOT add frontmatter when cursorMdc is false (other editor files unchanged)", () => {
+      const out = applyRule(null, { cursorMdc: false });
+      expect(out.startsWith("---")).toBe(false);
+      expect(out.startsWith("<!-- krimto:start -->")).toBe(true);
+    });
+
+    it("default (no opts) matches cursorMdc=false — back-compat", () => {
+      expect(applyRule(null)).toBe(applyRule(null, { cursorMdc: false }));
+    });
+  });
 });

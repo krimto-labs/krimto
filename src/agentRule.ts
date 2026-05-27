@@ -29,6 +29,17 @@ Don't save secrets, transient state, or one-off chatter.`;
 const START = "<!-- krimto:start -->";
 const END = "<!-- krimto:end -->";
 
+/**
+ * v0.2.29 — Cursor's `.cursor/rules/*.mdc` files require YAML frontmatter to be auto-applied.
+ * Without `alwaysApply: true`, Cursor treats the rule as MANUAL-attach only — the agent only
+ * loads it when the user explicitly says "krimto" (or `@krimto`) in their prompt. The smoke-6
+ * cross-editor test showed this: Claude Code (which auto-reads CLAUDE.md with no frontmatter
+ * needed) saved facts correctly, but Cursor wouldn't recall them until the user typed "krimto".
+ * Other editors (CLAUDE.md, AGENTS.md, GEMINI.md) are plain markdown — they don't use this
+ * convention, so the frontmatter is added ONLY for the cursor target.
+ */
+const CURSOR_FRONTMATTER = "---\nalwaysApply: true\n---\n";
+
 /** The rule wrapped in stable markers, so it can be found and updated in place later. */
 export function ruleBlock(): string {
   return `${START}\n${AGENT_RULE}\n${END}`;
@@ -40,19 +51,34 @@ export function ruleBlock(): string {
  * - existing WITHOUT our markers → append the block, preserving all existing content
  * - existing WITH our markers    → replace only the marked block, preserving the rest
  * Re-applying the same rule yields identical content (so callers can detect a no-op).
+ *
+ * `opts.cursorMdc` prepends the Cursor-required YAML frontmatter (`alwaysApply: true`) so
+ * `.cursor/rules/krimto.mdc` is auto-loaded by Cursor on every prompt instead of being
+ * manual-attach-only. Idempotent: if frontmatter already exists at the top, it's preserved.
  */
-export function applyRule(existing: string | null): string {
+export function applyRule(
+  existing: string | null,
+  opts: { cursorMdc?: boolean } = {},
+): string {
   const block = ruleBlock();
-  if (!existing || existing.trim() === "") return `${block}\n`;
+
+  // Helper: ensure the result starts with `---\nalwaysApply: true\n---\n` when requested.
+  const withFrontmatter = (content: string): string => {
+    if (!opts.cursorMdc) return content;
+    if (content.startsWith("---\n")) return content; // user-supplied frontmatter — leave alone
+    return CURSOR_FRONTMATTER + content;
+  };
+
+  if (!existing || existing.trim() === "") return withFrontmatter(`${block}\n`);
 
   const startIdx = existing.indexOf(START);
   const endIdx = existing.indexOf(END);
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    return existing.slice(0, startIdx) + block + existing.slice(endIdx + END.length);
+    return withFrontmatter(existing.slice(0, startIdx) + block + existing.slice(endIdx + END.length));
   }
 
   const sep = existing.endsWith("\n") ? "\n" : "\n\n";
-  return `${existing}${sep}${block}\n`;
+  return withFrontmatter(`${existing}${sep}${block}\n`);
 }
 
 /**

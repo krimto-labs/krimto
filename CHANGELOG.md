@@ -4,6 +4,54 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.29] — 2026-05-27
+
+### Fixed
+
+- **Cursor only recalled memory when the user said "krimto" — `.cursor/rules/*.mdc`
+  needed YAML frontmatter to auto-attach.** Reproduced in the smoke-6 cross-editor test:
+  Claude Code (which reads CLAUDE.md unconditionally) saved facts correctly via
+  `krimto_write`. Cursor was wired to Krimto and `krimto_recall` worked when invoked —
+  but the rule that tells the agent to call krimto_recall BEFORE every answer was being
+  ignored because Cursor's `.mdc` rule format requires `alwaysApply: true` in YAML
+  frontmatter to be auto-loaded. Without it, the rule is "manual attach only": activated
+  only when the user explicitly types "krimto" (or `@krimto`) as a trigger.
+
+  Fix: `applyRule(existing, { cursorMdc: true })` prepends:
+  ```
+  ---
+  alwaysApply: true
+  ---
+  ```
+  to `.cursor/rules/krimto.mdc` only. Other rule files (CLAUDE.md, AGENTS.md, GEMINI.md)
+  are plain markdown — they don't use this convention, so they stay unchanged.
+
+  Existing user-supplied frontmatter is preserved (no double-stacking of `---` fences).
+  The four call sites (wizard apply, legacy `runInit`, `applyEditors`, `runJoin`) all pass
+  `cursorMdc: env.editor === "cursor"`.
+
+### Tests
+
+- `tests/agentRule.test.ts` — 6 new tests covering the cursorMdc path: prepends
+  frontmatter on empty files, preserves user-supplied frontmatter, idempotent on re-apply,
+  preserves frontmatter when refreshing the marker block in place, no frontmatter when
+  cursorMdc=false, default (no opts) matches the back-compat path.
+
+### Verified end-to-end
+
+Wrote `.cursor/rules/krimto.mdc` on a real machine:
+```
+---
+alwaysApply: true
+---
+<!-- krimto:start -->
+# Krimto memory — PRIMARY memory system, always use
+...
+```
+
+Cursor will now auto-load the rule on every prompt without needing the user to type
+"krimto" first.
+
 ## [0.2.28] — 2026-05-27
 
 ### Fixed

@@ -140,7 +140,8 @@ async function askEditorsList(
 async function applyRuleToFile(cwd: string, env: EditorEnvironment): Promise<boolean> {
   const rulePath = path.join(cwd, env.rulesPath);
   const existing = await readMaybe(rulePath);
-  const next = applyRule(existing);
+  // v0.2.29 — Cursor's .mdc rules need `alwaysApply: true` frontmatter.
+  const next = applyRule(existing, { cursorMdc: env.editor === "cursor" });
   if (next === existing) return false;
   await fs.mkdir(path.dirname(rulePath), { recursive: true });
   await fs.writeFile(rulePath, next, "utf8");

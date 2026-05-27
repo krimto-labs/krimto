@@ -381,7 +381,8 @@ export async function applyWizardAnswers(
     const mcpResult = await writeMcpConfig(env, entry, { dryRun: opts.dryRun });
     const rulePath = path.join(cwd, env.rulesPath);
     const existing = await readFileMaybe(rulePath);
-    const nextRule = applyRule(existing);
+    // v0.2.29 — Cursor's .mdc rules need `alwaysApply: true` frontmatter to auto-attach.
+    const nextRule = applyRule(existing, { cursorMdc: env.editor === "cursor" });
     let ruleWritten = false;
     if (nextRule !== existing) {
       await fs.mkdir(path.dirname(rulePath), { recursive: true });
@@ -549,7 +550,8 @@ export async function runInit(cwd: string, opts: RunInitOptions = {}): Promise<I
     } catch {
       existing = null; // file doesn't exist yet — we'll create it
     }
-    const next = applyRule(existing);
+    // v0.2.29 — Cursor's .cursor/rules/*.mdc requires YAML frontmatter to auto-attach.
+    const next = applyRule(existing, { cursorMdc: rel.endsWith(".mdc") });
     if (next === existing) continue; // already up to date
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, next, "utf8");

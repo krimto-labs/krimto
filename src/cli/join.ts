@@ -108,7 +108,8 @@ export async function applyJoin(
     const mcpResult = await writeMcpConfig(env, entry, { dryRun: opts.dryRun });
     const rulePath = path.join(cwd, env.rulesPath);
     const existing = await readMaybe(rulePath);
-    const nextRule = applyRule(existing);
+    // v0.2.29 — Cursor's .mdc rules need `alwaysApply: true` frontmatter.
+    const nextRule = applyRule(existing, { cursorMdc: env.editor === "cursor" });
     let ruleWritten = false;
     if (nextRule !== existing) {
       await fs.mkdir(path.dirname(rulePath), { recursive: true });
