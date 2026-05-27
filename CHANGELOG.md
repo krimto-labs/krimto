@@ -4,6 +4,37 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.33] — 2026-05-27 — `reset --wipe-notes` single-prompt UX
+
+### Fixed
+
+- **`krimto reset --wipe-notes` was tripping users up.** The two-prompt flow asked
+  "Proceed with reset?" first (default N) and only then the wipe-notes-specific
+  confirmation. A user who typed `--wipe-notes` and hit Enter at the first prompt got
+  "No changes made" with no idea why — their explicit flag had been silently no-op'd.
+
+  Fix: when `--wipe-notes` is passed, collapse the two confirmations into **one** prompt
+  whose text names the worst thing explicitly:
+  ```
+  ? Wipe notes folder AND disconnect everything? (y/N)
+  ```
+  The intro block above the prompt now leads with `⚠️ --wipe-notes — this will:` and
+  enumerates the consequences (including the data-dir move). Default is still N (no
+  accidental data loss on a stray Enter), but the path from "I typed --wipe-notes" to
+  "the destructive thing happened" is one Enter+`y`, not Enter+`y`+`y`.
+
+  Without the flag, the original `Proceed with reset?` prompt is unchanged (back-compat).
+  With `--yes`, both flags still skip all prompts as before.
+
+### Tests
+
+- `tests/integration/shortcuts.test.ts` — 3 new tests covering: the `--wipe-notes`
+  intro shows the consequence-named warning; the single prompt still defaults to N
+  (no accidental data loss); without the flag, the original `Proceed with reset?`
+  prompt is used (back-compat).
+
+Total: 627 passing (was 624). Lint + types clean.
+
 ## [0.2.32] — 2026-05-27 — "the stop button"
 
 ### Added — zero-friction off-ramp

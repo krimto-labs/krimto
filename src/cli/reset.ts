@@ -155,36 +155,40 @@ export async function runReset(opts: ResetOptions = {}): Promise<ResetResult | n
   try {
     const dataDir = opts.dataDir ?? path.join(opts.homeDir ?? "", ".krimto");
 
+    // v0.2.33 — single-prompt UX. The original flow asked "Proceed with reset?" first
+    // (default N), and only AFTER that asked the wipe-notes-specific confirmation. Users
+    // who passed `--wipe-notes` were tripped up by the first prompt: they'd typed the flag,
+    // hit Enter at "Proceed?", and got "No changes made" without realising the flag they
+    // passed had no consent baked in. The fix: when `--wipe-notes` is passed, collapse the
+    // two confirmations into ONE that names the worst thing explicitly. Without the flag,
+    // the single-prompt flow stays exactly as it was.
     io.out("\nKrimto — Reset machine-level config\n\n");
-    io.out("  This will:\n");
-    io.out("    • Disconnect Krimto from all editors (MCP config + standing rule)\n");
-    io.out("    • Stop and uninstall the background service (if installed)\n");
-    io.out("    • Wipe the local API-key store\n\n");
-    io.out("  This will NOT touch:\n");
-    io.out(`    • Your notes folder (${dataDir}) — unless you pass --wipe-notes\n`);
-    io.out("    • The team's git history or members.yaml\n\n");
+    if (opts.wipeNotes) {
+      io.out("  ⚠️  --wipe-notes — this will:\n");
+      io.out("    • Disconnect Krimto from all editors (MCP config + standing rule)\n");
+      io.out("    • Stop and uninstall the background service (if installed)\n");
+      io.out("    • Wipe the local API-key store\n");
+      io.out(`    • MOVE your notes folder (${dataDir}) to a timestamped trash sibling\n`);
+      io.out(`      ${dataDir}.trash-<ts> stays on disk until you delete it manually.\n\n`);
+      io.out("  This will NOT touch:\n");
+      io.out("    • The team's git history or members.yaml on the remote\n\n");
+    } else {
+      io.out("  This will:\n");
+      io.out("    • Disconnect Krimto from all editors (MCP config + standing rule)\n");
+      io.out("    • Stop and uninstall the background service (if installed)\n");
+      io.out("    • Wipe the local API-key store\n\n");
+      io.out("  This will NOT touch:\n");
+      io.out(`    • Your notes folder (${dataDir}) — pass --wipe-notes to also move it\n`);
+      io.out("    • The team's git history or members.yaml\n\n");
+    }
 
-    const ok = opts.yes ?? (await confirm({ message: "Proceed with reset?", default: false }));
+    const promptMessage = opts.wipeNotes
+      ? "Wipe notes folder AND disconnect everything?"
+      : "Proceed with reset?";
+    const ok = opts.yes ?? (await confirm({ message: promptMessage, default: false }));
     if (!ok) {
       io.out("\nNo changes made.\n");
       return null;
-    }
-
-    // The --wipe-notes path needs its OWN confirmation — the default reset is reversible
-    // (just re-run `krimto init`), but wiping notes is data loss.
-    if (opts.wipeNotes && !opts.yes) {
-      io.out(
-        `\n⚠️  --wipe-notes will MOVE ${dataDir} to a timestamped trash sibling.\n` +
-          `   The notes stay on disk (recoverable) until you delete the trash dir manually.\n`,
-      );
-      const wipeOk = await confirm({
-        message: `Confirm: also move ${dataDir} to ${dataDir}.trash-<ts>?`,
-        default: false,
-      });
-      if (!wipeOk) {
-        io.out("\n(Reset proceeding without --wipe-notes — notes preserved.)\n");
-        opts = { ...opts, wipeNotes: false };
-      }
     }
 
     const result = await applyReset(opts);
