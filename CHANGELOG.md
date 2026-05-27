@@ -4,6 +4,39 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.28] — 2026-05-27
+
+### Fixed
+
+- **Cursor's file-watcher still hit ECONNREFUSED even with the v0.2.27 readiness probe.**
+  Root cause the v0.2.27 fix missed: the wizard's apply step ran in this order:
+    1. `writeMcpConfig` for each editor (writes HTTP url into mcp.json)
+    2. `installService` (with v0.2.27 probe waiting for the port)
+  Cursor's file watcher fires the *instant* mcp.json changes — at the END of step 1,
+  before step 2 has even started. The probe correctly waited for the port to be ready,
+  but by then Cursor had already tried, failed, and given up. Reproduced in the smoke-6
+  trace: Cursor connect attempt at 11:45:17.248, port bound at 11:45:30.594 — a 13s gap.
+
+  Fix: swap the order for always-running mode. Service installs + probe runs FIRST
+  (port now up), THEN editor MCP configs get written. Verified by a 200ms-sampling trace
+  showing `port=none, mcp={}` → `port=<pid>, mcp={krimto}` in consecutive samples —
+  Cursor's watcher will never see the config change while the port is unbound.
+
+  As-needed (stdio) mode is unaffected — there's no service, no port, no race.
+
+### Verified end-to-end
+
+200ms-sampled trace of `krimto init --yes` on a clean machine:
+```
+T+1.0s   port=none     cursor_mcp={}        ← service installing
+T+1.0s   port=none     cursor_mcp={}        ← still installing
+T+1.0s   port=76434    cursor_mcp={krimto}  ← port UP first, then mcp.json written
+T+1.0s   port=76434    cursor_mcp={krimto}
+```
+
+The two states never overlap such that Cursor sees a krimto entry while the port isn't
+listening. 578 tests passing. Lint+types clean.
+
 ## [0.2.27] — 2026-05-27
 
 ### Fixed

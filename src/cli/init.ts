@@ -353,6 +353,29 @@ export async function applyWizardAnswers(
     };
   }
 
+  // v0.2.28 — service-first ordering. Editors that auto-reconnect on mcp.json change
+  // (Cursor's file watcher being the worst offender) used to fire the instant the wizard
+  // wrote the new HTTP entry — well before the service was even installed, let alone
+  // listening. The user saw ECONNREFUSED logs even though the wizard later succeeded.
+  // For always-running mode we now install + probe the service FIRST, then write editor
+  // configs. When Cursor's watcher fires on the config write, the port is already up.
+  // For as-needed (stdio) mode there's no service to install, so order doesn't matter.
+  let serviceInstall: InstallResult | undefined;
+  if (answers.runMode === "always-running") {
+    const binPath = opts.binPath ?? process.execPath;
+    const serviceArgs =
+      opts.serviceArgs ?? [process.argv[1] ?? path.join(cwd, "bin", "krimto.mjs"), "serve"];
+    serviceInstall = await installService(
+      {
+        binPath,
+        args: serviceArgs,
+        env: { ...sharedEnv, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
+        homeDir,
+      },
+      { dryRun: opts.dryRun },
+    );
+  }
+
   const editorOutcomes: EditorOutcome[] = [];
   for (const env of selectedEnvs) {
     const mcpResult = await writeMcpConfig(env, entry, { dryRun: opts.dryRun });
@@ -372,22 +395,6 @@ export async function applyWizardAnswers(
       rulePath: env.rulesPath,
       manualSnippet: mcpResult.snippet,
     });
-  }
-
-  let serviceInstall: InstallResult | undefined;
-  if (answers.runMode === "always-running") {
-    const binPath = opts.binPath ?? process.execPath;
-    const serviceArgs =
-      opts.serviceArgs ?? [process.argv[1] ?? path.join(cwd, "bin", "krimto.mjs"), "serve"];
-    serviceInstall = await installService(
-      {
-        binPath,
-        args: serviceArgs,
-        env: { ...sharedEnv, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
-        homeDir,
-      },
-      { dryRun: opts.dryRun },
-    );
   }
 
   return {
