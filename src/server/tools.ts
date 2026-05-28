@@ -9,7 +9,7 @@ import { isValidScope, type Requester } from "../access/scope";
 import { canRead, canWrite, isOrgAdmin, type Membership } from "../access/membership";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
-import { rankCandidates } from "../retrieval/pipeline";
+import { lexicalSimilarity, rankCandidates } from "../retrieval/pipeline";
 import { type CommitBatcher } from "../storage/batcher";
 import { type ActivityLog } from "./activity";
 import { KrimtoError } from "./errors";
@@ -47,6 +47,12 @@ export interface WriteInput {
   source?: string;
   supersedes?: string[];
 }
+export interface RelatedFact {
+  id: string;
+  title: string;
+  /** Hybrid-retrieval score of the existing fact against the new one's title+body. */
+  score: number;
+}
 export interface WriteResult {
   id: string;
   scope: string;
@@ -56,6 +62,12 @@ export interface WriteResult {
   /** Human-readable hint for the agent to relay back. Teaches "this is just a file you can open." */
   hint: string;
   commit_sha: string | null;
+  /**
+   * Existing facts in the same scope that closely resemble the one just written. Surfaced so a
+   * weak agent that skipped krimto_recall still gets a chance to krimto_supersede instead of
+   * duplicating. Omitted when nothing similar was found.
+   */
+  related?: RelatedFact[];
 }
 
 export interface RecallInput {
@@ -148,6 +160,39 @@ function writableScopesFor(ctx: ToolContext): string[] {
   return scopes;
 }
 
+/**
+ * Token-cosine bar above which an existing fact is "the same thing, said again" rather than
+ * merely sharing a word. Tuned from the smoke-6 cases: a near-duplicate (pizza vs pizza+sushi)
+ * scores ~0.8 and a same-topic update (pizza vs tacos) ~0.7, while two facts that only share a
+ * generic qualifier (favorite FOOD vs favorite COLOR) score ~0.38. 0.5 sits cleanly between.
+ */
+const DUPLICATE_SIMILARITY_THRESHOLD = 0.5;
+
+/**
+ * Existing facts in `scope` that closely resemble `${title} ${body}` — the server-side backstop
+ * for the "call krimto_recall first" rule. FTS narrows the candidate set; token cosine then
+ * filters out facts that merely share a generic word. Excludes anything the new write already
+ * supersedes (no point nagging about a fact it's replacing). Top 3, most-similar first.
+ */
+async function findRelatedFacts(
+  ctx: ToolContext,
+  scope: string,
+  title: string,
+  body: string,
+  supersedes: string[] | undefined,
+  now: Date,
+): Promise<RelatedFact[]> {
+  const text = `${title} ${body}`;
+  const candidates = await ctx.index.searchCandidates(text, { readableScopes: [scope], now });
+  const excluded = new Set(supersedes ?? []);
+  return candidates
+    .filter((c) => !excluded.has(c.id))
+    .map((c) => ({ id: c.id, title: c.title, score: lexicalSimilarity(text, `${c.title} ${c.body}`) }))
+    .filter((r) => r.score >= DUPLICATE_SIMILARITY_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
 /** Create a new fact. Author comes from the requester identity; scope is required. */
 export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<WriteResult> {
   // "user/me"/"user/self" (and bare "me"/"self") mean the caller's own personal scope. An agent
@@ -179,6 +224,14 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
     });
   }
   return ctx.writeQueue.run(async () => {
+    // Run the near-duplicate check BEFORE the new fact is indexed, so it can't match itself.
+    // Best-effort: a failure here must never block a write — the hint is observational.
+    let related: RelatedFact[] = [];
+    try {
+      related = await findRelatedFacts(ctx, scope, input.title, input.body, input.supersedes, clock(ctx));
+    } catch {
+      /* dedup hint is advisory — never let it break the write path */
+    }
     const fact = createFact({
       scope,
       title: input.title,
@@ -224,6 +277,12 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
         `git auto-commits every 30s, run \`npx @krimto-labs/krimto --help\` for the full CLI surface, ` +
         `or \`npx @krimto-labs/krimto storage\` for the storage model.)`;
     }
+    if (related.length > 0) {
+      const list = related.map((r) => `"${r.title}" (${r.id})`).join(", ");
+      hint +=
+        `\n⚠ Similar existing fact${related.length > 1 ? "s" : ""} in this scope: ${list}. ` +
+        `If this updates ${related.length > 1 ? "one of them" : "it"}, call krimto_supersede instead of leaving a duplicate.`;
+    }
     return {
       id: fact.frontmatter.id,
       scope: fact.frontmatter.scope,
@@ -231,6 +290,7 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
       absolute_path: absolutePath,
       hint,
       commit_sha: null,
+      ...(related.length > 0 ? { related } : {}),
     };
   });
 }

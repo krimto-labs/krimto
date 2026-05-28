@@ -3,7 +3,7 @@
 User-facing notes for each Krimto release. For the full technical changelog see
 [CHANGELOG.md](CHANGELOG.md).
 
-## v0.2 — shipped (v0.2.5 → v0.2.36, 2026-05-25 → 2026-05-28)
+## v0.2 — shipped (v0.2.5 → v0.2.37, 2026-05-25 → 2026-05-28)
 
 The first public release. Krimto is a **team memory layer** you can self-host with `npx`, `pnpm
 dev`, or the published Docker image at `ghcr.io/krimto-labs/krimto`:
@@ -28,5 +28,9 @@ sniffing; honest reconfigure menu driven by lock + launchctl reality. **v0.2.36*
 team init` restart the running service into team mode itself (no copy-paste recipe, no lock
 conflict), saves invite keys to a 0600 backup file, validates the git remote URL at the prompt,
 and makes `krimto notes` work from any terminal by falling back to `git config user.email`.
+**v0.2.37** adds a retrieval-quality eval and a write-time duplicate backstop: `krimto_write`
+now flags a near-duplicate fact in the same scope (a `related` list + a hint to
+`krimto_supersede`), so memory doesn't silently accumulate two facts about the same thing
+even when the agent forgets to recall first.
 
 Install instructions and the connect-your-agent guide are in the [README](README.md).

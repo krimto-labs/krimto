@@ -54,7 +54,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.36";
+export const KRIMTO_VERSION = "0.2.37";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -121,7 +121,9 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
         "durable fact, or when correcting a mistake you should not repeat. For the user's personal " +
         "scope use `user/me` (the server resolves it to their identity) — do not guess an email. The " +
         "write is rejected (with the list of scopes you may write to) if you target a scope you couldn't " +
-        "read back. Call krimto_recall first to avoid duplicates.",
+        "read back. Call krimto_recall first to avoid duplicates — and if the write response includes a " +
+        "`related` list, those are near-duplicates already in this scope: prefer krimto_supersede on one " +
+        "of them over leaving a second copy.",
       inputSchema: {
         scope: z
           .string()

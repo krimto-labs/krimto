@@ -124,6 +124,59 @@ describe("krimto_write", () => {
   });
 });
 
+describe("krimto_write — near-duplicate detection", () => {
+  // Smoke-6 follow-up: a weak agent (Haiku) skipped krimto_recall and wrote "Also likes sushi"
+  // as a fresh fact instead of superseding the existing pizza fact. The write path now runs its
+  // own similarity check so the duplicate is surfaced even when the agent forgot to recall —
+  // a server-side backstop for the "call krimto_recall first" rule that nothing enforced before.
+  it("surfaces a similar existing fact so the agent can supersede instead of duplicating", async () => {
+    const first = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Favorite food: pizza",
+      body: "User's favorite food is pizza.",
+    });
+    const second = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Favorite food: pizza and sushi",
+      body: "User's favorite food is pizza and sushi.",
+    });
+    expect(second.related?.map((r) => r.id)).toContain(first.id);
+    expect(second.related?.find((r) => r.id === first.id)?.title).toBe("Favorite food: pizza");
+    expect(second.hint).toContain("krimto_supersede");
+  });
+
+  it("does not flag an unrelated fact as a near-duplicate", async () => {
+    await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Favorite food: pizza",
+      body: "User's favorite food is pizza.",
+    });
+    const other = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Deploy schedule",
+      body: "We deploy on Tuesdays at noon.",
+    });
+    expect(other.related ?? []).toEqual([]);
+    expect(other.hint).not.toContain("krimto_supersede");
+  });
+
+  it("does not flag a fact this write already supersedes", async () => {
+    const first = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Favorite food: pizza",
+      body: "User's favorite food is pizza.",
+    });
+    const replacement = await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Favorite food: pizza and sushi",
+      body: "User's favorite food is pizza and sushi.",
+      supersedes: [first.id],
+    });
+    // It's already being superseded — no need to nag about it.
+    expect(replacement.related ?? []).toEqual([]);
+  });
+});
+
 describe("krimto_recall empty-hint (Gap #4)", () => {
   it("populates a 'no hits — call krimto_write' hint when results is empty", async () => {
     const empty = await krimtoRecall(ctx, { query: "nothing-matches-this-yet-xyz123" });

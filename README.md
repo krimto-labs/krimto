@@ -9,8 +9,8 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.36** is the current release — the v0.2.17 wizard redesign is now
-> shipped end-to-end, plus nineteen patch releases of correctness fixes and agent-friendly
+> **Where we are:** **v0.2.37** is the current release — the v0.2.17 wizard redesign is now
+> shipped end-to-end, plus twenty patch releases of correctness fixes and agent-friendly
 > surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
 > hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
 > image, the web UI) is unchanged. What you get on top of v0.2.16:
@@ -41,7 +41,7 @@ timestamp, reviewer).
 >   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
 >   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
 >
-> **The agent story (v0.2.34 → v0.2.36).**
+> **The agent story (v0.2.34 → v0.2.37).**
 > - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
 >   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
 >   open an interactive prompt now has a flag form.
@@ -58,6 +58,10 @@ timestamp, reviewer).
 >   service into team mode itself (no copy-paste recipe, no lock conflict), saves invite keys
 >   to a 0600 backup file, and validates the git remote URL at the prompt. `krimto notes` now
 >   works from any terminal (identity falls back to `git config user.email`).
+> - **Write-time duplicate backstop (v0.2.37)** — `krimto_write` flags a near-duplicate fact in
+>   the same scope (a `related` list + a hint to `krimto_supersede`), so memory doesn't silently
+>   accumulate two facts about the same thing even when the agent skips `krimto_recall`. Backed
+>   by a new retrieval-quality eval that asserts recall returns the right fact first.
 >
 > See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
 > diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
@@ -503,7 +507,7 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 ## Roadmap
 
 `v0.2` (teams, v0.2.5) → `v0.2.18` (v0.2.17 wizard redesign — published as one SemVer-clean
-release) → `v0.2.36` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
+release) → `v0.2.37` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
 flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the per-release breakdown.
 
 ## License

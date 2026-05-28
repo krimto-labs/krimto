@@ -4,6 +4,49 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.37] — 2026-05-28 — recall-quality eval + write-time duplicate backstop
+
+The smoke-6 memory-quality audit. Across two editors (Claude Code wrote, Cursor read) the
+cross-editor sharing, identity, and supersede mechanics all worked — but two gaps showed up:
+a weak agent (Haiku) skipped `krimto_recall` and wrote a near-duplicate, and keyword search
+ranked an unrelated "favorite **color**" fact above the actual "favorite **food**" fact for a
+food query (they share the generic word "favorite"). This release adds the test scoreboard that
+was missing and a server-side backstop for the skipped-recall case.
+
+### Added — retrieval-quality eval
+
+`tests/retrieval/recall-quality.test.ts` runs the real recall path (`krimtoRecall` →
+`searchCandidates` → `rankCandidates`) over known fact sets and asserts which fact ranks #1 —
+the regression scoreboard the suite never had (prior tests proved facts SAVE and SUPERSEDE,
+nothing proved recall returns the RIGHT fact first). Three green guards lock correct behavior
+(good content ranks #1; color query returns the color fact; superseded facts never surface);
+one `it.fails` documents the keyword-mode limitation (a content-poor fact loses to a
+word-sharing one) and will flip the suite red — prompting promotion to a guard — the moment
+semantic search or a content fix makes it pass.
+
+### Added — write-time near-duplicate detection (`related` on krimto_write)
+
+`krimto_write` now runs its own similarity check BEFORE indexing the new fact: FTS narrows
+candidates in the same scope, then token cosine (`lexicalSimilarity`) filters at a 0.5
+threshold — tuned so a real duplicate (pizza vs pizza+sushi ≈ 0.81) or same-topic update
+(pizza vs tacos ≈ 0.73) is flagged, while two facts sharing only a generic qualifier
+(favorite food vs favorite color ≈ 0.38) are not. When a match is found, the write response
+gains a `related: [{ id, title, score }]` field and the hint appends *"⚠ Similar existing
+fact … call krimto_supersede instead of leaving a duplicate."* Excludes anything the write
+already supersedes; best-effort (a failure never blocks the write). This is the server-side
+backstop for the "call krimto_recall first" rule that nothing enforced before — it would have
+caught the smoke-6 sushi write even though the agent skipped recall. The `krimto_write` tool
+description now tells agents to act on `related`.
+
+### Tests
+
+- `tests/retrieval/recall-quality.test.ts` — 4 eval cases (3 guards + 1 documented limitation).
+- `tests/server/tools.test.ts` — 3 new cases: a near-duplicate is surfaced with title + supersede
+  hint; an unrelated fact is not flagged; a fact the write already supersedes is not flagged.
+
+Total: 650 unit + 331 integration passing. Lint + types clean. No data-model or schema change —
+the `related` field is additive to the write response.
+
 ## [0.2.36] — 2026-05-28 — team-init lands you in team mode, not a copy-paste maze
 
 The smoke-6 follow-up. `krimto team init` succeeded on disk but left the user unable to
