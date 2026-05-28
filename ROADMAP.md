@@ -61,6 +61,38 @@ a notes-app instead of an engineering dashboard. See
 Cumulative: +23 source files, +9 test files, +144 tests. No architecture changes — pure CLI/web
 surface evolution over the v0.2 storage + index + access layers.
 
+## v0.2.19 → v0.2.35 — correctness + agent-friendliness — ✅ Shipped
+
+Seventeen patch releases on top of the v0.2.17 wizard redesign. No architecture changes — every
+patch is an audit-driven correctness fix or a surface upgrade for AI-agent callers. Highlights:
+
+- **`0.2.19` → `0.2.23`** — first-run polish: identity capture from `git config user.email`,
+  Cursor-vs-Claude editor detection at both project (`.cursor/`, `CLAUDE.md`) and machine
+  (`~/.cursor/`, `~/.claude.json`) levels, reconfigure menu that re-reads lock + launchctl reality
+  on each invocation.
+- **`0.2.24` → `0.2.25`** — empty-result safety nets: `krimto_recall` returns a write-opportunity
+  hint when results are empty; `krimto_list_scopes` returns a getting-started hint when no scopes
+  exist; **`krimto_whoami` MCP tool** added so agents stop hallucinating identity (Gap 3 from the
+  smoke-6 audit).
+- **`0.2.26` → `0.2.30`** — runtime reliability: service-first install ordering, port-ready probe
+  (the v0.2.27/28 ECONNREFUSED fix), single reconciled runtime view (`inspectRuntime`) shared by
+  every read-side command, warm-paper `/ui` aesthetic with scope-icon cards (📔 / 📓 / 🏢),
+  Cursor `alwaysApply: true` frontmatter so `.cursor/rules/krimto.mdc` auto-attaches.
+- **`0.2.31`** — User-Agent → fact attribution (HTTP MCP handler stamps `source: "cursor"` /
+  `"claude-code"` / …); consolidated `krimto status` panels; first-class `krimto remote` and
+  `krimto folder` verbs.
+- **`0.2.32` → `0.2.33` — "the stop button".** First-class teardown verbs: `krimto stop` /
+  `start` / `restart` / `reset [--wipe-notes]`. `reset --wipe-notes` uses atomic mv to a
+  recoverable trash sibling, never `rm -rf`. `uninit` now offers to stop the machine-wide service
+  after stripping the project rule.
+- **`0.2.34` — Phase B agent flags.** Every interactive command has a flag form: `editors --add /
+  --remove / --set / --list`, `service --as-needed / --always / --manual`, `search --keyword /
+  --openai --api-key`, `remote --show / --set / --remove`, `folder --to`. Non-TTY guards exit 2
+  with copy-pasteable usage instead of hanging on unanswerable prompts.
+- **`0.2.35`** — honest reconfigure menu (drops fake "Service: always" claim, prints the real
+  launchctl-derived run mode); Claude Code reset sweep across user / project / local config
+  scopes.
+
 ## v0.3 — Humans on top of git
 
 Remaining items that didn't ship in the v0.2.17 series:

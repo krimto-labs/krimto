@@ -9,3 +9,4 @@ Key rules:
 - No automatic fact extraction — facts are written only on an explicit `krimto_write`.
 
 To use Krimto, install it as an MCP server (see `README.md` → "Connect your agent").
+

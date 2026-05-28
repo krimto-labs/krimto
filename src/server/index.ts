@@ -8,6 +8,11 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { promises as fs } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const IDENTITY_EMAIL_RE = /^[^@\s]+@[^@\s]+$/;
 
 import { ApiKeyStore } from "../access/auth";
 import { bootstrapAdmin, reissueKey } from "./bootstrap";
@@ -49,14 +54,36 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.35";
+export const KRIMTO_VERSION = "0.2.36";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
 }
 
-export function resolveIdentity(): string {
-  return process.env.KRIMTO_IDENTITY ?? "user@localhost";
+/**
+ * Resolve the caller's identity in three steps: explicit env override, then the user's global
+ * git identity, then a last-resort placeholder.
+ *
+ * The git fallback closes the smoke-6 UX gap. The wizard sets `KRIMTO_IDENTITY` in editor MCP
+ * configs and the service plist — but not in the user's shell rc. Without the git fallback,
+ * a plain-terminal `krimto notes` ran as `user@localhost` and couldn't see facts the editor
+ * had saved under the wizard-configured identity — same data dir, two answers depending on
+ * shell env. The CLI now infers the same identity the wizard would have captured.
+ *
+ * Stays async because the git lookup shells out; every call site is already inside an async
+ * handler. Malformed env values fall through (we never persist a non-email as an identity).
+ */
+export async function resolveIdentity(): Promise<string> {
+  const env = process.env.KRIMTO_IDENTITY;
+  if (env && IDENTITY_EMAIL_RE.test(env)) return env;
+  try {
+    const { stdout } = await execFileAsync("git", ["config", "--global", "user.email"]);
+    const email = stdout.trim();
+    if (IDENTITY_EMAIL_RE.test(email)) return email;
+  } catch {
+    /* git missing, no global user.email — fall through to the placeholder */
+  }
+  return "user@localhost";
 }
 
 function ok(data: unknown): CallToolResult {
@@ -281,7 +308,7 @@ export async function main(): Promise<void> {
 
   // Load membership AFTER bootstrap so the new admin is present.
   let membership = await loadMembership(dataDir);
-  const identity = resolveIdentity();
+  const identity = await resolveIdentity();
   const embedCfg = embeddingConfigFromEnv();
   const embeddingProvider = createEmbeddingProvider(embedCfg);
   const indexConfig: IndexConfig = {

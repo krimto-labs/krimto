@@ -521,7 +521,7 @@ try {
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runNotes({
       dataDir: resolveDataDir(),
-      identity: resolveIdentity(),
+      identity: await resolveIdentity(),
       query: typeof query === "string" && query.length > 0 ? query : undefined,
     });
     process.stdout.write(result.message);
@@ -534,7 +534,7 @@ try {
     }
     const { runEdit } = await tsImport("../src/cli/edit.ts", import.meta.url);
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runEdit({ dataDir: resolveDataDir(), identity: resolveIdentity(), id });
+    const result = await runEdit({ dataDir: resolveDataDir(), identity: await resolveIdentity(), id });
     process.stdout.write(result.message);
     if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
   } else if (cmd === "mv") {
@@ -551,7 +551,7 @@ try {
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runMv({
       dataDir: resolveDataDir(),
-      identity: resolveIdentity(),
+      identity: await resolveIdentity(),
       id,
       newScope,
     });
@@ -568,7 +568,7 @@ try {
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runSupersede({
       dataDir: resolveDataDir(),
-      identity: resolveIdentity(),
+      identity: await resolveIdentity(),
       id,
     });
     process.stdout.write(result.message);
@@ -587,7 +587,7 @@ try {
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runTag({
       dataDir: resolveDataDir(),
-      identity: resolveIdentity(),
+      identity: await resolveIdentity(),
       id,
       changes,
     });
@@ -603,7 +603,7 @@ try {
     }
     const { runDeleteFact } = await tsImport("../src/cli/deleteFact.ts", import.meta.url);
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runDeleteFact(resolveDataDir(), resolveIdentity(), id);
+    const result = await runDeleteFact(resolveDataDir(), await resolveIdentity(), id);
     process.stdout.write(result.message);
     if (result.status !== "ok") process.exitCode = 1;
   } else if (cmd === "reindex") {

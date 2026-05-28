@@ -76,3 +76,4 @@ hierarchy as the primary primitive**. Krimto is **Apache-2.0** licensed and stay
 ## Common mistakes
 
 Grows over time. Every fix becomes context for next time.
+

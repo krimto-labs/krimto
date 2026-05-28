@@ -4,6 +4,66 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.36] — 2026-05-28 — team-init lands you in team mode, not a copy-paste maze
+
+The smoke-6 follow-up. `krimto team init` succeeded on disk but left the user unable to
+actually use team mode: a literal `$` in the printed "Next" recipe broke their zsh paste,
+the malformed git URL they typed was accepted then rejected at push time, and the
+"start the server" instruction was blocked by the always-running service already holding
+the data-dir lock. Plus `krimto notes` from a plain terminal showed "No notes yet" even
+though facts existed. All fixed.
+
+### Fixed — `krimto team init` now leaves team mode actually live
+
+- **The wizard restarts the running service itself.** After applying team config, it
+  probes `inspectRuntime`; if a service-launched Krimto is alive it asks one yes/no, then
+  calls `installService` with `KRIMTO_BOOTSTRAP_ADMIN` baked into the plist/unit env.
+  `waitForPort` confirms team mode is live before printing `🟢 Team mode is live on
+  http://localhost:8080`. The old flow handed the user a `KRIMTO_BOOTSTRAP_ADMIN=… npx
+  serve` recipe that the running service's single-writer lock refused.
+- **No literal `$` in any copy-paste line.** `src/cli/teamInit.ts` and
+  `src/cli/setupRemote.ts` printed `$ npx …` / `$ export …`; users pasted the `$` and got
+  `command not found: $`. Removed from all three sites.
+- **Git remote URL validated at the prompt.** `looksLikeRemoteUrl` now requires one of
+  `git@` / `https://` / `http://` / `ssh://` / `file://` / absolute path. A bare
+  `github.com/x/y.git` re-prompts in-flow instead of being saved and failing at push time
+  after keys were already minted.
+
+### Fixed — `krimto notes` from a plain terminal returned "No notes yet"
+
+`resolveIdentity()` resolved to the `user@localhost` placeholder when `KRIMTO_IDENTITY`
+wasn't set in the shell (the wizard sets it in editor MCP configs + the service plist, but
+not in the user's rc). So the CLI queried a scope the user's real facts weren't in. Now
+`resolveIdentity()` is three-layer: env var → `git config --global user.email` → placeholder,
+validating each as a real email — the same source the wizard captures identity from.
+
+### Added — safety nets around team onboarding
+
+- **Invite backup file.** `team init` writes all minted keys + the DM template to
+  `<dataDir>/.krimto/team-invites-<ISO>.txt` (mode 0600). The admin's own key is
+  shown-once-only; losing it from scrollback used to require `reset-admin-key`.
+- **`krimto join` soft guard.** When joining a remote team server while a local
+  solo-mode Krimto service is running (and its `/mcp` returns anything but 401), prints one
+  warning line recommending `krimto stop` first. Non-blocking — flags the potential
+  unauthenticated-LAN-exposure without refusing to proceed.
+
+### Changed — wizard scan labels distinguish "detected" from "connected"
+
+`krimto init`'s machine scan now shows `connected to Krimto` for editors already wired vs
+`detected, not yet connected` for installed-but-unwired ones, so "Keep current (Cursor,
+Claude Code)" no longer looks inconsistent with a four-editor scan list.
+
+### Tests
+
+- `tests/integration/team-init.test.ts` — invite file written at 0600 with all keys;
+  idempotent rerun mints no new file; `maybeRestartServiceForTeamMode` short-circuits when
+  `skipServiceRestart` is set.
+- `tests/integration/setup-remote.test.ts` — bare-host URL rejected by the tightened validator.
+- `tests/server/startup.test.ts` — `resolveIdentity` returns a valid env identity and falls
+  through on a malformed one.
+
+Total: 643 unit + 331 integration passing. Lint + types clean.
+
 ## [0.2.35] — 2026-05-27 — honest reconfigure menu + Claude Code reset sweep
 
 ### Fixed — reset never actually removed Claude Code's registration

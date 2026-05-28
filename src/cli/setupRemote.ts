@@ -14,13 +14,18 @@ export interface SetupRemoteResult {
   url: string;
 }
 
-// Minimal guard against obvious typos. Anything with whitespace or no `/`/`:` separator
-// (e.g. "not a url") is rejected up front; everything else is handed to git, which is the
-// authoritative URL parser (accepts ssh, https, file://, bare local paths, etc.).
-function looksLikeRemoteUrl(url: string): boolean {
+// Reject anything that isn't an obvious git remote BEFORE we hand it to `git`. Smoke-6
+// transcript showed `github.com/krimto-labs/foo.git` (no protocol, no user) reaching git and
+// failing only at push time — by which point the wizard had already printed success messages.
+// Tightened to require one of the well-known transport prefixes (or an absolute filesystem
+// path). git is still the authoritative parser for everything past this gate.
+const VALID_REMOTE_PREFIXES = ["git@", "https://", "http://", "ssh://", "file://"];
+
+export function looksLikeRemoteUrl(url: string): boolean {
   if (url.trim() !== url || url.length === 0) return false;
   if (/\s/.test(url)) return false;
-  return /[:/]/.test(url);
+  if (url.startsWith("/")) return true;
+  return VALID_REMOTE_PREFIXES.some((p) => url.startsWith(p));
 }
 
 export async function runSetupRemote(dataDir: string, url: string): Promise<SetupRemoteResult> {
@@ -47,7 +52,7 @@ export async function runSetupRemote(dataDir: string, url: string): Promise<Setu
         `\n   ${url}\n` +
         `\n━━ Next ━━\n` +
         `\n   To also auto-pull teammates' edits (every 60s), set on next boot:\n` +
-        `     $ export KRIMTO_GIT_REMOTE=${url}\n` +
+        `     export KRIMTO_GIT_REMOTE=${url}\n` +
         `\n   The batcher will auto-push every commit from now on regardless.\n`,
     };
   }

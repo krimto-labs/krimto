@@ -32,7 +32,13 @@ vi.mock("@inquirer/prompts", () => ({
   input: vi.fn(async (config: { message: string }) => nextAnswer(`input:${config.message}`)),
 }));
 
-import { applyTeamInit, runTeamInit, type TeamInitAnswers } from "../../src/cli/teamInit";
+import {
+  applyTeamInit,
+  maybeRestartServiceForTeamMode,
+  runTeamInit,
+  type TeamInitAnswers,
+  type TeamInitResult,
+} from "../../src/cli/teamInit";
 
 interface MembersYaml {
   org?: { slug?: string; admins?: string[] };
@@ -132,6 +138,60 @@ describe("applyTeamInit — pure apply step", () => {
     expect(res.invites).toEqual([]);
     expect(res.adminKey).not.toBeNull();
   });
+
+  // Smoke-6 follow-up: invite keys + DM template land in a 0600 file so the admin can
+  // recover them if scrollback is lost. Admin's key is shown-once-only; without this
+  // backup the only recovery is `reset-admin-key`.
+  it("writes invite keys + DM template to a 0600 file", async () => {
+    const res = await applyTeamInit(baseAnswers(), { dataDir });
+    expect(res.inviteFilePath).toBeDefined();
+    const stat = await fs.stat(res.inviteFilePath!);
+    expect((stat.mode & 0o777).toString(8)).toBe("600");
+    const body = await fs.readFile(res.inviteFilePath!, "utf8");
+    expect(body).toContain("maria@acme.com");
+    expect(body).toContain(res.adminKey);
+    expect(body).toContain("ben@acme.com");
+    expect(body).toContain("priya@acme.com");
+    // Every minted key is present so the admin can DM them out from the file alone.
+    for (const inv of res.invites) expect(body).toContain(inv.key);
+    expect(body).toContain("npx @krimto-labs/krimto join");
+  });
+
+  it("skips the invite file on idempotent rerun when no new keys were minted", async () => {
+    await applyTeamInit(baseAnswers(), { dataDir });
+    const second = await applyTeamInit(baseAnswers(), { dataDir });
+    // No admin key reissued + no teammate keys reissued = no new file. The first run's
+    // file is still on disk (we don't delete prior backups).
+    expect(second.adminKey).toBeNull();
+    expect(second.invites).toEqual([]);
+    expect(second.inviteFilePath).toBeUndefined();
+  });
+});
+
+// Smoke-6 follow-up. The wizard's post-apply restart probes inspectRuntime + (if a
+// service-launched Krimto is alive) calls installService with `KRIMTO_BOOTSTRAP_ADMIN`
+// baked in. The conditional probe + prompt is best verified by manual reproduction
+// (documented in the plan's Verification section); here we lock down two contract
+// properties that the integration of the helper depends on.
+describe("maybeRestartServiceForTeamMode", () => {
+  const fakeResult: TeamInitResult = {
+    adminEmail: "alice@example.com",
+    adminKey: "krm_live_test123",
+    teamSlug: "backend",
+    invites: [],
+    serverHost: "localhost:8080",
+    dataDir: "/tmp/krimto-fake",
+  };
+
+  it("returns 'no-service' immediately when skipServiceRestart is set (tests opt out)", async () => {
+    const outcome = await maybeRestartServiceForTeamMode(fakeResult, { skipServiceRestart: true });
+    expect(outcome).toEqual({ kind: "no-service" });
+  });
+
+  // Note: the conditional "service was loaded → install with KRIMTO_BOOTSTRAP_ADMIN" path
+  // shells out to launchctl/systemctl and runs only against a real platform CLI. Verified by
+  // manual reproduction in the plan's Verification section, not in this test file (would add
+  // multi-second shell-outs that compete with the rest of the suite under vitest parallelism).
 });
 
 describe("runTeamInit — interactive flow", () => {
@@ -172,7 +232,7 @@ describe("runTeamInit — interactive flow", () => {
     });
     promptQueue.push({ name: "confirm:Apply this setup?", value: true });
 
-    const res = await runTeamInit({ io, dataDir });
+    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
     expect(res).not.toBeNull();
     expect(res?.invites).toHaveLength(2);
 
@@ -206,7 +266,7 @@ describe("runTeamInit — interactive flow", () => {
     });
     promptQueue.push({ name: "confirm:Apply this setup?", value: false });
 
-    const res = await runTeamInit({ io, dataDir });
+    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
     expect(res).toBeNull();
     expect(io.stdout.join("")).toContain("No changes made");
     // members.yaml shouldn't exist — nothing was applied.
@@ -220,7 +280,7 @@ describe("runTeamInit — interactive flow", () => {
     promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: err });
 
     const exitBefore = process.exitCode;
-    const res = await runTeamInit({ io, dataDir });
+    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
     expect(res).toBeNull();
     expect(process.exitCode).toBe(130);
     process.exitCode = exitBefore;

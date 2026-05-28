@@ -258,7 +258,7 @@ async function runFreshWizard(
 ): Promise<ApplyResult | null> {
   io.out(`\nKrimto — Setting up your AI's memory · v${KRIMTO_VERSION}\n\n`);
   const envs = await detectEditorEnvironments(cwd, opts.homeDir);
-  printScan(envs, io);
+  printScan(envs, snapshot?.registeredEditors ?? [], io);
 
   // v0.2.31 — Gap D, "Keep current" intermediate prompt. On reconfigure runs (snapshot !==
   // null), each question is wrapped in a two-stage "Keep current / Reconfigure..." select so
@@ -498,16 +498,22 @@ async function askSearch(
 
 // === Pretty printing ========================================================
 
-function printScan(envs: EditorEnvironment[], io: WizardIO): void {
+function printScan(envs: EditorEnvironment[], registered: EditorKind[], io: WizardIO): void {
+  // Four states. The crucial split is "detected" vs "connected to Krimto": the smoke-6 user saw
+  // four detected editors then "Keep current (Cursor, Claude Code)" and didn't realize the other
+  // two weren't actually wired to Krimto's MCP. Now the scan output names that distinction.
+  const wired = new Set(registered);
   io.out("  Scanning your machine ...\n\n");
   for (const env of envs) {
-    // v0.2.21: three states — project-level, machine-level only, not found.
-    const dot = env.present ? "✓" : env.installed ? "~" : "–";
-    const note = env.present
-      ? "detected (in this project)"
-      : env.installed
-        ? "installed (machine-wide)"
-        : "not found";
+    const isWired = wired.has(env.editor);
+    const dot = isWired ? "✓" : env.present ? "✓" : env.installed ? "~" : "–";
+    const note = isWired
+      ? "connected to Krimto"
+      : env.present
+        ? "detected, not yet connected"
+        : env.installed
+          ? "installed (machine-wide), not connected"
+          : "not found";
     io.out(`    ${dot} ${EDITOR_LABEL[env.editor].padEnd(14)} ${note}\n`);
   }
   io.out("\n");

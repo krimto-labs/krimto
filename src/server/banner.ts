@@ -3,15 +3,18 @@
 
 import { connectSnippets } from "./connect";
 
-/** The placeholder identity that resolves when KRIMTO_IDENTITY is unset. Keep in sync with resolveIdentity(). */
+/** The placeholder identity that resolves when KRIMTO_IDENTITY is unset AND git config user.email is
+ * unset/invalid. Keep in sync with resolveIdentity()'s final fallback. */
 export const DEFAULT_IDENTITY = "user@localhost";
 
 /**
  * G2 — warn when the resolved identity is the unset-placeholder default. Two Krimto processes
  * on the same data dir (e.g. Cursor's stdio launch + a separate `serve` in her terminal) often
  * resolve to different identities — the MCP config sets one, the bare shell doesn't. The result
- * is scope mismatch: she writes facts under one identity and sees a different scope in /ui.
- * Returns an empty string when the identity was explicitly set.
+ * is scope mismatch: facts saved under one identity, viewed under another in /ui. After the
+ * smoke-6 fix, `resolveIdentity()` falls back to global git user.email before this placeholder,
+ * so the warning only fires when both sources are missing.
+ * Returns an empty string when a real identity was resolved.
  */
 export function identityWarning(identity: string): string {
   if (identity !== DEFAULT_IDENTITY) return "";

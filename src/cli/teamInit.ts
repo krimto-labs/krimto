@@ -22,8 +22,10 @@ import { ApiKeyStore } from "../access/auth";
 import { addUser, createTeam } from "../access/membershipStore";
 import { bootstrapAdmin } from "../server/bootstrap";
 import { defaultIdentity } from "./init";
+import { inspectRuntime } from "./inspectRuntime";
 import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
-import { runSetupRemote } from "./setupRemote";
+import { detectPlatform, installService } from "./service";
+import { looksLikeRemoteUrl, runSetupRemote } from "./setupRemote";
 
 /** Everything the wizard collects before it calls {@link applyTeamInit}. */
 export interface TeamInitAnswers {
@@ -58,6 +60,13 @@ export interface TeamInitResult {
   serverHost: string;
   /** Resolved data dir the wizard wrote membership/keys into. */
   dataDir: string;
+  /**
+   * Path to the 0600-mode invite file written at apply time, when any keys were minted.
+   * Unset when there was nothing new to save (idempotent rerun where admin + all teammates
+   * already had keys). Admin's key is shown-once-only — losing it from scrollback used to
+   * require `reset-admin-key`; the file is the recoverable backup.
+   */
+  inviteFilePath?: string;
 }
 
 export interface TeamInitOptions {
@@ -68,6 +77,14 @@ export interface TeamInitOptions {
   keysPath?: string;
   /** Override KRIMTO_HTTP_PORT detection. */
   port?: number;
+  /** Override os.homedir() — passed to inspectRuntime + installService for tests. */
+  homeDir?: string;
+  /** When true, the post-apply service-restart step writes files but never invokes
+   * launchctl/systemctl/schtasks. Tests use this to assert the new env block without
+   * mutating CI's user services. */
+  dryRun?: boolean;
+  /** Suppress the post-apply service-restart probe entirely (tests that don't exercise it). */
+  skipServiceRestart?: boolean;
   /** Skip `runSetupRemote` even when a URL was given. Tests use this. */
   skipRemoteSetup?: boolean;
 }
@@ -123,6 +140,24 @@ export async function applyTeamInit(
   }
 
   const port = opts.port ?? Number(process.env.KRIMTO_HTTP_PORT ?? "8080");
+  const serverHost = `localhost:${port}`;
+
+  // 5. Save plaintext keys + DM template to a 0600 file. Admin's key is shown-once-only;
+  // teammates' keys are shown-once-each. Without this file the only recovery is
+  // `reset-admin-key` (admin) or re-issuing each invite (teammates) — both unnecessary churn.
+  let inviteFilePath: string | undefined;
+  if (adminKey || invites.length > 0) {
+    inviteFilePath = await writeInviteFile({
+      dataDir,
+      adminEmail: answers.adminEmail,
+      adminKey,
+      teamSlug: answers.teamSlug,
+      teamName: answers.teamName,
+      invites,
+      serverHost,
+    });
+  }
+
   return {
     adminEmail: answers.adminEmail,
     adminKey,
@@ -130,9 +165,58 @@ export async function applyTeamInit(
     teamName: answers.teamName,
     remote,
     invites,
-    serverHost: `localhost:${port}`,
+    serverHost,
     dataDir,
+    ...(inviteFilePath ? { inviteFilePath } : {}),
   };
+}
+
+/**
+ * Write the team-invite file to `<dataDir>/.krimto/team-invites-<ISO-timestamp>.txt` with
+ * mode 0o600. Filename's timestamp colons are replaced with dashes so the path is portable
+ * across filesystems. Returns the absolute path.
+ */
+async function writeInviteFile(input: {
+  dataDir: string;
+  adminEmail: string;
+  adminKey: string | null;
+  teamSlug: string;
+  teamName?: string;
+  invites: InviteRecord[];
+  serverHost: string;
+}): Promise<string> {
+  const ts = new Date().toISOString().replace(/:/g, "-").replace(/\.\d+Z$/, "Z");
+  const file = path.join(input.dataDir, ".krimto", `team-invites-${ts}.txt`);
+  const teamLabel = input.teamName ? `${input.teamSlug} ("${input.teamName}")` : input.teamSlug;
+  const adminBlock = input.adminKey
+    ? `━━ Admin ━━\n  ${input.adminEmail.padEnd(28)} ${input.adminKey}\n\n`
+    : `━━ Admin ━━\n  ${input.adminEmail} — existing key kept (no new one minted).\n\n`;
+  const inviteBlock =
+    input.invites.length > 0
+      ? "━━ Teammates (send each their key) ━━\n" +
+        input.invites.map((i) => `  ${i.email.padEnd(28)} ${i.key}`).join("\n") +
+        "\n\n"
+      : "";
+  const dmTemplate =
+    "━━ DM template (one per teammate) ━━\n" +
+    "  1. Install Krimto:\n" +
+    `     npx @krimto-labs/krimto join \\\n` +
+    `         --server http://${input.serverHost} \\\n` +
+    `         --key <your key from above>\n` +
+    "  2. Restart your editor.\n" +
+    "  3. Test: \"Remember our package manager is pnpm\" → new chat → \"What do we use?\"\n\n" +
+    (input.serverHost.startsWith("localhost:")
+      ? "  Note: `localhost` only works if your teammates are on this same machine.\n" +
+        "  Swap the --server URL for a reachable address before sharing.\n"
+      : "");
+  const body =
+    `Krimto team mode — saved ${new Date().toISOString()}\n` +
+    `Team: ${teamLabel}\n\n` +
+    adminBlock +
+    inviteBlock +
+    dmTemplate;
+  await fs.writeFile(file, body, { encoding: "utf8", mode: 0o600 });
+  return file;
 }
 
 // === Interactive entry point ===============================================
@@ -166,7 +250,14 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
       { adminEmail, teamSlug, teamName, gitRemote, teammates },
       opts,
     );
-    printApplyResult(result, io);
+
+    // Probe runtime + offer to restart the always-running service so team-mode auth takes
+    // effect on the SAME machine, in the SAME wizard run. The smoke-6 transcript ended with
+    // a copy-paste "Next" recipe (`KRIMTO_BOOTSTRAP_ADMIN=... npx serve`) the user couldn't
+    // run because their existing service held the data-dir lock. This closes that gap.
+    const restartOutcome = await maybeRestartServiceForTeamMode(result, opts);
+
+    printApplyResult(result, io, restartOutcome);
     return result;
   } catch (e) {
     if (isExitPrompt(e)) {
@@ -231,7 +322,14 @@ async function askGitRemote(io: WizardIO): Promise<string | undefined> {
   const url = (
     await input({
       message: "Remote URL (e.g. git@github.com:acme/krimto-data.git)",
-      validate: (v) => (v.trim().length > 0 ? true : "Please paste a URL or pick 'Not yet'"),
+      validate: (v) => {
+        const t = v.trim();
+        if (t.length === 0) return "Please paste a URL or pick 'Not yet'";
+        if (!looksLikeRemoteUrl(t)) {
+          return "URL must start with git@, https://, http://, ssh://, file://, or / (no bare 'github.com/...')";
+        }
+        return true;
+      },
     })
   ).trim();
   io.out("Will verify the push during apply.\n");
@@ -254,6 +352,74 @@ async function askTeammates(): Promise<string[]> {
   return list;
 }
 
+// === Post-apply service restart =============================================
+
+/**
+ * What happened when the wizard tried to flip the running service into team mode after apply.
+ * Drives the "Next" block in {@link printApplyResult}: when team mode is live, we don't print
+ * the copy-paste `KRIMTO_BOOTSTRAP_ADMIN=... npx serve` recipe.
+ */
+export type RestartOutcome =
+  | { kind: "no-service" }
+  | { kind: "declined" }
+  | { kind: "restarted"; portReady: boolean }
+  | { kind: "failed"; error: string };
+
+/**
+ * If the running Krimto IS the always-running service we installed, offer to restart it with
+ * `KRIMTO_BOOTSTRAP_ADMIN` baked in so team-mode auth takes effect immediately. Returns the
+ * outcome for the print step to render. Skipped silently when {@link TeamInitOptions.skipServiceRestart}
+ * is set (tests that don't want to exercise this path).
+ */
+async function maybeRestartServiceForTeamMode(
+  result: TeamInitResult,
+  opts: TeamInitOptions,
+): Promise<RestartOutcome> {
+  if (opts.skipServiceRestart) return { kind: "no-service" };
+  const io = opts.io ?? defaultIO;
+
+  const runtime = await inspectRuntime(
+    result.dataDir,
+    opts.homeDir ? { homeDir: opts.homeDir } : {},
+  );
+  if (!runtime.service.loaded || runtime.effectiveLaunchedBy !== "service") {
+    return { kind: "no-service" };
+  }
+
+  const wantRestart = await confirm({
+    message: "Restart the running Krimto service so team mode is enforced now? (~3s of downtime)",
+    default: true,
+  });
+  if (!wantRestart) return { kind: "declined" };
+
+  io.out("\n  Restarting service in team mode...\n");
+  try {
+    const install = await installService(
+      {
+        binPath: process.execPath,
+        args: [process.argv[1] ?? "krimto", "serve"],
+        env: {
+          KRIMTO_IDENTITY: result.adminEmail,
+          KRIMTO_DATA: result.dataDir,
+          KRIMTO_HTTP_PORT: "8080",
+          KRIMTO_BOOTSTRAP_ADMIN: result.adminEmail,
+        },
+        ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
+      },
+      {
+        platform: detectPlatform(),
+        ...(opts.dryRun ? { dryRun: opts.dryRun } : {}),
+      },
+    );
+    return { kind: "restarted", portReady: install.portReady !== false };
+  } catch (e) {
+    return { kind: "failed", error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Exposed for the integration test that asserts on the env block written to the plist.
+export { maybeRestartServiceForTeamMode };
+
 // === Pretty printing ========================================================
 
 function printPreamble(dataDir: string, io: WizardIO): void {
@@ -273,7 +439,7 @@ function printSummary(a: TeamInitAnswers, io: WizardIO): void {
   io.out(`  Teammates:    ${a.teammates.length === 0 ? "(none yet)" : a.teammates.join(", ")}\n\n`);
 }
 
-function printApplyResult(res: TeamInitResult, io: WizardIO): void {
+function printApplyResult(res: TeamInitResult, io: WizardIO, restart: RestartOutcome): void {
   io.out("  ✓ Admin promoted + members.yaml updated\n");
   io.out(`  ✓ Team "${res.teamSlug}" created\n`);
   if (res.invites.length > 0) {
@@ -302,7 +468,7 @@ function printApplyResult(res: TeamInitResult, io: WizardIO): void {
     }
     io.out("\n━━ DM template for each teammate ━━\n\n");
     io.out("  1. Install Krimto:\n");
-    io.out(`     $ npx @krimto-labs/krimto join \\\n`);
+    io.out(`     npx @krimto-labs/krimto join \\\n`);
     io.out(`         --server http://${res.serverHost} \\\n`);
     io.out(`         --key <your key from above>\n`);
     io.out("  2. Restart your editor.\n");
@@ -316,9 +482,31 @@ function printApplyResult(res: TeamInitResult, io: WizardIO): void {
     }
   }
 
+  if (res.inviteFilePath) {
+    io.out("━━ Backup ━━\n\n");
+    io.out(`  All keys + the DM template are also saved to:\n    ${res.inviteFilePath}\n`);
+    io.out(`  (mode 0600 — read by you only. Delete it once teammates have their keys.)\n\n`);
+  }
+
+  // The "Next" block depends on whether the running service was just flipped into team mode.
+  // When it was, the user's already done — just hand them the dashboard URL. When it wasn't
+  // (no service, declined, or install failed), fall back to the original copy-paste recipe.
   io.out("━━ Next ━━\n\n");
-  io.out("  • Start the server in team mode (if not already):\n");
-  io.out(`      $ KRIMTO_BOOTSTRAP_ADMIN=${res.adminEmail} npx @krimto-labs/krimto serve\n`);
-  io.out("  • View the dashboard at http://localhost:8080/ui/admin\n");
+  if (restart.kind === "restarted" && restart.portReady) {
+    io.out(`  🟢 Team mode is live on http://localhost:8080\n`);
+    io.out(`  • View the dashboard at http://localhost:8080/ui/admin\n`);
+  } else if (restart.kind === "restarted" && !restart.portReady) {
+    io.out(`  ⚠ Service restarted in team mode, but the port didn't come up in 10s.\n`);
+    io.out(`     Check /tmp/com.krimto.server.err.log (macOS) or \`journalctl --user -u krimto\` (Linux).\n`);
+    io.out(`  • View the dashboard at http://localhost:8080/ui/admin (once the port is up)\n`);
+  } else if (restart.kind === "failed") {
+    io.out(`  ⚠ Service restart failed: ${restart.error}\n`);
+    io.out(`     Start it yourself: KRIMTO_BOOTSTRAP_ADMIN=${res.adminEmail} npx @krimto-labs/krimto serve\n`);
+  } else {
+    // "declined" or "no-service" — print the original recipe (still without the literal `$`).
+    io.out("  • Start the server in team mode (if not already):\n");
+    io.out(`      KRIMTO_BOOTSTRAP_ADMIN=${res.adminEmail} npx @krimto-labs/krimto serve\n`);
+    io.out("  • View the dashboard at http://localhost:8080/ui/admin\n");
+  }
   io.out("  • Step back to solo with `krimto team disband` (data preserved)\n\n");
 }

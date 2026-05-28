@@ -39,6 +39,16 @@ describe("runSetupRemote", () => {
     expect(r.message).toContain("Invalid URL");
   });
 
+  // Smoke-6 follow-up. The user pasted `github.com/krimto-labs/foo.git` (no protocol, no
+  // user) and the old `looksLikeRemoteUrl` accepted it; the failure only surfaced at push
+  // time, AFTER admin keys had been minted and success messages printed. Tightened to
+  // require a known transport prefix (git@, https://, etc.) so the wizard re-prompts in-flow.
+  it("rejects bare-host URLs without a protocol prefix", async () => {
+    const r = await runSetupRemote(dataDir, "github.com/krimto-labs/foo.git");
+    expect(r.status).toBe("invalid_url");
+    expect(r.message).toContain("Invalid URL");
+  });
+
   it("configures the remote and pushes the existing commit when the remote is empty", async () => {
     const r = await runSetupRemote(dataDir, bareRemote);
     expect(r.status).toBe("ok");

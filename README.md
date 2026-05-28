@@ -9,8 +9,8 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.35** is the current release — the v0.2.17 wizard redesign is now
-> shipped end-to-end, plus eighteen patch releases of correctness fixes and agent-friendly
+> **Where we are:** **v0.2.36** is the current release — the v0.2.17 wizard redesign is now
+> shipped end-to-end, plus nineteen patch releases of correctness fixes and agent-friendly
 > surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
 > hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
 > image, the web UI) is unchanged. What you get on top of v0.2.16:
@@ -41,7 +41,7 @@ timestamp, reviewer).
 >   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
 >   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
 >
-> **The agent story (v0.2.34 → v0.2.35).**
+> **The agent story (v0.2.34 → v0.2.36).**
 > - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
 >   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
 >   open an interactive prompt now has a flag form.
@@ -54,6 +54,10 @@ timestamp, reviewer).
 >   Cursor chat" line works without prompting agents.
 > - **Cursor `alwaysApply: true` frontmatter** so `.cursor/rules/krimto.mdc` auto-attaches
 >   instead of requiring the user to type "krimto" first.
+> - **`krimto team init` lands you in team mode (v0.2.36)** — the wizard restarts the running
+>   service into team mode itself (no copy-paste recipe, no lock conflict), saves invite keys
+>   to a 0600 backup file, and validates the git remote URL at the prompt. `krimto notes` now
+>   works from any terminal (identity falls back to `git config user.email`).
 >
 > See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
 > diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
@@ -409,14 +413,14 @@ admin surface.
 
 ### Option C — Docker (HTTP + bearer auth, containerized)
 
-Build the image and run it (a published image is coming):
+The published multi-arch image at `ghcr.io/krimto-labs/krimto:latest` (built for `linux/amd64` and
+`linux/arm64`) is the default path:
 
 ```bash
-docker build -t krimto .
 docker run -d --name krimto -p 8080:8080 \
   -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com \
   -v ~/.krimto:/data \
-  krimto
+  ghcr.io/krimto-labs/krimto:latest
 docker logs krimto | grep "admin API key"   # the key is printed once
 ```
 
@@ -424,16 +428,18 @@ The container serves MCP at `http://localhost:8080/mcp` (bearer auth) and health
 `/health/ready`; facts persist in the mounted `/data` volume. Point your agent at it with the same
 `"url"` + `Bearer` config as Option B.
 
-**Pulling a published image (no local build):** pushing a `v*` git tag runs
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml), which publishes the
-image to `ghcr.io/krimto-labs/krimto`. After the first release tag you can skip `docker build` and run
-the published image directly:
+**Building locally** — only needed if you're developing Krimto or pinning to an unreleased
+commit:
 
 ```bash
+docker build -t krimto .
 docker run -d --name krimto -p 8080:8080 \
   -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com -v ~/.krimto:/data \
-  ghcr.io/krimto-labs/krimto:latest
+  krimto
 ```
+
+The published image is built and pushed by
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) on every `v*` tag.
 
 ### Web UI (humans)
 
@@ -496,9 +502,9 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 
 ## Roadmap
 
-`v0.2` (teams) → `v0.2.18` (UX redesign — wizards, per-note CLI, notes-app `/ui` — published) →
-`v0.3` (OAuth + PR approval flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the
-per-release breakdown.
+`v0.2` (teams, v0.2.5) → `v0.2.18` (v0.2.17 wizard redesign — published as one SemVer-clean
+release) → `v0.2.36` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
+flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the per-release breakdown.
 
 ## License
 

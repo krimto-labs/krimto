@@ -11,6 +11,7 @@
 
 import { checkbox } from "@inquirer/prompts";
 import { promises as fs } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import { applyRule } from "../agentRule";
@@ -20,6 +21,7 @@ import {
   type EditorEnvironment,
   type EditorKind,
 } from "./init";
+import { inspectRuntime } from "./inspectRuntime";
 import { writeMcpConfig, type WriteAction } from "./mcpConfig";
 import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 
@@ -137,6 +139,15 @@ export async function runJoin(args: JoinArgs, opts: JoinOptions = {}): Promise<J
   try {
     io.out("\nKrimto — Joining team server\n\n");
     io.out(`  Server: ${normalizeServerUrl(args.server)}\n`);
+
+    // Smoke-6 follow-up: a teammate may have an EARLIER solo-mode Krimto service running on
+    // this machine. After join, their editor points at the admin's server (good) — but the
+    // local solo service keeps listening on localhost:8080 with no auth, serving whatever's
+    // in their solo data dir. Print one warning line so they can `krimto stop` first.
+    // Non-blocking, narrow: only fires when (a) a service-launched lock is alive, (b) the
+    // local /mcp returns anything other than 401 (i.e. not enforcing auth).
+    await warnIfLocalSoloServiceRunning(args.server, opts, io);
+
     io.out("  Detecting your editors...\n");
 
     const cwd = opts.cwd ?? process.cwd();
@@ -199,6 +210,61 @@ async function readMaybe(p: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Soft guard for the Plan-agent-flagged Risk (b): a teammate's earlier solo-mode Krimto
+ * service may still be running on this machine after join, serving solo notes on
+ * localhost:8080 with no auth. Print one warning line so they can `krimto stop` first.
+ * Best-effort, non-blocking — never refuses to proceed (that's the architectural fix's job).
+ */
+async function warnIfLocalSoloServiceRunning(
+  teamServerArg: string,
+  opts: JoinOptions,
+  io: WizardIO,
+): Promise<void> {
+  const dataDir = path.join(opts.homeDir ?? os.homedir(), ".krimto");
+  let runtime;
+  try {
+    runtime = await inspectRuntime(
+      dataDir,
+      opts.homeDir ? { homeDir: opts.homeDir } : {},
+    );
+  } catch {
+    return; // probe failed — say nothing rather than scare the user
+  }
+  if (!runtime.lock || !runtime.lock.alive || runtime.effectiveLaunchedBy !== "service") return;
+
+  // Same-machine joins (admin onboarding themselves) are NOT the case we want to warn about —
+  // their local service IS the team server. Skip the warning when the team-server URL is
+  // localhost / 127.0.0.1 / the host's own hostname.
+  const url = teamServerArg.toLowerCase();
+  if (
+    url.includes("localhost") ||
+    url.includes("127.0.0.1") ||
+    url.includes(os.hostname().toLowerCase())
+  ) {
+    return;
+  }
+
+  // Probe the local /mcp endpoint. 401 means auth is enforced (team mode) → no warning.
+  // Anything else (200, 405, timeout) → likely solo mode → warn.
+  let enforcingAuth = false;
+  try {
+    const res = await fetch("http://127.0.0.1:8080/mcp", {
+      signal: AbortSignal.timeout(1500),
+    });
+    enforcingAuth = res.status === 401;
+  } catch {
+    /* unreachable on :8080 — fall through and warn */
+  }
+  if (enforcingAuth) return;
+
+  io.err(
+    `\n⚠ A local Krimto service is also running on this machine (PID ${runtime.lock.pid}).\n` +
+      `  It serves notes in ${dataDir} on http://localhost:8080 with no auth.\n` +
+      `  If you don't need it: \`krimto stop\` then re-run \`krimto join …\`.\n\n`,
+  );
 }
 
 function printApplyResult(res: JoinResult, io: WizardIO): void {
