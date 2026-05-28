@@ -30,7 +30,7 @@ beforeEach(async () => {
   };
   const app = buildHttpApp({
     ctx, keys, membership: () => membership, db, index,
-    version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none", requireAuth: true,
+    version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none", teamModeActive: () => true,
   });
   await new Promise<void>((r) => { server = app.listen(0, () => r()); });
   port = (server.address() as { port: number }).port;
@@ -76,6 +76,37 @@ describe("HTTP transport + bearer auth", () => {
     expect(res.status).toBe(401);
   });
 
+  it("flips /mcp from open (solo) to 401 (team) when an admin appears — per-request, no rebuild", async () => {
+    // The core of the "file is the switch" fix: team mode is evaluated per request, so the SAME
+    // running app enforces auth the moment membership gains an admin — no restart, no rebuild.
+    const liveMembership: Membership = { org: { slug: "acme", admins: [] }, teams: [], users: [] };
+    let teamMode = false;
+    const keys = new ApiKeyStore(path.join(root, "keys-flip.json"));
+    const app = buildHttpApp({
+      ctx: {
+        store: new FactStore(root),
+        index: new FactIndex(openIndexDb(":memory:", { provider: "none", dimensions: 0 })),
+        writeQueue: new Serializer(),
+        membership: liveMembership,
+        requester: { identity: "solo@local", teams: [] },
+      },
+      keys, membership: () => liveMembership, db: openIndexDb(":memory:", { provider: "none", dimensions: 0 }),
+      index: new FactIndex(openIndexDb(":memory:", { provider: "none", dimensions: 0 })),
+      version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none",
+      teamModeActive: () => teamMode,
+    });
+    const s: Server = await new Promise((r) => { const sv = app.listen(0, () => r(sv)); });
+    const p = (s.address() as { port: number }).port;
+    // Solo: a bare GET /mcp reaches the handler (no auth) → NOT 401.
+    const before = await fetch(`http://localhost:${p}/mcp`);
+    expect(before.status).not.toBe(401);
+    // Flip to team mode on the SAME app — no rebuild, no restart.
+    teamMode = true;
+    const after = await fetch(`http://localhost:${p}/mcp`);
+    expect(after.status).toBe(401);
+    await new Promise<void>((r) => s.close(() => r()));
+  });
+
   it("fires onFirstClient on the first /mcp request and only once (Gap #5c)", async () => {
     // Spin up a small HTTP server just for this test so we can capture the callback count cleanly.
     let calls = 0;
@@ -85,7 +116,7 @@ describe("HTTP transport + bearer auth", () => {
       keys, membership: () => membership, db: openIndexDb(":memory:", { provider: "none", dimensions: 0 }),
       index: new FactIndex(openIndexDb(":memory:", { provider: "none", dimensions: 0 })),
       version: "0.2.0", startedAt: Date.now(), isBuilding: () => false, gitRemoteStatus: () => "none",
-      requireAuth: false, // simpler — no auth needed for this test
+      teamModeActive: () => false, // simpler — no auth needed for this test
       onFirstClient: () => { calls += 1; },
     });
     const localServer: Server = await new Promise((r) => { const s = localApp.listen(0, () => r(s)); });

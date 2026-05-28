@@ -2,7 +2,10 @@
 // (divergence: spec hardcodes float[1536]); FTS5 is an external-content table kept in
 // sync by triggers (canonical sqlite.org pattern).
 
-export const SCHEMA_VERSION = 1;
+// Bumped to 2 in v0.2.38: facts_fts gains the Porter stemmer so a singular query ("favorite
+// color") matches a plural-titled fact ("Favorite colors"). openIndexDb migrates older indexes
+// by dropping + recreating facts_fts and rebuilding it from the content table.
+export const SCHEMA_VERSION = 2;
 
 /** Static DDL (everything except the dimension-parameterized vec table). */
 export const SCHEMA_SQL = `
@@ -22,7 +25,7 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
-  title, body, tags, content='facts', content_rowid='rowid'
+  title, body, tags, content='facts', content_rowid='rowid', tokenize='porter unicode61'
 );
 
 CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN

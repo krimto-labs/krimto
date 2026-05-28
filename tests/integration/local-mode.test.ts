@@ -40,7 +40,7 @@ beforeEach(async () => {
     startedAt: Date.now(),
     isBuilding: () => false,
     gitRemoteStatus: () => "none",
-    requireAuth: false,
+    teamModeActive: () => false,
   });
   await new Promise<void>((r) => {
     server = app.listen(0, () => r());

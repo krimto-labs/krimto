@@ -34,12 +34,13 @@ import { z } from "zod";
 import { FactStore } from "../storage/store";
 import { GitRepo } from "../storage/git";
 import { CommitBatcher, batcherConfigFromEnv } from "../storage/batcher";
-import { loadMembership, requesterFor } from "../access/membership";
+import { hasOrgAdmin, loadMembership, parseMembership, requesterFor, shouldAdoptReload } from "../access/membership";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
 import { openIndexDb, embeddingSpaceChanged, type IndexConfig } from "../index/db";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { RemoteSync, syncConfigFromEnv } from "../storage/sync";
+import { MembershipWatcher } from "./membershipWatcher";
 import { KrimtoError } from "./errors";
 import {
   krimtoListScopes,
@@ -54,7 +55,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.37";
+export const KRIMTO_VERSION = "0.2.38";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -346,12 +347,28 @@ export async function main(): Promise<void> {
     process.stderr.write(`Krimto embeddings: ${embeddingProvider.name} (${embeddingProvider.dimensions}d)\n`);
   }
 
+  const membersPath = path.join(dataDir, ".krimto", "members.yaml");
   const reloadMembership = async (): Promise<void> => {
-    membership = await loadMembership(dataDir);
-    ctx.membership = membership;
+    let next: ReturnType<typeof parseMembership>;
+    try {
+      next = parseMembership(await fs.readFile(membersPath, "utf8"));
+    } catch {
+      return; // read/parse failure — keep the current membership; never blank out auth
+    }
+    // Safety: never flip team→solo on a (possibly transient, mid-write) zero-admin read — that
+    // would open an auth-off window. See shouldAdoptReload for the rationale.
+    if (!shouldAdoptReload(membership, next)) return;
+    membership = next;
+    ctx.membership = next;
   };
 
   batcher.start((fn) => ctx.writeQueue.run(fn));
+
+  // Live team-mode trigger: poll members.yaml so a `krimto team init` (a separate CLI process)
+  // flips this running server into team mode within ~2s — no restart. Runs unconditionally so a
+  // solo→team transition is picked up. Reload goes through the write serializer.
+  const memberWatch = new MembershipWatcher(membersPath, reloadMembership);
+  memberWatch.start((fn) => ctx.writeQueue.run(fn));
 
   const sync = new RemoteSync(
     repo,
@@ -396,6 +413,7 @@ export async function main(): Promise<void> {
     shuttingDown = true;
     telemetry.stop();
     sync.stop();
+    memberWatch.stop();
     batcher.stop();
     void ctx.writeQueue
       .run(() => batcher.flush())
@@ -410,8 +428,12 @@ export async function main(): Promise<void> {
   const httpPort = process.env.KRIMTO_HTTP_PORT ? Number(process.env.KRIMTO_HTTP_PORT) : undefined;
   if (httpPort !== undefined && Number.isInteger(httpPort) && httpPort > 0) {
     const rlConfig = rateLimitConfigFromEnv();
-    // Team mode (auth) when an admin is bootstrapped or auth is explicitly required; else local mode.
-    const requireAuth = Boolean(process.env.KRIMTO_BOOTSTRAP_ADMIN || process.env.KRIMTO_REQUIRE_AUTH === "1");
+    // Team mode is derived LIVE from membership: any org admin ⇒ enforce auth. KRIMTO_BOOTSTRAP_ADMIN
+    // still works because it seeds an admin into members.yaml before this point; the explicit
+    // KRIMTO_REQUIRE_AUTH=1 override remains. Evaluated per request (via the getter), so a later
+    // `members.yaml` edit flips the running server with no restart.
+    const teamModeActive = (): boolean =>
+      hasOrgAdmin(membership) || process.env.KRIMTO_REQUIRE_AUTH === "1";
     const app = buildHttpApp({
       ctx,
       keys,
@@ -425,7 +447,7 @@ export async function main(): Promise<void> {
       gitRemoteStatus: () => batcher.lastPushStatus(),
       rateLimiter: rlConfig.enabled ? new RateLimiter(rlConfig) : undefined,
       admin,
-      requireAuth,
+      teamModeActive,
       // Live status for the /ui dashboard panel — built per request so it never goes stale.
       status: () => ({
         gitRemoteUrl: process.env.KRIMTO_GIT_REMOTE,
@@ -445,7 +467,7 @@ export async function main(): Promise<void> {
     });
     app.listen(httpPort, () => {
       process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
-      if (!requireAuth) {
+      if (!teamModeActive()) {
         process.stderr.write(localModeBanner(httpPort, dataDir, identity));
       } else {
         process.stderr.write(teamModeBanner({ host: `localhost:${httpPort}`, key: bootstrapKey, dataDir }));

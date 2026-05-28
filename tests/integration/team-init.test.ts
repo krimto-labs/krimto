@@ -32,12 +32,12 @@ vi.mock("@inquirer/prompts", () => ({
   input: vi.fn(async (config: { message: string }) => nextAnswer(`input:${config.message}`)),
 }));
 
+import { createServer } from "node:http";
 import {
   applyTeamInit,
-  maybeRestartServiceForTeamMode,
+  confirmTeamModeLive,
   runTeamInit,
   type TeamInitAnswers,
-  type TeamInitResult,
 } from "../../src/cli/teamInit";
 
 interface MembersYaml {
@@ -168,30 +168,42 @@ describe("applyTeamInit — pure apply step", () => {
   });
 });
 
-// Smoke-6 follow-up. The wizard's post-apply restart probes inspectRuntime + (if a
-// service-launched Krimto is alive) calls installService with `KRIMTO_BOOTSTRAP_ADMIN`
-// baked in. The conditional probe + prompt is best verified by manual reproduction
-// (documented in the plan's Verification section); here we lock down two contract
-// properties that the integration of the helper depends on.
-describe("maybeRestartServiceForTeamMode", () => {
-  const fakeResult: TeamInitResult = {
-    adminEmail: "alice@example.com",
-    adminKey: "krm_live_test123",
-    teamSlug: "backend",
-    invites: [],
-    serverHost: "localhost:8080",
-    dataDir: "/tmp/krimto-fake",
-  };
+// Live activation replaces the v0.2.36 restart dance: members.yaml is the switch, and the wizard
+// only VERIFIES the running server flipped (polls /mcp for 401) instead of restarting anything.
+describe("confirmTeamModeLive", () => {
+  let close: (() => Promise<void>) | undefined;
+  afterEach(async () => {
+    if (close) await close();
+    close = undefined;
+  });
+  async function serveStatus(status: number): Promise<string> {
+    const srv = createServer((_req, res) => {
+      res.statusCode = status;
+      res.end();
+    });
+    await new Promise<void>((r) => srv.listen(0, () => r()));
+    close = () => new Promise<void>((r) => srv.close(() => r()));
+    return `localhost:${(srv.address() as { port: number }).port}`;
+  }
 
-  it("returns 'no-service' immediately when skipServiceRestart is set (tests opt out)", async () => {
-    const outcome = await maybeRestartServiceForTeamMode(fakeResult, { skipServiceRestart: true });
-    expect(outcome).toEqual({ kind: "no-service" });
+  it("returns 'live' when /mcp responds 401 (bearer required = team mode enforced)", async () => {
+    const host = await serveStatus(401);
+    expect(await confirmTeamModeLive(host, 2000)).toBe("live");
   });
 
-  // Note: the conditional "service was loaded → install with KRIMTO_BOOTSTRAP_ADMIN" path
-  // shells out to launchctl/systemctl and runs only against a real platform CLI. Verified by
-  // manual reproduction in the plan's Verification section, not in this test file (would add
-  // multi-second shell-outs that compete with the rest of the suite under vitest parallelism).
+  it("returns 'timeout' when a server responds but never 401", async () => {
+    const host = await serveStatus(200);
+    expect(await confirmTeamModeLive(host, 800)).toBe("timeout");
+  });
+
+  it("returns 'no-server' when nothing is listening on the host", async () => {
+    // Bind to claim a port, then free it — guarantees nothing is listening there.
+    const srv = createServer();
+    await new Promise<void>((r) => srv.listen(0, () => r()));
+    const port = (srv.address() as { port: number }).port;
+    await new Promise<void>((r) => srv.close(() => r()));
+    expect(await confirmTeamModeLive(`localhost:${port}`, 800)).toBe("no-server");
+  });
 });
 
 describe("runTeamInit — interactive flow", () => {
@@ -232,7 +244,7 @@ describe("runTeamInit — interactive flow", () => {
     });
     promptQueue.push({ name: "confirm:Apply this setup?", value: true });
 
-    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
+    const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
     expect(res).not.toBeNull();
     expect(res?.invites).toHaveLength(2);
 
@@ -242,7 +254,9 @@ describe("runTeamInit — interactive flow", () => {
     expect(out).toContain("krimto join");
     expect(out).toContain("ben@acme.com");
     expect(out).toContain("priya@acme.com");
-    expect(out).toContain("KRIMTO_BOOTSTRAP_ADMIN=maria@acme.com");
+    // confirmLive → "no-server" path prints a plain serve recipe (members.yaml is the switch now —
+    // no KRIMTO_BOOTSTRAP_ADMIN env var needed).
+    expect(out).toContain("npx @krimto-labs/krimto serve");
   });
 
   it("aborts cleanly when the user declines the final confirm", async () => {
@@ -266,7 +280,7 @@ describe("runTeamInit — interactive flow", () => {
     });
     promptQueue.push({ name: "confirm:Apply this setup?", value: false });
 
-    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
+    const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
     expect(res).toBeNull();
     expect(io.stdout.join("")).toContain("No changes made");
     // members.yaml shouldn't exist — nothing was applied.
@@ -280,7 +294,7 @@ describe("runTeamInit — interactive flow", () => {
     promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: err });
 
     const exitBefore = process.exitCode;
-    const res = await runTeamInit({ io, dataDir, skipServiceRestart: true });
+    const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
     expect(res).toBeNull();
     expect(process.exitCode).toBe(130);
     process.exitCode = exitBefore;

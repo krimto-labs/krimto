@@ -69,6 +69,15 @@ describe("recall quality — ranking guards (must stay green)", () => {
     expect((await recallIds("favorite color"))[0]).toBe(color);
   });
 
+  it("matches singular/plural word forms via stemming", async () => {
+    // smoke-6 round 2: the user asked "favorite color" (singular) but the live fact was titled
+    // "Favorite colors" (plural). The query and fact must share ONLY the singular/plural pair so
+    // the test isolates stemming — no generic word like "favorite" can confound the match. Under
+    // a non-stemming tokenizer, "color" ≠ "colors" → zero matches → the fact is invisible.
+    const fact = await write("Preferred colors", "Orange, pink, and yellow.");
+    expect((await recallIds("color"))[0]).toBe(fact);
+  });
+
   it("never returns a superseded fact", async () => {
     const pizza = await write("Favorite food: pizza", "User's favorite food is pizza.");
     await krimtoSupersede(ctx, {

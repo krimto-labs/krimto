@@ -20,10 +20,12 @@ export interface WebRouterDeps {
   keys: ApiKeyStore;
   membership: () => Membership;
   sessionSecret: string;
-  /** When set, enables the admin-only /ui/admin page. */
+  /** When set, enables the admin-only /ui/admin page (only reachable in team mode). */
   admin?: AdminContext;
-  /** When set (local mode), skip login and use this identity for every request. */
-  localIdentity?: string;
+  /** Live team-mode predicate. Evaluated per request: team ⇒ require login; solo ⇒ use localIdentity. */
+  teamModeActive: () => boolean;
+  /** The local/solo identity — used (no login) whenever team mode is NOT active. Always provided. */
+  localIdentity: string;
   /** Live status snapshot for the /ui/facts status panel. Called per request so it's never stale. */
   status?: () => StatusPanelOpts;
 }
@@ -64,8 +66,8 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
   });
 
   router.use((req, res, next) => {
-    if (deps.localIdentity) {
-      (req as WithIdentity).identity = deps.localIdentity; // local mode: no login
+    if (!deps.teamModeActive()) {
+      (req as WithIdentity).identity = deps.localIdentity; // solo mode: no login
       next();
       return;
     }
@@ -84,7 +86,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
 
   router.get("/connect", (req, res) => {
     const host = typeof req.headers.host === "string" ? req.headers.host : "localhost:8080";
-    page(res, 200, "Connect", connectPanel({ host, requireAuth: !deps.localIdentity }), idOf(req));
+    page(res, 200, "Connect", connectPanel({ host, requireAuth: deps.teamModeActive() }), idOf(req));
   });
 
   router.get("/settings", (req, res) => {

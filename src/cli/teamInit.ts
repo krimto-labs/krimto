@@ -22,9 +22,8 @@ import { ApiKeyStore } from "../access/auth";
 import { addUser, createTeam } from "../access/membershipStore";
 import { bootstrapAdmin } from "../server/bootstrap";
 import { defaultIdentity } from "./init";
-import { inspectRuntime } from "./inspectRuntime";
+import { applyJoin } from "./join";
 import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
-import { detectPlatform, installService } from "./service";
 import { looksLikeRemoteUrl, runSetupRemote } from "./setupRemote";
 
 /** Everything the wizard collects before it calls {@link applyTeamInit}. */
@@ -77,17 +76,25 @@ export interface TeamInitOptions {
   keysPath?: string;
   /** Override KRIMTO_HTTP_PORT detection. */
   port?: number;
-  /** Override os.homedir() — passed to inspectRuntime + installService for tests. */
+  /** Override os.homedir() — forwarded to the admin-reconnect `applyJoin` for editor detection. */
   homeDir?: string;
-  /** When true, the post-apply service-restart step writes files but never invokes
-   * launchctl/systemctl/schtasks. Tests use this to assert the new env block without
-   * mutating CI's user services. */
+  /** When true, the admin-reconnect `applyJoin` writes nothing to real editor configs. Tests use this. */
   dryRun?: boolean;
-  /** Suppress the post-apply service-restart probe entirely (tests that don't exercise it). */
-  skipServiceRestart?: boolean;
+  /** Inject the live-team-mode probe (tests). Defaults to the real {@link confirmTeamModeLive}
+   * which polls the running server's /mcp for a 401. */
+  confirmLive?: (host: string) => Promise<LiveOutcome>;
   /** Skip `runSetupRemote` even when a URL was given. Tests use this. */
   skipRemoteSetup?: boolean;
 }
+
+/**
+ * Result of verifying that the running server is ACTUALLY enforcing team mode (not just that a
+ * port is open). The old wizard printed "🟢 live" off a TCP probe and lied; this is the honest signal.
+ *   - "live"      — the server returned 401 on /mcp ⇒ bearer required ⇒ team mode enforced.
+ *   - "no-server" — nothing reachable at the host (start one with `krimto serve`).
+ *   - "timeout"   — a server responded but never 401 within the window (it polls members.yaml ~2s).
+ */
+export type LiveOutcome = "live" | "no-server" | "timeout";
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+$/;
@@ -251,13 +258,31 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
       opts,
     );
 
-    // Probe runtime + offer to restart the always-running service so team-mode auth takes
-    // effect on the SAME machine, in the SAME wizard run. The smoke-6 transcript ended with
-    // a copy-paste "Next" recipe (`KRIMTO_BOOTSTRAP_ADMIN=... npx serve`) the user couldn't
-    // run because their existing service held the data-dir lock. This closes that gap.
-    const restartOutcome = await maybeRestartServiceForTeamMode(result, opts);
+    // No restart, no env var: writing members.yaml IS the switch. The running server polls the
+    // file (~2s) and flips to team mode on its own. We just VERIFY it actually happened — poll
+    // /mcp for a 401 — instead of the old TCP probe that falsely printed "🟢 live".
+    const live = await (opts.confirmLive ?? confirmTeamModeLive)(result.serverHost);
 
-    printApplyResult(result, io, restartOutcome);
+    // When team mode is confirmed live, reconnect the admin's OWN editors in team mode (their
+    // solo/no-key connection would otherwise start getting 401s). Reuses the teammate join path.
+    let reconnected = false;
+    if (live === "live" && result.adminKey) {
+      try {
+        const join = await applyJoin(
+          { server: `http://${result.serverHost}`, key: result.adminKey },
+          {
+            cwd: process.cwd(),
+            ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
+            ...(opts.dryRun ? { dryRun: opts.dryRun } : {}),
+          },
+        );
+        reconnected = join.editorOutcomes.some((o) => o.mcpAction !== "manual");
+      } catch {
+        /* best-effort — the admin can run `krimto join` manually if this fails */
+      }
+    }
+
+    printApplyResult(result, io, { live, reconnected });
     return result;
   } catch (e) {
     if (isExitPrompt(e)) {
@@ -352,73 +377,32 @@ async function askTeammates(): Promise<string[]> {
   return list;
 }
 
-// === Post-apply service restart =============================================
+// === Verify team mode is actually live ======================================
 
 /**
- * What happened when the wizard tried to flip the running service into team mode after apply.
- * Drives the "Next" block in {@link printApplyResult}: when team mode is live, we don't print
- * the copy-paste `KRIMTO_BOOTSTRAP_ADMIN=... npx serve` recipe.
+ * Poll the running server's `/mcp` until it returns 401 — the precise signal that bearer auth is
+ * being enforced (team mode is genuinely ON). Writing members.yaml flips the server within its
+ * ~2s membership-watch tick, so we give it a short window. Returns "live" on 401, "no-server"
+ * when nothing was ever reachable, "timeout" when a server responded but never 401 in time.
+ *
+ * This replaces the v0.2.36 restart dance: there's nothing to restart anymore — the file is the
+ * switch. We only confirm it took effect (the old code printed "🟢 live" off a TCP probe and lied).
  */
-export type RestartOutcome =
-  | { kind: "no-service" }
-  | { kind: "declined" }
-  | { kind: "restarted"; portReady: boolean }
-  | { kind: "failed"; error: string };
-
-/**
- * If the running Krimto IS the always-running service we installed, offer to restart it with
- * `KRIMTO_BOOTSTRAP_ADMIN` baked in so team-mode auth takes effect immediately. Returns the
- * outcome for the print step to render. Skipped silently when {@link TeamInitOptions.skipServiceRestart}
- * is set (tests that don't want to exercise this path).
- */
-async function maybeRestartServiceForTeamMode(
-  result: TeamInitResult,
-  opts: TeamInitOptions,
-): Promise<RestartOutcome> {
-  if (opts.skipServiceRestart) return { kind: "no-service" };
-  const io = opts.io ?? defaultIO;
-
-  const runtime = await inspectRuntime(
-    result.dataDir,
-    opts.homeDir ? { homeDir: opts.homeDir } : {},
-  );
-  if (!runtime.service.loaded || runtime.effectiveLaunchedBy !== "service") {
-    return { kind: "no-service" };
+export async function confirmTeamModeLive(host: string, timeoutMs = 8000): Promise<LiveOutcome> {
+  const deadline = Date.now() + timeoutMs;
+  let reached = false;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://${host}/mcp`, { method: "GET" });
+      reached = true;
+      if (res.status === 401) return "live";
+    } catch {
+      /* not reachable yet */
+    }
+    await new Promise((r) => setTimeout(r, 500));
   }
-
-  const wantRestart = await confirm({
-    message: "Restart the running Krimto service so team mode is enforced now? (~3s of downtime)",
-    default: true,
-  });
-  if (!wantRestart) return { kind: "declined" };
-
-  io.out("\n  Restarting service in team mode...\n");
-  try {
-    const install = await installService(
-      {
-        binPath: process.execPath,
-        args: [process.argv[1] ?? "krimto", "serve"],
-        env: {
-          KRIMTO_IDENTITY: result.adminEmail,
-          KRIMTO_DATA: result.dataDir,
-          KRIMTO_HTTP_PORT: "8080",
-          KRIMTO_BOOTSTRAP_ADMIN: result.adminEmail,
-        },
-        ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
-      },
-      {
-        platform: detectPlatform(),
-        ...(opts.dryRun ? { dryRun: opts.dryRun } : {}),
-      },
-    );
-    return { kind: "restarted", portReady: install.portReady !== false };
-  } catch (e) {
-    return { kind: "failed", error: e instanceof Error ? e.message : String(e) };
-  }
+  return reached ? "timeout" : "no-server";
 }
-
-// Exposed for the integration test that asserts on the env block written to the plist.
-export { maybeRestartServiceForTeamMode };
 
 // === Pretty printing ========================================================
 
@@ -439,7 +423,11 @@ function printSummary(a: TeamInitAnswers, io: WizardIO): void {
   io.out(`  Teammates:    ${a.teammates.length === 0 ? "(none yet)" : a.teammates.join(", ")}\n\n`);
 }
 
-function printApplyResult(res: TeamInitResult, io: WizardIO, restart: RestartOutcome): void {
+function printApplyResult(
+  res: TeamInitResult,
+  io: WizardIO,
+  status: { live: LiveOutcome; reconnected: boolean },
+): void {
   io.out("  ✓ Admin promoted + members.yaml updated\n");
   io.out(`  ✓ Team "${res.teamSlug}" created\n`);
   if (res.invites.length > 0) {
@@ -488,25 +476,24 @@ function printApplyResult(res: TeamInitResult, io: WizardIO, restart: RestartOut
     io.out(`  (mode 0600 — read by you only. Delete it once teammates have their keys.)\n\n`);
   }
 
-  // The "Next" block depends on whether the running service was just flipped into team mode.
-  // When it was, the user's already done — just hand them the dashboard URL. When it wasn't
-  // (no service, declined, or install failed), fall back to the original copy-paste recipe.
+  // The "Next" block reflects the VERIFIED state of the running server (members.yaml is the
+  // switch — no restart). "🟢 live" is only printed when /mcp actually returned 401.
   io.out("━━ Next ━━\n\n");
-  if (restart.kind === "restarted" && restart.portReady) {
-    io.out(`  🟢 Team mode is live on http://localhost:8080\n`);
-    io.out(`  • View the dashboard at http://localhost:8080/ui/admin\n`);
-  } else if (restart.kind === "restarted" && !restart.portReady) {
-    io.out(`  ⚠ Service restarted in team mode, but the port didn't come up in 10s.\n`);
-    io.out(`     Check /tmp/com.krimto.server.err.log (macOS) or \`journalctl --user -u krimto\` (Linux).\n`);
-    io.out(`  • View the dashboard at http://localhost:8080/ui/admin (once the port is up)\n`);
-  } else if (restart.kind === "failed") {
-    io.out(`  ⚠ Service restart failed: ${restart.error}\n`);
-    io.out(`     Start it yourself: KRIMTO_BOOTSTRAP_ADMIN=${res.adminEmail} npx @krimto-labs/krimto serve\n`);
+  if (status.live === "live") {
+    io.out(`  🟢 Team mode is live on http://${res.serverHost}\n`);
+    if (status.reconnected) {
+      io.out(`  ✓ Reconnected your editor in team mode — restart it once to pick up the key.\n`);
+    }
+    io.out(`  • View the dashboard at http://${res.serverHost}/ui/admin (sign in with your admin key)\n`);
+  } else if (status.live === "timeout") {
+    io.out(`  ⏳ A server is running at ${res.serverHost} but team mode hasn't taken effect yet.\n`);
+    io.out(`     It re-reads members.yaml every ~2s — give it a moment, then reload /ui/admin.\n`);
   } else {
-    // "declined" or "no-service" — print the original recipe (still without the literal `$`).
-    io.out("  • Start the server in team mode (if not already):\n");
-    io.out(`      KRIMTO_BOOTSTRAP_ADMIN=${res.adminEmail} npx @krimto-labs/krimto serve\n`);
-    io.out("  • View the dashboard at http://localhost:8080/ui/admin\n");
+    // "no-server" — nothing reachable. With members.yaml written, a plain serve starts in team mode.
+    io.out(`  • No running server found at ${res.serverHost}. Start one (it reads members.yaml and\n`);
+    io.out(`    comes up in team mode — no env var needed):\n`);
+    io.out(`      npx @krimto-labs/krimto serve\n`);
+    io.out(`  • Then open http://${res.serverHost}/ui/admin and sign in with your admin key.\n`);
   }
   io.out("  • Step back to solo with `krimto team disband` (data preserved)\n\n");
 }

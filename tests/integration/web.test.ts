@@ -98,7 +98,7 @@ beforeEach(async () => {
     startedAt: Date.now(),
     isBuilding: () => false,
     gitRemoteStatus: () => "none",
-    requireAuth: true,
+    teamModeActive: () => true,
   });
 
   await new Promise<void>((r) => {

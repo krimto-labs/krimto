@@ -11,6 +11,7 @@ import {
   parseMembership,
   requesterFor,
   roleOf,
+  shouldAdoptReload,
   teamsOf,
   type Membership,
 } from "../../src/access/membership";
@@ -111,5 +112,23 @@ describe("loadMembership", () => {
   });
   it("returns an empty membership when the file is absent", async () => {
     expect((await loadMembership(dir)).teams).toEqual([]);
+  });
+});
+
+describe("shouldAdoptReload (live-reload downgrade guard)", () => {
+  const withAdmin: Membership = { org: { slug: "o", admins: ["a@b.com"] }, teams: [], users: [] };
+  const noAdmin: Membership = { org: { slug: "o", admins: [] }, teams: [], users: [] };
+
+  it("adopts solo→team (gaining an admin turns auth ON — desired)", () => {
+    expect(shouldAdoptReload(noAdmin, withAdmin)).toBe(true);
+  });
+  it("adopts team→team (still has an admin)", () => {
+    expect(shouldAdoptReload(withAdmin, withAdmin)).toBe(true);
+  });
+  it("REFUSES team→solo (dropping the last admin would disable auth — the exposure-window guard)", () => {
+    expect(shouldAdoptReload(withAdmin, noAdmin)).toBe(false);
+  });
+  it("adopts solo→solo (nothing to protect)", () => {
+    expect(shouldAdoptReload(noAdmin, noAdmin)).toBe(true);
   });
 });

@@ -21,7 +21,21 @@ export function openIndexDb(path: string, config: IndexConfig): Db {
   if (path !== ":memory:") db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.transaction(() => {
+    // A virtual table's tokenizer is fixed at CREATE; `CREATE ... IF NOT EXISTS` won't change an
+    // existing facts_fts. So when an older index is opened, drop facts_fts + its sync triggers,
+    // let SCHEMA_SQL recreate them with the current tokenizer, then rebuild the FTS index from the
+    // (untouched) content table. The `facts` rows survive — only the derived FTS index is rebuilt.
+    const prior = readStoredSchemaVersion(db);
+    const ftsMigration = prior !== null && prior < SCHEMA_VERSION;
+    if (ftsMigration) {
+      db.exec(
+        "DROP TRIGGER IF EXISTS facts_ai; DROP TRIGGER IF EXISTS facts_ad; DROP TRIGGER IF EXISTS facts_au; DROP TABLE IF EXISTS facts_fts;",
+      );
+    }
     db.exec(SCHEMA_SQL);
+    if (ftsMigration) {
+      db.exec("INSERT INTO facts_fts(facts_fts) VALUES('rebuild');");
+    }
     if (config.provider !== "none" && config.dimensions > 0) {
       db.exec(vecTableSql(config.dimensions));
     }
@@ -33,6 +47,18 @@ export function openIndexDb(path: string, config: IndexConfig): Db {
     set.run("embed_dimensions", String(config.dimensions));
   })();
   return db;
+}
+
+/** The schema_version stored in a pre-existing index, or null when the table isn't there yet. */
+function readStoredSchemaVersion(db: Db): number | null {
+  try {
+    const row = db.prepare("SELECT value FROM schema_meta WHERE key='schema_version'").get() as
+      | { value: string }
+      | undefined;
+    return row ? Number(row.value) : null;
+  } catch {
+    return null; // schema_meta doesn't exist yet (fresh database)
+  }
 }
 
 /** True when the stored embedding space differs from the configured one (forces rebuild). */

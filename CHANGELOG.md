@@ -4,6 +4,69 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.38] — 2026-05-28 — team mode activates live from members.yaml (no restart)
+
+`krimto team init` printed "🟢 Team mode is live" but the running HTTP server stayed in **solo
+mode** (no auth) — verified on a user's machine: `members.yaml` listed an admin yet `GET /mcp`
+returned 406 (handler reached, no auth) instead of 401, and `/ui` still showed the old solo user.
+Root cause: the server decided solo-vs-team **once at boot** from an env var and never re-checked,
+and the wizard's "live" claim was based only on a TCP port probe. **The file is now the switch.**
+
+### Changed — team mode is derived LIVE from membership
+
+- The server's auth gate is now a per-request predicate: **any org admin in `members.yaml` ⇒ team
+  mode** (`hasOrgAdmin`), plus the explicit `KRIMTO_REQUIRE_AUTH=1` override. `KRIMTO_BOOTSTRAP_ADMIN`
+  still works (it seeds an admin at boot). The four previously boot-time decisions in
+  `src/server/http.ts` — the `/mcp` auth chain, the `/admin` mount, the `/mcp` requester resolver,
+  and the `/ui` login-vs-local-identity branch — are all evaluated **per request** now, so a flip
+  takes effect with no rebuild and no restart.
+- **New `MembershipWatcher`** (`src/server/membershipWatcher.ts`): the server polls
+  `members.yaml`'s mtime (~2s) and reloads membership when it changes. So `krimto team init`
+  (a separate CLI process) flips the running server into team mode on its own, within ~2s. Runs
+  unconditionally (solo→team), through the write serializer, stopped on shutdown.
+
+### Fixed — auth-off exposure window (security)
+
+`loadMembership` returns an empty membership on a failed/partial read — a mid-write read could
+momentarily drop admins to 0 and **disable auth**. The live reload now refuses to adopt a
+zero-admin parse when an admin currently exists (`shouldAdoptReload`): turning team mode OFF is a
+deliberate, restart-gated action, never a file-watch race. Read/parse failures keep the current
+membership.
+
+### Changed — `krimto team init` verifies instead of restarting
+
+Removed the fragile `maybeRestartServiceForTeamMode` (installService restart + TCP probe that
+printed "🟢 live" falsely). The wizard now **verifies** team mode is genuinely enforced —
+`confirmTeamModeLive` polls `/mcp` until it returns 401 — before printing "🟢 Team mode is live".
+On a confirmed flip it **auto-reconnects the admin's own editors** in team mode (reuses the
+`krimto join` path: HTTP transport + bearer header), so the admin's editor keeps working with no
+manual step. Honest guidance when no server is reachable ("start one — it reads members.yaml and
+comes up in team mode, no env var needed") or when it hasn't flipped yet.
+
+### Tests
+
+- `tests/integration/http.test.ts` — a mutable `teamModeActive` flips `/mcp` from open (solo) to
+  401 (team) on the **same app, no rebuild**.
+- `tests/server/membershipWatcher.test.ts` — fires once on mtime change, no-op when
+  absent/unchanged.
+- `tests/access/membership.test.ts` — `shouldAdoptReload` refuses team→solo downgrades (the
+  exposure-window guard).
+- `tests/integration/team-init.test.ts` — `confirmTeamModeLive` → live/timeout/no-server.
+
+### Changed — recall matches singular/plural (Porter stemmer)
+
+Also in this release: the FTS index now uses `tokenize='porter unicode61'`, so a singular query
+("favorite color") matches a plural-titled fact ("Favorite colors") — previously they were
+different tokens and the fact was invisible (caught in a smoke test where `krimto notes
+"favorite color"` returned nothing despite the fact existing). `openIndexDb` migrates an existing
+index (schema v1→v2): it drops + recreates `facts_fts` with the new tokenizer and FTS5-`rebuild`s
+it from the untouched content table, so existing `~/.krimto` installs pick up stemming on next
+start. Verified by `tests/index/db.test.ts` (migration) + `tests/retrieval/recall-quality.test.ts`
+(singular/plural). Deeper recall precision (semantic search) remains a separate initiative.
+
+Total: 662 unit + 334 integration passing. Lint + types clean. Out of scope: turning team mode
+OFF live (disband → solo) deliberately still requires a restart, so there's never an auth-off window.
+
 ## [0.2.37] — 2026-05-28 — recall-quality eval + write-time duplicate backstop
 
 The smoke-6 memory-quality audit. Across two editors (Claude Code wrote, Cursor read) the

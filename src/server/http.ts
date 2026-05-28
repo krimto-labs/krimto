@@ -38,8 +38,12 @@ export interface HttpAppDeps {
   rateLimiter?: RateLimiter;
   /** When set, mounts the admin-only membership/key API at /admin and enables /ui/admin. */
   admin?: AdminContext;
-  /** True = team mode (auth on /mcp + /ui login + /admin). False = local mode (no auth). */
-  requireAuth: boolean;
+  /**
+   * Live predicate for team mode (auth on /mcp + /ui login + /admin). Evaluated PER REQUEST, not
+   * captured once — so when `members.yaml` gains an admin the running server flips to team mode
+   * without a restart. True ⇒ enforce auth; false ⇒ local/solo mode (no auth).
+   */
+  teamModeActive: () => boolean;
   /** Live status snapshot for the /ui dashboard status panel. */
   status?: () => StatusPanelOpts;
   /** Called once, on the first request to /mcp (any verb). Powers the "🟢 client connected" boot hint. */
@@ -86,7 +90,7 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     // call. The resolver enriches the Requester with `source` so krimtoWrite can stamp facts
     // with "cursor" / "claude-code" / etc. when the caller didn't pass `source` explicitly.
     const source = userAgentToSource(req.get("User-Agent"));
-    const baseResolver = deps.requireAuth
+    const baseResolver = deps.teamModeActive()
       ? (extra: { authInfo?: AuthInfo }) => requesterFromAuth(extra.authInfo)
       : (() => deps.ctx.requester) as (extra: { authInfo?: AuthInfo }) => Requester;
     const resolver: (extra: { authInfo?: AuthInfo }) => Requester = source
@@ -116,15 +120,38 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
     }
     next();
   };
-  const mcpChain: RequestHandler[] = deps.requireAuth ? [auth, rateLimit] : [rateLimit];
-  app.post("/mcp", ...mcpChain, (req, res) => {
+  // Per-request gate: run bearer auth only when team mode is active right now. In solo mode the
+  // request falls straight through to rateLimit + handler (req.auth stays unset; rateLimit keys
+  // on "anonymous"). Mounted always so a live flip to team mode takes effect with no rebuild.
+  const maybeAuth: RequestHandler = (req, res, next) => {
+    if (deps.teamModeActive()) {
+      auth(req, res, next);
+    } else {
+      next();
+    }
+  };
+  app.post("/mcp", maybeAuth, rateLimit, (req, res) => {
     void handleMcp(req, res);
   });
-  app.get("/mcp", ...mcpChain, (req, res) => {
+  app.get("/mcp", maybeAuth, rateLimit, (req, res) => {
     void handleMcp(req, res);
   });
 
-  if (deps.requireAuth && deps.admin) app.use("/admin", auth, buildAdminRouter(deps.admin));
+  // /admin is mounted whenever an admin context exists, but each request is gated on live team
+  // mode: in solo mode it 404s (invisible), in team mode it requires the admin bearer key.
+  if (deps.admin) {
+    app.use(
+      "/admin",
+      (req, res, next) => {
+        if (deps.teamModeActive()) {
+          auth(req, res, next);
+        } else {
+          res.sendStatus(404);
+        }
+      },
+      buildAdminRouter(deps.admin),
+    );
+  }
 
   app.use(
     "/ui",
@@ -133,8 +160,9 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       keys: deps.keys,
       membership: deps.membership,
       sessionSecret: sessionConfigFromEnv().secret,
-      admin: deps.requireAuth ? deps.admin : undefined,
-      localIdentity: deps.requireAuth ? undefined : deps.ctx.requester.identity,
+      admin: deps.admin,
+      teamModeActive: deps.teamModeActive,
+      localIdentity: deps.ctx.requester.identity,
       status: deps.status,
     }),
   );

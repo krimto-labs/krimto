@@ -80,6 +80,21 @@ export function isOrgAdmin(m: Membership, email: string): boolean {
   return m.org.admins.includes(email);
 }
 
+/** True when the org has at least one admin — the live signal that team mode should be enforced. */
+export function hasOrgAdmin(m: Membership): boolean {
+  return m.org.admins.length > 0;
+}
+
+/**
+ * Guard for LIVE membership reloads: refuse to adopt a reload that would drop the last admin,
+ * because that silently turns auth OFF on a running server. A transient/mid-write read that
+ * momentarily parses zero admins must NOT open an auth-off window. Turning team mode off is a
+ * deliberate, restart-gated operator action — never an automatic side effect of a file watch.
+ */
+export function shouldAdoptReload(current: Membership, next: Membership): boolean {
+  return !(hasOrgAdmin(current) && !hasOrgAdmin(next));
+}
+
 export function isTeamLead(m: Membership, teamSlug: string, email: string): boolean {
   const team = m.teams.find((t) => t.slug === teamSlug);
   return team ? team.leads.includes(email) : false;
