@@ -3,7 +3,7 @@
 User-facing notes for each Krimto release. For the full technical changelog see
 [CHANGELOG.md](CHANGELOG.md).
 
-## v0.2 — shipped (v0.2.5 → v0.2.38, 2026-05-25 → 2026-05-28)
+## v0.2 — shipped (v0.2.5 → v0.2.39, 2026-05-25 → 2026-05-28)
 
 The first public release. Krimto is a **team memory layer** you can self-host with `npx`, `pnpm
 dev`, or the published Docker image at `ghcr.io/krimto-labs/krimto`:
@@ -19,7 +19,7 @@ wizard (`krimto init`); admin team setup becomes one wizard + one join command (
 / `krimto join`); `/ui` becomes a notes app (plain-English scope labels, inline Edit/Move/Delete);
 per-note CLI (`krimto edit / mv / supersede / tag / notes`).
 
-**v0.2.19 → v0.2.38 — correctness + agent-friendliness.** First-class teardown verbs (`krimto stop
+**v0.2.19 → v0.2.39 — correctness + agent-friendliness.** First-class teardown verbs (`krimto stop
 / start / restart / reset`); Phase B agent flags so every interactive command also has a
 non-interactive form (`editors --add`, `service --always`, `search --keyword`, `remote --set`,
 …); non-TTY guards so AI agents stop hanging on prompts they can't answer; `krimto whoami` CLI +

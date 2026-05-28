@@ -9,8 +9,8 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.38** is the current release — the v0.2.17 wizard redesign is now
-> shipped end-to-end, plus twenty-one patch releases of correctness fixes and agent-friendly
+> **Where we are:** **v0.2.39** is the current release — the v0.2.17 wizard redesign is now
+> shipped end-to-end, plus twenty-two patch releases of correctness fixes and agent-friendly
 > surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
 > hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
 > image, the web UI) is unchanged. What you get on top of v0.2.16:
@@ -41,7 +41,7 @@ timestamp, reviewer).
 >   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
 >   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
 >
-> **The agent story (v0.2.34 → v0.2.38).**
+> **The agent story (v0.2.34 → v0.2.39).**
 > - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
 >   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
 >   open an interactive prompt now has a flag form.
@@ -66,6 +66,10 @@ timestamp, reviewer).
 >   running server flips to team mode on its own within ~2s (it polls the file) — no restart, no
 >   env var. The wizard verifies auth is genuinely enforced before printing "🟢 live", and
 >   auto-reconnects the admin's own editor with their key.
+> - **Team init keeps your identity (v0.2.39)** — the admin defaults to the identity that already
+>   owns your notes (not git config), so going solo→team is an upgrade of your existing account,
+>   not a silent second one. Type a different email and it warns + offers a one-key "use your
+>   existing identity," so your notes never get orphaned by accident.
 >
 > See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
 > diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
@@ -511,7 +515,7 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 ## Roadmap
 
 `v0.2` (teams, v0.2.5) → `v0.2.18` (v0.2.17 wizard redesign — published as one SemVer-clean
-release) → `v0.2.38` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
+release) → `v0.2.39` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
 flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the per-release breakdown.
 
 ## License

@@ -33,9 +33,11 @@ vi.mock("@inquirer/prompts", () => ({
 }));
 
 import { createServer } from "node:http";
+import { FactStore } from "../../src/storage/store";
 import {
   applyTeamInit,
   confirmTeamModeLive,
+  detectNotesOwner,
   runTeamInit,
   type TeamInitAnswers,
 } from "../../src/cli/teamInit";
@@ -168,6 +170,22 @@ describe("applyTeamInit — pure apply step", () => {
   });
 });
 
+// detectNotesOwner finds the identity that already owns notes, so the wizard keeps it as the
+// admin instead of silently splitting the solo user into two identities.
+describe("detectNotesOwner", () => {
+  it("returns the user identity with the most notes", async () => {
+    const store = new FactStore(dataDir);
+    await store.writeFact({ scope: "user/old@x.com", title: "note one", body: "a", author: "old@x.com" });
+    await store.writeFact({ scope: "user/old@x.com", title: "note two", body: "b", author: "old@x.com" });
+    await store.writeFact({ scope: "user/other@x.com", title: "note three", body: "c", author: "other@x.com" });
+    expect(await detectNotesOwner(dataDir)).toEqual({ email: "old@x.com", factCount: 2 });
+  });
+
+  it("returns null when no user notes exist", async () => {
+    expect(await detectNotesOwner(dataDir)).toBeNull();
+  });
+});
+
 // Live activation replaces the v0.2.36 restart dance: members.yaml is the switch, and the wizard
 // only VERIFIES the running server flipped (polls /mcp for 401) instead of restarting anything.
 describe("confirmTeamModeLive", () => {
@@ -285,6 +303,55 @@ describe("runTeamInit — interactive flow", () => {
     expect(io.stdout.join("")).toContain("No changes made");
     // members.yaml shouldn't exist — nothing was applied.
     await expect(fs.access(path.join(dataDir, ".krimto", "members.yaml"))).rejects.toThrow();
+  });
+
+  const divergeMsg = (count: number, email: string): string =>
+    `confirm:You have ${count} note${count === 1 ? "" : "s"} saved as ${email}. ` +
+    `Use that as your admin so they come with you? ` +
+    `(otherwise they stay private to ${email} and the admin won't see them)`;
+
+  function queueRemainingTeamQuestions(): void {
+    promptQueue.push({
+      name: 'input:What\'s your team called? (lowercase slug — e.g. "backend", "infra", "growth")',
+      value: "backend",
+    });
+    promptQueue.push({ name: 'input:Team display name (optional — press Enter to use "backend")', value: "" });
+    promptQueue.push({ name: "select:Set up a shared git remote for cross-machine sync?", value: "later" });
+    promptQueue.push({ name: "input:Invite teammates now? (comma-separated emails, or press Enter to skip)", value: "" });
+    promptQueue.push({ name: "confirm:Apply this setup?", value: true });
+  }
+
+  it("diverging admin email + 'use existing' → keeps the notes-owner as admin", async () => {
+    const store = new FactStore(dataDir);
+    await store.writeFact({ scope: "user/old@x.com", title: "n1", body: "a", author: "old@x.com" });
+    await store.writeFact({ scope: "user/old@x.com", title: "n2", body: "b", author: "old@x.com" });
+    const io = captureIO();
+    promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: "new@y.com" });
+    promptQueue.push({ name: divergeMsg(2, "old@x.com"), value: true }); // "use old@x.com instead"
+    queueRemainingTeamQuestions();
+
+    const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
+    expect(res?.adminEmail).toBe("old@x.com");
+    const parsed = parseYaml(await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8")) as MembersYaml;
+    expect(parsed.org?.admins).toContain("old@x.com");
+    expect(parsed.org?.admins).not.toContain("new@y.com");
+  });
+
+  it("diverging admin email + decline → keeps the typed admin and prints migration guidance", async () => {
+    const store = new FactStore(dataDir);
+    await store.writeFact({ scope: "user/old@x.com", title: "n1", body: "a", author: "old@x.com" });
+    await store.writeFact({ scope: "user/old@x.com", title: "n2", body: "b", author: "old@x.com" });
+    const io = captureIO();
+    promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: "new@y.com" });
+    promptQueue.push({ name: divergeMsg(2, "old@x.com"), value: false }); // proceed with new@y.com
+    queueRemainingTeamQuestions();
+
+    const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
+    expect(res?.adminEmail).toBe("new@y.com");
+    const out = io.stdout.join("");
+    expect(out).toContain("stay private to");
+    expect(out).toContain("old@x.com");
+    expect(out).toContain("krimto mv");
   });
 
   it("Ctrl-C at the first prompt exits 130 with no writes", async () => {

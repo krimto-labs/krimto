@@ -20,7 +20,9 @@ import * as path from "node:path";
 
 import { ApiKeyStore } from "../access/auth";
 import { addUser, createTeam } from "../access/membershipStore";
+import { parseScope } from "../access/scope";
 import { bootstrapAdmin } from "../server/bootstrap";
+import { FactStore } from "../storage/store";
 import { defaultIdentity } from "./init";
 import { applyJoin } from "./join";
 import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
@@ -239,7 +241,29 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
   try {
     printPreamble(dataDir, io);
 
-    const adminEmail = await askAdminEmail();
+    // Detect the identity that already owns notes so we keep it as the admin by default — going
+    // solo→team is an UPGRADE of your existing identity, not a fresh second account.
+    const notesOwner = await detectNotesOwner(dataDir);
+    let adminEmail = await askAdminEmail(notesOwner);
+
+    // Divergence guard: if the chosen admin differs from the identity that owns notes, those notes
+    // would be private to the old identity and invisible to the admin. Offer the one-key fix.
+    let divergedFrom: NotesOwner | null = null;
+    if (notesOwner && notesOwner.email !== adminEmail) {
+      const useExisting = await confirm({
+        message:
+          `You have ${notesOwner.factCount} note${notesOwner.factCount === 1 ? "" : "s"} saved as ` +
+          `${notesOwner.email}. Use that as your admin so they come with you? ` +
+          `(otherwise they stay private to ${notesOwner.email} and the admin won't see them)`,
+        default: true,
+      });
+      if (useExisting) {
+        adminEmail = notesOwner.email;
+      } else {
+        divergedFrom = notesOwner;
+      }
+    }
+
     const teamSlug = await askTeamSlug();
     const teamName = await askTeamName(teamSlug);
     const gitRemote = await askGitRemote(io);
@@ -282,7 +306,7 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
       }
     }
 
-    printApplyResult(result, io, { live, reconnected });
+    printApplyResult(result, io, { live, reconnected, divergedFrom });
     return result;
   } catch (e) {
     if (isExitPrompt(e)) {
@@ -296,8 +320,31 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
 
 // === Question functions ====================================================
 
-async function askAdminEmail(): Promise<string> {
-  const fallback = await defaultIdentity();
+/** The identity that already owns notes in this data dir (the solo user's pre-team self). */
+export interface NotesOwner {
+  email: string;
+  factCount: number;
+}
+
+/**
+ * Detect which identity owns existing notes, so the wizard can keep it as the admin (and not
+ * silently split the solo user into two identities whose notes the admin can't read). Scans the
+ * `user/<email>` scopes and returns the one with the most notes, or null when there are none.
+ */
+export async function detectNotesOwner(dataDir: string): Promise<NotesOwner | null> {
+  const scopes = await new FactStore(dataDir).listScopes();
+  const owners = scopes
+    .filter((s) => s.path.startsWith("user/") && s.factCount > 0)
+    .map((s) => ({ email: parseScope(s.path)?.id ?? "", factCount: s.factCount }))
+    .filter((o) => o.email.length > 0)
+    .sort((a, b) => b.factCount - a.factCount);
+  return owners[0] ?? null;
+}
+
+/** Ask for the admin email, defaulting to the identity that already owns notes (so hitting Enter
+ *  keeps the solo user's identity), or git config when there are none. */
+async function askAdminEmail(notesOwner: NotesOwner | null): Promise<string> {
+  const fallback = notesOwner?.email ?? (await defaultIdentity());
   return input({
     message: "What's your email? (this becomes the admin account)",
     default: fallback === "you@acme.com" ? undefined : fallback,
@@ -426,7 +473,7 @@ function printSummary(a: TeamInitAnswers, io: WizardIO): void {
 function printApplyResult(
   res: TeamInitResult,
   io: WizardIO,
-  status: { live: LiveOutcome; reconnected: boolean },
+  status: { live: LiveOutcome; reconnected: boolean; divergedFrom: NotesOwner | null },
 ): void {
   io.out("  ✓ Admin promoted + members.yaml updated\n");
   io.out(`  ✓ Team "${res.teamSlug}" created\n`);
@@ -474,6 +521,19 @@ function printApplyResult(
     io.out("━━ Backup ━━\n\n");
     io.out(`  All keys + the DM template are also saved to:\n    ${res.inviteFilePath}\n`);
     io.out(`  (mode 0600 — read by you only. Delete it once teammates have their keys.)\n\n`);
+  }
+
+  // The user chose an admin email different from the identity that owns their existing notes, so
+  // those notes stay private to the old identity. Tell them exactly how to bring them over.
+  if (status.divergedFrom) {
+    const d = status.divergedFrom;
+    io.out("━━ Heads up: your earlier notes ━━\n\n");
+    io.out(`  Your ${d.factCount} note${d.factCount === 1 ? "" : "s"} saved as ${d.email} stay private to\n`);
+    io.out(`  ${d.email} — the admin ${res.adminEmail} can't see them. To bring them over:\n`);
+    io.out(`    1. krimto stop\n`);
+    io.out(`    2. krimto mv <id> user/${res.adminEmail}   (per note — \`krimto notes\` lists ids)\n`);
+    io.out(`       …or move them to the team scope so everyone sees them.\n`);
+    io.out(`    3. start the server again\n\n`);
   }
 
   // The "Next" block reflects the VERIFIED state of the running server (members.yaml is the

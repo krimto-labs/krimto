@@ -4,6 +4,38 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.39] — 2026-05-28 — team init keeps your identity (no accidental solo→team split)
+
+A solo user's notes live under `user/<their-email>/`. When `krimto team init` defaulted the admin
+email to `git config user.email` (or the user typed a different address), they could end up with
+**two identities** — and since `user/<email>` scopes are private to that exact email, the new admin
+couldn't see their own prior notes. Verified: notes under `user/lpdthemes@gmail.com` invisible to
+admin `mrbuiko@me.com`. The privacy rule is correct; the **silent split** was the bug.
+
+### Changed — the admin defaults to the identity that already owns notes
+
+`krimto team init` now scans the data dir for the `user/<email>` scope with the most notes
+(`detectNotesOwner`) and defaults the admin email to it — so hitting Enter **keeps your identity
+and all its notes**. Falls back to `git config user.email` only when there are no existing notes.
+
+### Added — divergence guard + migration guidance
+
+If you type an admin email that differs from the identity that owns notes, the wizard asks:
+*"You have N notes saved as `<owner>`. Use that as your admin so they come with you?"* (default
+Yes). Decline and it proceeds with your chosen admin **and** prints exactly how to bring the old
+notes over later (`krimto stop` → `krimto mv <id> user/<admin>` per note, or promote to the team
+scope). Going solo→team is now an upgrade of your existing identity, not a silent second account.
+
+### Tests
+
+- `tests/integration/team-init.test.ts` — `detectNotesOwner` returns the dominant user identity
+  (null when none); diverging admin + "use existing" keeps the notes-owner; diverging + decline
+  keeps the typed admin and prints the migration guidance.
+
+Total: 666 unit + 338 integration passing. Lint + types clean. **No note files are moved** —
+migrating notes between identities while a server runs is unsafe (`krimto mv` blocks on the lock);
+that stays a deliberate, separate step. This is a prevention fix.
+
 ## [0.2.38] — 2026-05-28 — team mode activates live from members.yaml (no restart)
 
 `krimto team init` printed "🟢 Team mode is live" but the running HTTP server stayed in **solo
