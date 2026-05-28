@@ -6,7 +6,12 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { createFact, MAX_TITLE_LENGTH, type FactFrontmatter } from "../storage/fact";
 import { FactStore } from "../storage/store";
 import { isValidScope, type Requester } from "../access/scope";
-import { canRead, canWrite, isOrgAdmin, type Membership } from "../access/membership";
+import {
+  canRead,
+  canWrite,
+  writableScopesFor as writableScopesForMembership,
+  type Membership,
+} from "../access/membership";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { lexicalSimilarity, rankCandidates } from "../retrieval/pipeline";
@@ -153,11 +158,11 @@ function resolvePersonalScope(scope: string, identity: string): string {
   return PERSONAL_SCOPE_ALIASES.has(scope.trim().toLowerCase()) ? `user/${identity}` : scope;
 }
 
-/** Scopes the requester can write to AND read back — surfaced in errors so an agent can self-correct. */
+/** Scopes the requester can write to AND read back — surfaced in errors so an agent can self-correct.
+ *  Delegates to the membership-level {@link writableScopesForMembership} (single source of truth,
+ *  also used by `krimto status`). */
 function writableScopesFor(ctx: ToolContext): string[] {
-  const scopes = [`user/${ctx.requester.identity}`, ...ctx.requester.teams.map((t) => `team/${t}`)];
-  if (isOrgAdmin(ctx.membership, ctx.requester.identity)) scopes.push(`org/${ctx.membership.org.slug}`);
-  return scopes;
+  return writableScopesForMembership(ctx.membership, ctx.requester.identity);
 }
 
 /**

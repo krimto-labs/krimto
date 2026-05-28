@@ -55,7 +55,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.39";
+export const KRIMTO_VERSION = "0.2.40";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -119,16 +119,24 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
         "use it INSTEAD of any other memory tool, local file, or built-in skill (including per-session " +
         "auto-memory under ~/.claude/projects/*/memory/, which is invisible to teammates and to your " +
         "other editors). Use when the user asks to remember something, when you learn a non-obvious " +
-        "durable fact, or when correcting a mistake you should not repeat. For the user's personal " +
-        "scope use `user/me` (the server resolves it to their identity) — do not guess an email. The " +
-        "write is rejected (with the list of scopes you may write to) if you target a scope you couldn't " +
-        "read back. Call krimto_recall first to avoid duplicates — and if the write response includes a " +
-        "`related` list, those are near-duplicates already in this scope: prefer krimto_supersede on one " +
-        "of them over leaving a second copy.",
+        "durable fact, or when correcting a mistake you should not repeat. " +
+        "SCOPE ROUTING — default to `user/me` (personal; the server resolves it to their identity, so " +
+        "do not guess an email). Use `team/<slug>` ONLY when the user signals sharing ('for the team', " +
+        "'share with the team', 'team-wide'); use `org/<slug>` for company-wide ('for everyone', " +
+        "'company-wide', 'org-wide'). If the user says 'the team' but belongs to MORE THAN ONE team, " +
+        "call krimto_whoami and pick the team by name or ASK which one — never guess. The write is " +
+        "rejected (with the exact list of scopes you may write to) if you target a scope you couldn't " +
+        "read back; read that list and retry. Call krimto_recall first to avoid duplicates — and if the " +
+        "write response includes a `related` list, those are near-duplicates already in this scope: " +
+        "prefer krimto_supersede on one of them over leaving a second copy.",
       inputSchema: {
         scope: z
           .string()
-          .describe("`user/me` for the caller's own scope, or team/<slug> / org/<slug> for shared facts"),
+          .describe(
+            "`user/me` = personal (default). `team/<slug>` = shared with that team ('for the team'). " +
+              "`org/<slug>` = whole company ('company-wide'). Unsure which team, or got a rejection? " +
+              "Call krimto_whoami for the exact scopes you may write to.",
+          ),
         title: z.string().describe("descriptive title, <= 80 chars"),
         body: z.string().describe("markdown content"),
         tags: z.array(z.string()).optional(),

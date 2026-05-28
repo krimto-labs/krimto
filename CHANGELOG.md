@@ -4,6 +4,133 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.40] — 2026-05-28 — Team UX hardening: visibility + safety + lifecycle clarity + agent-safe setup + frictionless saves + org naming
+
+Real testing showed the "Team" lifecycle had confusing and dangerous edges: no way to see team
+state, `team disband` sounds team-wide but is per-machine, `krimto reset` silently wipes the keys
+all teammates log in with, and `krimto stop` on a host silently disconnects everyone. On top of
+that, the team commands weren't agent-safe — an AI agent could set up *solo* Krimto unattended but
+could not set up a *team* at all. This release makes the team model visible, guards the destructive
+actions, and brings team setup to the same no-TTY bar as solo. No change to the on-disk model,
+auth, or live activation — CLI/UX layer only.
+
+### Added — `krimto team status`
+
+New command (and a Team block in `krimto status`) showing: team mode on/off, your role, the
+admins, the member count, and — crucially — **whether THIS machine is the team server everyone
+depends on**, plus its URL. Built on a shared `buildTeamSummary` (`src/cli/teamSummary.ts`,
+composing `loadMembership` + the lock) so the two surfaces can't drift.
+
+### Added — safety guards on the footguns
+
+- **`krimto reset`** now detects team mode and warns **"🛑 TEAM MODE IS ACTIVE — this wipes the
+  API-key store your team logs in with; all N members get locked out"** before the (default-No)
+  confirm. Previously it silently deleted `keys.json`, locking out the whole team with no notice.
+- **`krimto stop`** now refuses (or, in a TTY, confirms) when this machine is the team server,
+  naming how many teammates it would disconnect. `--yes` bypasses for scripts; solo stop is
+  unchanged (no prompt).
+
+### Changed — `team disband` clarity + reconnect
+
+`disband` now leads with **"This only changed THIS machine. The team is unaffected — members.yaml,
+the keys, and the running server all stay; your teammates keep their access."** It captures the
+server URL it disconnected from and prints the exact reconnect command
+(`krimto join --server <url> --key <your-key>`), and tells an admin that the server keeps running
+(`krimto stop` takes it down for everyone).
+
+### Added — `krimto team leave`
+
+The verb a joined teammate reaches for: same per-machine editor rewrite as disband, but framed for
+the joiner — *"you're still in the team's roster; ask the admin to remove you (/ui/admin) to fully
+leave."* Reuses `applyTeamDisband` (one implementation, two discoverable names).
+
+### Added — agent-safe team setup (no TTY)
+
+Team commands now reach the same agent-friendly bar as solo's `krimto init --yes`. Previously an AI
+agent (a no-keyboard shell) could stand up solo Krimto unattended but **could not set up a team at
+all** — `team init` always asked 5 questions and hung on the first.
+
+- **`krimto team init --yes --team <slug>`** — new non-interactive form. Flags: `--admin <email>`
+  (defaults to the identity that already owns your notes, then git config — same continuity as the
+  wizard), `--name <display>`, `--remote <git-url>`, and `--invite a@x.com,b@x.com` (comma-separated
+  and/or repeatable). Validates with the same rules the prompts use (`SLUG_RE` / `EMAIL_RE` /
+  `looksLikeRemoteUrl`) and reuses the existing `applyTeamInit` + live-verify + admin-reconnect path
+  (extracted into a shared `finishTeamInit` so interactive and `--yes` can't drift). `team init`
+  with no TTY and no `--yes` now prints the flag usage and exits 2 instead of hanging.
+- **`krimto team disband` / `team leave`** gained the non-TTY guard the other Phase-B commands have:
+  with no TTY and no `--yes` they print `re-run with --yes` and bail (return null, not `process.exit`)
+  instead of hanging on the confirm.
+- **`krimto --help`** now lists `team status` and `team leave` (previously absent) and shows the
+  `team init --yes` form in the "For AI agents" block.
+
+### Fixed — the team creator can now write team notes
+
+`applyTeamInit` added *teammates* to the team's `members` but never the **creator** — so the admin
+was an org-admin who wasn't a team member: `krimto_write` to `team/<slug>` passed the write check but
+failed the read-back/ghost-fact guard (*"you would not be able to read it back"*), and the user had
+to hand-edit `members.yaml`. The creator is now added as a team member at init (one
+`setTeamMember` call, after `createTeam` so the team name is preserved), so "remember for the team"
+works for them immediately. Idempotent — re-running `team init` heals existing setups. `member_count`
+is unchanged (the admin was already in `users`).
+
+### Added — discoverable scope routing (no syntax to memorize)
+
+Saving to a scope is driven by how you phrase it to your AI ("remember for the team …"), but nothing
+surfaced the phrasings. Now:
+
+- **`krimto_write`'s tool description + `scope` param** spell out the routing the agent reads:
+  default `user/me`; `team/<slug>` on "for the team"; `org/<slug>` on "company-wide"; and — when the
+  user is in **multiple teams** — call `krimto_whoami` and name/ask the team rather than guess.
+- **The standing rule (`AGENT_RULE`)** carries the same routing + multi-team guidance.
+- **`krimto team init`** ends with a "How to save notes" guide (personal / this team / company-wide),
+  and **`krimto team status`** shows your exact **Save targets** — one line per writable scope, so a
+  multi-team member sees each team spelled out (which teaches naming the team). It also nudges an
+  org-admin who isn't a member of an existing team (legacy setups) with the one-command fix.
+- A pure **`writableScopesFor(membership, identity)`** in `src/access/membership.ts` is now the single
+  source of truth for "where can I save?", reused by the `krimto_write` error payload and `team status`.
+
+### Added — name your organization (no more `org/default`)
+
+The org scope was a meaningless `org/default` because nothing ever captured the organization's
+identity (`org.slug` was hard-coded to `"default"`; `org.name` was in the data model but never set
+or shown). Now:
+
+- **`krimto team init`** asks **"What's your organization called?"** (interactive) and accepts
+  **`--org "<name>"`** (non-interactive). The path-safe slug is derived from the name you typed via
+  the existing `slugifyTitle` (`"Acme Inc" → org/acme-inc`) — no guessing from git remotes or email
+  domains. A new `setOrg` (`src/access/membershipStore.ts`) persists `org.name` + `org.slug`.
+- **The friendly name is shown, never the raw slug.** `team status` Save targets render
+  `→ Acme Inc (whole org)`; an unnamed org shows `your whole org` + the exact command to name it
+  (`krimto team init --org "Your Company"`), and `team init`'s success guide does the same.
+- **Migration-safe:** the slug is only adopted when the current `org/<slug>` has no notes yet
+  (the normal first-naming case); if company-wide notes already exist, only the display name is set
+  so nothing is orphaned. Renaming a populated org scope is left to a future migration.
+
+### Tests
+
+- `tests/integration/team-status.test.ts` — `buildTeamSummary` (solo/team/role/member-count/hostedHere)
+  + `runTeamStatus` output.
+- `tests/integration/team-safety.test.ts` — reset shows the lockout warning in team mode (not solo);
+  stop refuses without `--yes` when hosting a team, naming the disconnect.
+- `tests/integration/team-disband.test.ts` — disband captures the URL + prints the reconnect command;
+  `team leave` prints the "still in the roster" guidance; the non-TTY guard returns null + `--yes`
+  usage for both `disband` and `leave`, and `--yes` still bypasses.
+- `tests/integration/team-init.test.ts` — `runTeamInitNonInteractive` applies from flags with no
+  prompts, defaults the admin to the notes-owner when `--admin` is omitted, prints migration guidance
+  on a divergent explicit admin, and rejects a missing/invalid slug or a bad invite email; the
+  creator is added to the team (`canWrite` ∩ `canRead` on `team/<slug>`); the success screen shows
+  the "How to save notes" guide.
+- `tests/server/access.test.ts` — `writableScopesFor` (solo → own user; multi-team → each team; admin
+  → +org). `tests/integration/team-status.test.ts` — `Save targets` per writable scope + the
+  admin-not-member nudge; named org shows its name (not the raw slug), unnamed shows the name-it
+  command. `tests/agentRule.test.ts` — scope-routing + multi-team disambiguation text.
+- `tests/integration/team-init.test.ts` (org naming) — `applyTeamInit` sets `org.name` + derives the
+  slug; leaves `default` when unnamed; keeps the slug (no orphaning) when org notes already exist;
+  the interactive prompt + `--org` flag both capture it.
+
+Total: 701 tests passing (vitest run). Lint + types clean. Deferred (bigger/separate):
+reachable-URL detection / `team set-server-url`, self-service roster removal, key-recovery overhaul.
+
 ## [0.2.39] — 2026-05-28 — team init keeps your identity (no accidental solo→team split)
 
 A solo user's notes live under `user/<their-email>/`. When `krimto team init` defaulted the admin

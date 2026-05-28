@@ -19,9 +19,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { ApiKeyStore } from "../access/auth";
-import { addUser, createTeam } from "../access/membershipStore";
+import { loadMembership } from "../access/membership";
+import { addUser, createTeam, setOrg, setTeamMember } from "../access/membershipStore";
 import { parseScope } from "../access/scope";
 import { bootstrapAdmin } from "../server/bootstrap";
+import { slugifyTitle } from "../storage/fact";
 import { FactStore } from "../storage/store";
 import { defaultIdentity } from "./init";
 import { applyJoin } from "./join";
@@ -31,6 +33,9 @@ import { looksLikeRemoteUrl, runSetupRemote } from "./setupRemote";
 /** Everything the wizard collects before it calls {@link applyTeamInit}. */
 export interface TeamInitAnswers {
   adminEmail: string;
+  /** Optional human-readable organization name. Sets `org.name` + derives `org.slug` (replacing the
+   *  `default` placeholder) so company-wide notes read as "Acme Inc" instead of `org/default`. */
+  orgName?: string;
   teamSlug: string;
   /** Optional human-readable display name for the team. Falls back to the slug. */
   teamName?: string;
@@ -52,6 +57,10 @@ export interface TeamInitResult {
   adminEmail: string;
   /** The admin's plaintext key. Shown once. Null when the admin already had one. */
   adminKey: string | null;
+  /** The org's display name, when set. */
+  orgName?: string;
+  /** The org's resolved slug (the `org/<slug>` path) — `"default"` until the org is named. */
+  orgSlug: string;
   teamSlug: string;
   teamName?: string;
   /** Set when a remote URL was provided; reports whether the test push worked. */
@@ -98,8 +107,8 @@ export interface TeamInitOptions {
  */
 export type LiveOutcome = "live" | "no-server" | "timeout";
 
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
-const EMAIL_RE = /^[^@\s]+@[^@\s]+$/;
+export const SLUG_RE = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
+export const EMAIL_RE = /^[^@\s]+@[^@\s]+$/;
 
 // === Pure apply step =======================================================
 
@@ -125,6 +134,28 @@ export async function applyTeamInit(
 
   // 2. Create the team. `createTeam` is idempotent.
   await createTeam(dataDir, answers.teamSlug, answers.teamName);
+  // The creator is a working member of the team they just made — add them so they can read/write
+  // team notes immediately. Without this they're an org-admin who isn't a team member: canWrite is
+  // true but canRead is false, so krimtoWrite's ghost-fact guard refuses ("you would not be able to
+  // read it back"). Done AFTER createTeam so the team's display name is preserved. Idempotent.
+  await setTeamMember(dataDir, answers.teamSlug, answers.adminEmail, true);
+
+  // 2b. Name the organization, replacing the meaningless `org/default` placeholder. We derive a
+  // path-safe slug from the name the user typed (NOT a guess from git/email). The slug is the
+  // folder for company-wide notes, so we only adopt a new slug when the current org scope has no
+  // notes yet — otherwise we'd orphan them; in that case we update the display name only.
+  if (answers.orgName) {
+    const current = await loadMembership(dataDir);
+    const desiredSlug = slugifyTitle(answers.orgName);
+    const orgHasNotes = (await new FactStore(dataDir).listScopes()).some(
+      (s) => s.path === `org/${current.org.slug}` && s.factCount > 0,
+    );
+    if (SLUG_RE.test(desiredSlug) && !orgHasNotes) {
+      await setOrg(dataDir, { name: answers.orgName, slug: desiredSlug });
+    } else {
+      await setOrg(dataDir, { name: answers.orgName });
+    }
+  }
 
   // 3. Invite each teammate: add them to members.yaml + issue a key.
   const invites: InviteRecord[] = [];
@@ -167,9 +198,14 @@ export async function applyTeamInit(
     });
   }
 
+  // Read back the final org identity so callers can display the name + resolved slug.
+  const finalOrg = (await loadMembership(dataDir)).org;
+
   return {
     adminEmail: answers.adminEmail,
     adminKey,
+    ...(finalOrg.name ? { orgName: finalOrg.name } : {}),
+    orgSlug: finalOrg.slug,
     teamSlug: answers.teamSlug,
     teamName: answers.teamName,
     remote,
@@ -264,12 +300,13 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
       }
     }
 
+    const orgName = await askOrgName();
     const teamSlug = await askTeamSlug();
     const teamName = await askTeamName(teamSlug);
     const gitRemote = await askGitRemote(io);
     const teammates = await askTeammates();
 
-    printSummary({ adminEmail, teamSlug, teamName, gitRemote, teammates }, io);
+    printSummary({ adminEmail, orgName, teamSlug, teamName, gitRemote, teammates }, io);
     const ok = await confirm({ message: "Apply this setup?", default: true });
     if (!ok) {
       io.out("\nNo changes made.\n");
@@ -278,35 +315,10 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
 
     io.out("\nSetting up team mode...\n");
     const result = await applyTeamInit(
-      { adminEmail, teamSlug, teamName, gitRemote, teammates },
+      { adminEmail, orgName, teamSlug, teamName, gitRemote, teammates },
       opts,
     );
-
-    // No restart, no env var: writing members.yaml IS the switch. The running server polls the
-    // file (~2s) and flips to team mode on its own. We just VERIFY it actually happened — poll
-    // /mcp for a 401 — instead of the old TCP probe that falsely printed "🟢 live".
-    const live = await (opts.confirmLive ?? confirmTeamModeLive)(result.serverHost);
-
-    // When team mode is confirmed live, reconnect the admin's OWN editors in team mode (their
-    // solo/no-key connection would otherwise start getting 401s). Reuses the teammate join path.
-    let reconnected = false;
-    if (live === "live" && result.adminKey) {
-      try {
-        const join = await applyJoin(
-          { server: `http://${result.serverHost}`, key: result.adminKey },
-          {
-            cwd: process.cwd(),
-            ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
-            ...(opts.dryRun ? { dryRun: opts.dryRun } : {}),
-          },
-        );
-        reconnected = join.editorOutcomes.some((o) => o.mcpAction !== "manual");
-      } catch {
-        /* best-effort — the admin can run `krimto join` manually if this fails */
-      }
-    }
-
-    printApplyResult(result, io, { live, reconnected, divergedFrom });
+    await finishTeamInit(result, opts, divergedFrom);
     return result;
   } catch (e) {
     if (isExitPrompt(e)) {
@@ -316,6 +328,119 @@ export async function runTeamInit(opts: TeamInitOptions = {}): Promise<TeamInitR
     }
     throw e;
   }
+}
+
+// === Non-interactive entry point (agent-safe `--yes` form) ==================
+
+/** Flag inputs collected by `bin/krimto.mjs` for `team init --yes ...`. All optional except the
+ *  team slug (enforced at runtime) — the rest default the same way the interactive wizard would. */
+export interface TeamInitFlags {
+  adminEmail?: string;
+  orgName?: string;
+  teamSlug?: string;
+  teamName?: string;
+  gitRemote?: string;
+  teammates?: string[];
+}
+
+/**
+ * The agent-safe twin of {@link runTeamInit}: build the answers from flags instead of prompts, then
+ * apply. This is what `krimto team init --yes --team <slug> [--admin … --invite a,b]` calls so an AI
+ * agent can stand a team up unattended — the same bar solo already has via `krimto init --yes`.
+ *
+ * Validates with the SAME rules the prompts use ({@link SLUG_RE}, {@link EMAIL_RE},
+ * {@link looksLikeRemoteUrl}); throws on the first bad input so the bin's top-level catch prints it.
+ * The admin defaults to the identity that already owns notes (solo→team continuity) then git config.
+ */
+export async function runTeamInitNonInteractive(
+  opts: TeamInitOptions & TeamInitFlags,
+): Promise<TeamInitResult> {
+  const io = opts.io ?? defaultIO;
+  const dataDir = opts.dataDir ?? path.join(os.homedir(), ".krimto");
+
+  // Team slug is the one truly required input — there's no sensible default for a team's name.
+  const teamSlug = opts.teamSlug?.trim();
+  if (!teamSlug) {
+    throw new Error("team init --yes requires --team <slug> (e.g. --team backend)");
+  }
+  if (!SLUG_RE.test(teamSlug)) {
+    throw new Error(
+      `Invalid team slug "${teamSlug}" — use lowercase letters, digits, dashes or underscores only`,
+    );
+  }
+
+  // Admin defaults to the notes-owner (keeps the solo user's identity), then git config. An
+  // explicit --admin that differs from the notes-owner is honored, but we flag the divergence so
+  // those earlier notes aren't silently orphaned (the printed guidance shows how to bring them).
+  const notesOwner = await detectNotesOwner(dataDir);
+  const explicitAdmin = opts.adminEmail?.trim();
+  const adminEmail = explicitAdmin || notesOwner?.email || (await defaultIdentity());
+  if (!EMAIL_RE.test(adminEmail)) {
+    throw new Error(`Invalid admin email "${adminEmail}" — expected name@domain`);
+  }
+  const divergedFrom =
+    explicitAdmin && notesOwner && notesOwner.email !== adminEmail ? notesOwner : null;
+
+  const teammates = (opts.teammates ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+  const badEmails = teammates.filter((e) => !EMAIL_RE.test(e));
+  if (badEmails.length > 0) {
+    throw new Error(`These don't look like emails: ${badEmails.join(", ")}`);
+  }
+
+  const gitRemote = opts.gitRemote?.trim() || undefined;
+  if (gitRemote && !looksLikeRemoteUrl(gitRemote)) {
+    throw new Error(
+      `Invalid git remote "${gitRemote}" — must start with git@, https://, http://, ssh://, file://, or /`,
+    );
+  }
+  const teamName = opts.teamName?.trim() || undefined;
+  const orgName = opts.orgName?.trim() || undefined;
+
+  io.out("\nSetting up team mode (non-interactive)...\n");
+  const result = await applyTeamInit(
+    { adminEmail, orgName, teamSlug, teamName, gitRemote, teammates },
+    opts,
+  );
+  await finishTeamInit(result, opts, divergedFrom);
+  return result;
+}
+
+/**
+ * Shared post-apply tail for BOTH the interactive and non-interactive team-init paths: verify the
+ * running server actually flipped to team mode (members.yaml is the switch — no restart), reconnect
+ * the admin's own editors when it's confirmed live, and print the result. Extracted so the agent-safe
+ * `--yes` path gets identical "is it live?" + reconnect + reporting behavior without duplicating it.
+ */
+async function finishTeamInit(
+  result: TeamInitResult,
+  opts: TeamInitOptions,
+  divergedFrom: NotesOwner | null,
+): Promise<void> {
+  const io = opts.io ?? defaultIO;
+  // No restart, no env var: writing members.yaml IS the switch. The running server polls the file
+  // (~2s) and flips to team mode on its own. We VERIFY it (poll /mcp for a 401) — not a TCP probe.
+  const live = await (opts.confirmLive ?? confirmTeamModeLive)(result.serverHost);
+
+  // When team mode is confirmed live, reconnect the admin's OWN editors in team mode (their
+  // solo/no-key connection would otherwise start getting 401s). Reuses the teammate join path.
+  let reconnected = false;
+  if (live === "live" && result.adminKey) {
+    try {
+      const join = await applyJoin(
+        { server: `http://${result.serverHost}`, key: result.adminKey },
+        {
+          cwd: process.cwd(),
+          ...(opts.homeDir ? { homeDir: opts.homeDir } : {}),
+          ...(opts.dryRun ? { dryRun: opts.dryRun } : {}),
+        },
+      );
+      reconnected = join.editorOutcomes.some((o) => o.mcpAction !== "manual");
+    } catch {
+      /* best-effort — the admin can run `krimto join` manually if this fails */
+    }
+  }
+
+  printApplyResult(result, io, { live, reconnected, divergedFrom });
 }
 
 // === Question functions ====================================================
@@ -351,6 +476,19 @@ async function askAdminEmail(notesOwner: NotesOwner | null): Promise<string> {
     validate: (v) =>
       EMAIL_RE.test(v.trim()) ? true : "Looks like that's not an email — expected name@domain",
   }).then((v) => v.trim());
+}
+
+/** Ask for the organization's display name (optional). Sets the company-wide scope's identity so
+ *  it reads as "Acme Inc" instead of the `org/default` placeholder. Enter skips it. */
+async function askOrgName(): Promise<string | undefined> {
+  const v = (
+    await input({
+      message:
+        'What\'s your organization called? (e.g. "Acme Inc" — for company-wide notes; Enter to skip)',
+      default: "",
+    })
+  ).trim();
+  return v === "" ? undefined : v;
 }
 
 async function askTeamSlug(): Promise<string> {
@@ -465,6 +603,7 @@ function printPreamble(dataDir: string, io: WizardIO): void {
 function printSummary(a: TeamInitAnswers, io: WizardIO): void {
   io.out("\nReady to set up team mode:\n\n");
   io.out(`  Admin:        ${a.adminEmail}\n`);
+  io.out(`  Organization: ${a.orgName ?? "(not named — company-wide notes go to org/default)"}\n`);
   io.out(`  Team:         ${a.teamSlug}${a.teamName ? ` ("${a.teamName}")` : ""}\n`);
   io.out(`  Git remote:   ${a.gitRemote ?? "(not configured)"}\n`);
   io.out(`  Teammates:    ${a.teammates.length === 0 ? "(none yet)" : a.teammates.join(", ")}\n\n`);
@@ -556,4 +695,16 @@ function printApplyResult(
     io.out(`  • Then open http://${res.serverHost}/ui/admin and sign in with your admin key.\n`);
   }
   io.out("  • Step back to solo with `krimto team disband` (data preserved)\n\n");
+
+  // Discoverability: there's no save syntax — you signal scope by how you phrase it to your AI.
+  // Show that here (and in `krimto team status`) so nobody has to know the phrasings in advance.
+  io.out("━━ How to save notes (just tell your AI in chat) ━━\n\n");
+  io.out(`  Personal      "remember my editor is vim"               → only you\n`);
+  io.out(`  This team     "remember for the ${res.teamSlug} team, we ship Fri"  → team/${res.teamSlug}\n`);
+  const orgLabel = res.orgName ? `${res.orgName} (whole org)` : "your whole org";
+  io.out(`  Company-wide  "remember company-wide, support is …"      → ${orgLabel} (admins)\n`);
+  if (!res.orgName) {
+    io.out(`                Name your org so this reads nicely: krimto team init --org "Your Company"\n`);
+  }
+  io.out("\n  Tip: `krimto team status` lists your exact save targets any time.\n\n");
 }

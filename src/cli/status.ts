@@ -23,6 +23,7 @@ import {
   type SetupSnapshot,
 } from "./init";
 import { inspectRuntime } from "./inspectRuntime";
+import { buildTeamSummary, type TeamSummary } from "./teamSummary";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -82,6 +83,8 @@ export async function runStatus(
   const connectionsBlock = renderConnections(envs, snapshot, recent);
   const storageBlock = renderStorage(dataDir, gitInfo, indexStats);
   const addonsBlock = renderAddons(snapshot);
+  // Team block — only rendered in team mode (identity unused here; role isn't shown in the summary).
+  const teamBlock = renderTeam(await buildTeamSummary(dataDir, ""));
   const activityBlock = renderActivity(recent, now);
   const hijackBlock = renderHijackWarning(stats);
 
@@ -92,6 +95,7 @@ export async function runStatus(
       connectionsBlock +
       storageBlock +
       addonsBlock +
+      teamBlock +
       activityBlock +
       hijackBlock +
       "\n",
@@ -191,6 +195,17 @@ function renderStorage(dataDir: string, git: GitInfo, idx: { exists: boolean; mo
   body += idx.exists
     ? `  ⚡ Index:        present at index.db\n`
     : `  ⚡ Index:        not yet built — will be created on first run\n`;
+  return body;
+}
+
+function renderTeam(t: TeamSummary): string {
+  if (t.mode === "solo") return ""; // solo machines don't need a Team block
+  let body = `\n━━ Team ━━\n\n`;
+  body += `  Mode:    Team (login required) · ${t.memberCount} member${t.memberCount === 1 ? "" : "s"} · admins: ${t.admins.join(", ") || "(none)"}\n`;
+  body += t.hostedHere
+    ? `  Server:  🟢 THIS machine is the team server (${t.serverUrl}) — \`krimto stop\` takes the team offline\n`
+    : `  Server:  hosted elsewhere (this machine isn't the team server)\n`;
+  body += `  Detail:  krimto team status\n`;
   return body;
 }
 

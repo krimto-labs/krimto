@@ -9,8 +9,8 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.39** is the current release — the v0.2.17 wizard redesign is now
-> shipped end-to-end, plus twenty-two patch releases of correctness fixes and agent-friendly
+> **Where we are:** **v0.2.40** is the current release — the v0.2.17 wizard redesign is now
+> shipped end-to-end, plus twenty-three patch releases of correctness fixes and agent-friendly
 > surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
 > hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
 > image, the web UI) is unchanged. What you get on top of v0.2.16:
@@ -41,7 +41,7 @@ timestamp, reviewer).
 >   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
 >   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
 >
-> **The agent story (v0.2.34 → v0.2.39).**
+> **The agent story (v0.2.34 → v0.2.40).**
 > - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
 >   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
 >   open an interactive prompt now has a flag form.
@@ -70,6 +70,11 @@ timestamp, reviewer).
 >   owns your notes (not git config), so going solo→team is an upgrade of your existing account,
 >   not a silent second one. Type a different email and it warns + offers a one-key "use your
 >   existing identity," so your notes never get orphaned by accident.
+> - **Team UX hardening (v0.2.40)** — `krimto team status` (and a Team block in `krimto status`)
+>   shows team mode, members, your role, and whether THIS machine is the server. `krimto reset`
+>   warns before wiping the keys your team logs in with; `krimto stop` warns before disconnecting
+>   teammates; `krimto team disband` says it's per-machine + prints the reconnect command; and
+>   `krimto team leave` covers the joined-teammate case.
 >
 > See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
 > diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
@@ -515,7 +520,7 @@ Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
 ## Roadmap
 
 `v0.2` (teams, v0.2.5) → `v0.2.18` (v0.2.17 wizard redesign — published as one SemVer-clean
-release) → `v0.2.39` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
+release) → `v0.2.40` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
 flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the per-release breakdown.
 
 ## License

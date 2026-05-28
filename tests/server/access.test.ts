@@ -13,7 +13,7 @@ import {
   krimtoWrite,
   type ToolContext,
 } from "../../src/server/tools";
-import { type Membership } from "../../src/access/membership";
+import { writableScopesFor, type Membership } from "../../src/access/membership";
 
 const membership: Membership = {
   org: { slug: "acme", admins: ["admin@acme.com"] },
@@ -111,5 +111,39 @@ describe("read access", () => {
     expect(paths).toContain("team/infra");
     expect(paths).not.toContain("team/payments");
     expect(paths).not.toContain("user/alice@acme.com");
+  });
+});
+
+describe("writableScopesFor (pure)", () => {
+  it("solo member: only their own user scope", () => {
+    const m: Membership = { org: { slug: "acme", admins: [] }, teams: [], users: [] };
+    expect(writableScopesFor(m, "solo@acme.com")).toEqual(["user/solo@acme.com"]);
+  });
+
+  it("multi-team member: user scope + every team they're in (no org)", () => {
+    expect(writableScopesFor(membership, "alice@acme.com")).toEqual([
+      "user/alice@acme.com",
+      "team/payments",
+    ]);
+    const dana: Membership = {
+      org: { slug: "acme", admins: [] },
+      teams: [
+        { slug: "payments", members: ["dana@acme.com"], leads: [] },
+        { slug: "infra", members: ["dana@acme.com"], leads: [] },
+      ],
+      users: [],
+    };
+    expect(writableScopesFor(dana, "dana@acme.com")).toEqual([
+      "user/dana@acme.com",
+      "team/payments",
+      "team/infra",
+    ]);
+  });
+
+  it("org admin: user scope + org scope (+ any teams they're a member of)", () => {
+    expect(writableScopesFor(membership, "admin@acme.com")).toEqual([
+      "user/admin@acme.com",
+      "org/acme",
+    ]);
   });
 });

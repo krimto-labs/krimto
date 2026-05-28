@@ -136,6 +136,19 @@ export function canWrite(m: Membership, email: string, scope: string): boolean {
   return false; // org scope: org admins only (handled above)
 }
 
+/**
+ * Scopes `email` may write to AND read back: their own user scope, every team they're a member of,
+ * and the org scope when they're an org admin. Mirrors the server's per-request `writableScopesFor`
+ * (the union that {@link canWrite} ∩ {@link canRead} would accept) so the CLI/status surfaces can
+ * show "where can I save?" without a tool context. Note: an org-admin who isn't a team member does
+ * NOT get that team's scope here — they'd hit the read-back guard, so it isn't a real save target.
+ */
+export function writableScopesFor(m: Membership, email: string): string[] {
+  const scopes = [`user/${email}`, ...teamsOf(m, email).map((t) => `team/${t}`)];
+  if (isOrgAdmin(m, email)) scopes.push(`org/${m.org.slug}`);
+  return scopes;
+}
+
 /** Load membership from <dataDir>/.krimto/members.yaml. Returns an empty membership if absent. */
 export async function loadMembership(dataDir: string): Promise<Membership> {
   try {

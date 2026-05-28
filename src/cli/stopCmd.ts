@@ -37,6 +37,7 @@ import {
   type InstallResult,
   type ServiceOptions,
 } from "./service";
+import { buildTeamSummary } from "./teamSummary";
 
 export interface StopOptions {
   io?: WizardIO;
@@ -57,6 +58,36 @@ export interface StopResult {
 
 export async function runStop(opts: StopOptions): Promise<StopResult> {
   const platform = detectPlatform();
+
+  // Safety: stopping the team server disconnects every teammate that relies on it. Only guard
+  // when THIS machine is actually hosting a team (a live HTTP server + admins in members.yaml) —
+  // a plain solo stop stays prompt-free. `--yes` bypasses for scripts.
+  const team = await buildTeamSummary(opts.dataDir, "");
+  if (team.mode === "team" && team.hostedHere && !opts.yes) {
+    const warn = `\n⚠ This machine is the team server — stopping disconnects ${team.memberCount} teammate${
+      team.memberCount === 1 ? "" : "s"
+    } until it's restarted.\n`;
+    if (process.stdin.isTTY === true) {
+      opts.io?.out(warn);
+      const ok = await confirm({ message: "Stop the team server anyway?", default: false });
+      if (!ok) {
+        return {
+          status: "already-stopped",
+          serviceUninstalled: false,
+          pidKilled: null,
+          message: "\n  Left the team server running.\n\n",
+        };
+      }
+    } else {
+      return {
+        status: "already-stopped",
+        serviceUninstalled: false,
+        pidKilled: null,
+        message: warn + "  Re-run with `krimto stop --yes` to confirm.\n\n",
+      };
+    }
+  }
+
   const svc = await isServiceInstalled(platform, opts.homeDir);
 
   // v0.2.32 — use stopService (not uninstallService) so the unit file stays on disk and

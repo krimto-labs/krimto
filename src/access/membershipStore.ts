@@ -96,6 +96,20 @@ export async function removeUser(dataDir: string, email: string): Promise<void> 
   });
 }
 
+/** Set the organization's display name and/or path slug, preserving the admin list + unknown
+ *  fields. Used by `team init` to replace the meaningless `org/default` placeholder with the real
+ *  org identity. Idempotent. Callers own the "don't rename a slug that already has notes" guard. */
+export async function setOrg(
+  dataDir: string,
+  opts: { name?: string; slug?: string },
+): Promise<void> {
+  await editMembersYaml(dataDir, (raw) => {
+    const o = org(raw) as { slug: string; admins: string[]; name?: string };
+    if (opts.name !== undefined) o.name = opts.name;
+    if (opts.slug !== undefined) o.slug = opts.slug;
+  });
+}
+
 export async function createTeam(dataDir: string, slug: string, name?: string): Promise<void> {
   await editMembersYaml(dataDir, (raw) => {
     const list = teams(raw);

@@ -115,7 +115,10 @@ export async function inspectRuntime(dataDir: string, opts: InspectOptions = {})
   };
 }
 
-async function readLock(dataDir: string): Promise<RuntimeLock | null> {
+/** Read + alive-check the data dir's lock file. Exported so lightweight callers (e.g.
+ *  buildTeamSummary) can learn "is a server running here, in what mode" without the full
+ *  inspectRuntime probe (which also shells out to launchctl + `claude mcp list`). */
+export async function readLock(dataDir: string): Promise<RuntimeLock | null> {
   const file = path.join(dataDir, ".krimto", "lock.json");
   let raw: string;
   try {

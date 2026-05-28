@@ -43,12 +43,14 @@ try {
 
   // Guard: `krimto team` alone (or with an unknown subverb) shouldn't fall through to the stdio
   // MCP server. Print usage and exit instead.
-  const knownTeamCmds = ["team init", "team disband"];
+  const knownTeamCmds = ["team init", "team disband", "team status", "team leave"];
   if (rawCmd === "team" && !knownTeamCmds.includes(cmd)) {
     process.stderr.write(
-      "Usage: krimto team <init|disband>\n" +
+      "Usage: krimto team <init|status|disband|leave>\n" +
         "  init     Set up team mode (admin + members + git remote)\n" +
-        "  disband  Step back to solo mode on this machine\n",
+        "  status   Show team mode, members, your role, and whether this machine is the server\n" +
+        "  disband  Step THIS machine back to solo (the team is unaffected)\n" +
+        "  leave    Disconnect this machine from a team you joined\n",
     );
     process.exit(2);
   }
@@ -204,19 +206,70 @@ try {
       // The wizard prints its own summary; nothing more to do here.
     }
   } else if (cmd === "team init") {
-    // `krimto team init` — admin-side team-mode wizard (v0.2.17.1). Reads `process.cwd()` so it
-    // honors the project's data dir override (KRIMTO_DATA via resolveDataDir).
-    const { runTeamInit } = await tsImport("../src/cli/teamInit.ts", import.meta.url);
+    // `krimto team init` — admin-side team-mode setup. Three routes, mirroring `init` so a team
+    // can be stood up unattended (same agent-safe bar as solo `init --yes`):
+    //   • `--yes`            → non-interactive flag form (AI agents / CI). Requires --team.
+    //   • non-TTY w/o --yes  → print the flag usage + exit 2 (can't prompt — don't hang).
+    //   • interactive TTY    → the 5-question wizard (unchanged).
+    // Flags: --team <slug> --org "<name>" --admin <email> --name <display> --remote <url>
+    //        --invite a@x.com,b@x.com  (comma-separated and/or repeatable).
+    const flags = process.argv.slice(4);
+    const yes = flags.includes("--yes");
+    const isTty = process.stdin.isTTY === true;
+    const firstFlag = (name) => collectFlagValues(flags, name)[0];
+    const teammates = collectFlagValues(flags, "--invite")
+      .flatMap((v) => v.split(","))
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runTeamInit({ dataDir: resolveDataDir() });
-    if (result === null) process.exitCode = 1;
+    if (yes) {
+      const { runTeamInitNonInteractive } = await tsImport("../src/cli/teamInit.ts", import.meta.url);
+      const result = await runTeamInitNonInteractive({
+        dataDir: resolveDataDir(),
+        teamSlug: firstFlag("--team"),
+        orgName: firstFlag("--org"),
+        adminEmail: firstFlag("--admin"),
+        teamName: firstFlag("--name"),
+        gitRemote: firstFlag("--remote"),
+        teammates,
+      });
+      if (result === null) process.exitCode = 1;
+    } else if (!isTty) {
+      process.stderr.write(
+        "\nℹ️  No interactive terminal detected — `team init` needs flags for non-interactive use.\n\n" +
+          "    krimto team init --yes --team <slug> [--org \"Your Company\"] [--admin <email>] \\\n" +
+          "                     [--name <display>] [--remote <git-url>] [--invite a@x.com,b@x.com]\n\n" +
+          "Only --team is required; the admin defaults to the identity that owns your notes.\n",
+      );
+      process.exit(2);
+    } else {
+      const { runTeamInit } = await tsImport("../src/cli/teamInit.ts", import.meta.url);
+      const result = await runTeamInit({ dataDir: resolveDataDir() });
+      if (result === null) process.exitCode = 1;
+    }
+  } else if (cmd === "team status") {
+    // `krimto team status` — visibility: team mode? members? my role? is this machine the server?
+    const { runTeamStatus } = await tsImport("../src/cli/teamStatus.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runTeamStatus({ dataDir: resolveDataDir(), identity: await resolveIdentity() });
+    process.stdout.write(result.message);
   } else if (cmd === "team disband") {
     // `krimto team disband` — per-machine step-back: rewrites HTTP MCP entries as stdio. Notes
     // and team's git state are untouched.
     const flags = process.argv.slice(4);
     const yes = flags.includes("--yes");
     const { runTeamDisband } = await tsImport("../src/cli/teamDisband.ts", import.meta.url);
-    const result = await runTeamDisband({ yes });
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runTeamDisband({ yes, dataDir: resolveDataDir() });
+    if (result === null) process.exitCode = 1;
+  } else if (cmd === "team leave") {
+    // `krimto team leave` — for a teammate who joined someone else's server: disconnect this
+    // machine's editors and explain that the admin must remove them from the roster to fully leave.
+    const flags = process.argv.slice(4);
+    const yes = flags.includes("--yes");
+    const { runTeamLeave } = await tsImport("../src/cli/teamLeave.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runTeamLeave({ yes, dataDir: resolveDataDir() });
     if (result === null) process.exitCode = 1;
   } else if (cmd === "join") {
     // `krimto join --server <url> --key <key>` — teammate-side: writes the HTTP MCP entry +

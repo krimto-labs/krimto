@@ -14,6 +14,14 @@ describe("agentRule", () => {
     expect(AGENT_RULE).toContain("Do NOT use any other memory tool");
   });
 
+  it("routes scopes: default personal, phrase-driven team/org, and disambiguates multiple teams", () => {
+    expect(AGENT_RULE).toContain("user/me = personal");
+    expect(AGENT_RULE).toContain("for the team");
+    expect(AGENT_RULE).toContain("company-wide");
+    expect(AGENT_RULE).toContain("MORE THAN ONE team");
+    expect(AGENT_RULE).toContain("krimto_whoami");
+  });
+
   it("inserts the marker-wrapped block into an empty/absent file", () => {
     const out = applyRule(null);
     expect(out).toContain("<!-- krimto:start -->");

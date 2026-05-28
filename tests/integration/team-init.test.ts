@@ -33,17 +33,19 @@ vi.mock("@inquirer/prompts", () => ({
 }));
 
 import { createServer } from "node:http";
+import { canRead, canWrite, loadMembership } from "../../src/access/membership";
 import { FactStore } from "../../src/storage/store";
 import {
   applyTeamInit,
   confirmTeamModeLive,
   detectNotesOwner,
   runTeamInit,
+  runTeamInitNonInteractive,
   type TeamInitAnswers,
 } from "../../src/cli/teamInit";
 
 interface MembersYaml {
-  org?: { slug?: string; admins?: string[] };
+  org?: { slug?: string; name?: string; admins?: string[] };
   teams?: { slug?: string; name?: string; members?: string[]; leads?: string[] }[];
   users?: { email?: string; created?: string }[];
 }
@@ -60,6 +62,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
+
+// The interactive org-name prompt (added in the org-naming change). Its mock key, reused across the
+// interactive flow tests so they stay in sync with the prompt's wording.
+const ORG_PROMPT =
+  'input:What\'s your organization called? (e.g. "Acme Inc" — for company-wide notes; Enter to skip)';
 
 const baseAnswers = (over: Partial<TeamInitAnswers> = {}): TeamInitAnswers => ({
   adminEmail: "maria@acme.com",
@@ -100,6 +107,24 @@ describe("applyTeamInit — pure apply step", () => {
     expect(team?.name).toBe("Backend team");
   });
 
+  // The creator must be a MEMBER of the team they just made — otherwise they're an org-admin who
+  // can technically write team/<slug> but can't read it back, so krimtoWrite's ghost-fact guard
+  // refuses. Adding them as a member makes "remember for the team" work for the admin too.
+  it("adds the creator as a team member so they can write team notes", async () => {
+    await applyTeamInit(baseAnswers(), { dataDir });
+    const parsed = parseYaml(
+      await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8"),
+    ) as MembersYaml;
+    const team = parsed.teams?.find((t) => t.slug === "backend");
+    expect(team?.members).toContain("maria@acme.com");
+    expect(team?.name).toBe("Backend team"); // name preserved (createTeam ran before the add)
+
+    // The admin can now both write AND read the team scope (no ghost-fact refusal).
+    const mem = await loadMembership(dataDir);
+    expect(canWrite(mem, "maria@acme.com", "team/backend")).toBe(true);
+    expect(canRead(mem, "maria@acme.com", "team/backend")).toBe(true);
+  });
+
   it("issues a key per teammate (stored hashed in keys.json)", async () => {
     await applyTeamInit(baseAnswers(), { dataDir });
     const keysText = await fs.readFile(path.join(dataDir, ".krimto", "keys.json"), "utf8");
@@ -114,6 +139,41 @@ describe("applyTeamInit — pure apply step", () => {
     expect(first.invites).toHaveLength(2);
     expect(second.invites).toHaveLength(0); // already had keys, no churn
     expect(second.adminKey).toBeNull(); // bootstrapAdmin idempotency
+  });
+
+  it("names the org and derives a path-safe slug from the org name", async () => {
+    const res = await applyTeamInit(baseAnswers({ orgName: "Acme Inc" }), { dataDir });
+    expect(res.orgName).toBe("Acme Inc");
+    expect(res.orgSlug).toBe("acme-inc");
+    const parsed = parseYaml(
+      await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8"),
+    ) as MembersYaml;
+    expect(parsed.org?.name).toBe("Acme Inc");
+    expect(parsed.org?.slug).toBe("acme-inc");
+  });
+
+  it("leaves the org slug 'default' when no org name is given", async () => {
+    const res = await applyTeamInit(baseAnswers(), { dataDir });
+    expect(res.orgSlug).toBe("default");
+    expect(res.orgName).toBeUndefined();
+  });
+
+  it("keeps the existing org slug (no orphaning) when company-wide notes already exist", async () => {
+    // A company-wide note already lives under the current default org scope.
+    await new FactStore(dataDir).writeFact({
+      scope: "org/default",
+      title: "company holiday",
+      body: "office closed Dec 25",
+      author: "maria@acme.com",
+    });
+    const res = await applyTeamInit(baseAnswers({ orgName: "Acme Inc" }), { dataDir });
+    expect(res.orgName).toBe("Acme Inc"); // display name still set
+    expect(res.orgSlug).toBe("default"); // slug unchanged — the existing note isn't orphaned
+    const parsed = parseYaml(
+      await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8"),
+    ) as MembersYaml;
+    expect(parsed.org?.name).toBe("Acme Inc");
+    expect(parsed.org?.slug).toBe("default");
   });
 
   it("captures the git remote URL when given (skipRemoteSetup avoids touching real git in tests)", async () => {
@@ -244,6 +304,7 @@ describe("runTeamInit — interactive flow", () => {
   it("walks the 4 questions, applies, and prints the DM template", async () => {
     const io = captureIO();
     promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: "maria@acme.com" });
+    promptQueue.push({ name: ORG_PROMPT, value: "Acme Inc" });
     promptQueue.push({
       name: 'input:What\'s your team called? (lowercase slug — e.g. "backend", "infra", "growth")',
       value: "backend",
@@ -265,6 +326,8 @@ describe("runTeamInit — interactive flow", () => {
     const res = await runTeamInit({ io, dataDir, confirmLive: async () => "no-server" });
     expect(res).not.toBeNull();
     expect(res?.invites).toHaveLength(2);
+    expect(res?.orgName).toBe("Acme Inc"); // interactive org capture
+    expect(res?.orgSlug).toBe("acme-inc");
 
     const out = io.stdout.join("");
     expect(out).toContain("✅ Team mode is on");
@@ -272,6 +335,11 @@ describe("runTeamInit — interactive flow", () => {
     expect(out).toContain("krimto join");
     expect(out).toContain("ben@acme.com");
     expect(out).toContain("priya@acme.com");
+    // Discoverability: the success screen teaches how to save to each scope (no need to know in advance).
+    expect(out).toContain("How to save notes");
+    expect(out).toContain("for the backend team");
+    expect(out).toContain("company-wide");
+    expect(out).toContain("Acme Inc (whole org)"); // org name displayed, not org/default
     // confirmLive → "no-server" path prints a plain serve recipe (members.yaml is the switch now —
     // no KRIMTO_BOOTSTRAP_ADMIN env var needed).
     expect(out).toContain("npx @krimto-labs/krimto serve");
@@ -280,6 +348,7 @@ describe("runTeamInit — interactive flow", () => {
   it("aborts cleanly when the user declines the final confirm", async () => {
     const io = captureIO();
     promptQueue.push({ name: "input:What's your email? (this becomes the admin account)", value: "maria@acme.com" });
+    promptQueue.push({ name: ORG_PROMPT, value: "" });
     promptQueue.push({
       name: 'input:What\'s your team called? (lowercase slug — e.g. "backend", "infra", "growth")',
       value: "backend",
@@ -311,6 +380,7 @@ describe("runTeamInit — interactive flow", () => {
     `(otherwise they stay private to ${email} and the admin won't see them)`;
 
   function queueRemainingTeamQuestions(): void {
+    promptQueue.push({ name: ORG_PROMPT, value: "" }); // org prompt fires after the divergence confirm
     promptQueue.push({
       name: 'input:What\'s your team called? (lowercase slug — e.g. "backend", "infra", "growth")',
       value: "backend",
@@ -365,5 +435,131 @@ describe("runTeamInit — interactive flow", () => {
     expect(res).toBeNull();
     expect(process.exitCode).toBe(130);
     process.exitCode = exitBefore;
+  });
+});
+
+// The agent-safe twin of runTeamInit: builds answers from flags (not prompts) and applies. This
+// is what `krimto team init --yes --team <slug> ...` calls so an AI agent can stand up a team
+// unattended — same bar as solo's `krimto init --yes`. The mocked @inquirer throws on any prompt
+// call, so a passing test here proves NO prompt was reached.
+describe("runTeamInitNonInteractive — agent-safe flag form", () => {
+  function captureIO(): {
+    out: (s: string) => void;
+    err: (s: string) => void;
+    stdout: string[];
+    stderr: string[];
+  } {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    return { out: (s) => stdout.push(s), err: (s) => stderr.push(s), stdout, stderr };
+  }
+
+  it("applies from flags with no prompts and writes members.yaml", async () => {
+    const io = captureIO();
+    const res = await runTeamInitNonInteractive({
+      io,
+      dataDir,
+      teamSlug: "backend",
+      teamName: "Backend team",
+      adminEmail: "maria@acme.com",
+      teammates: ["ben@acme.com"],
+      confirmLive: async () => "no-server",
+    });
+    expect(res.adminEmail).toBe("maria@acme.com");
+    expect(res.adminKey).not.toBeNull();
+    expect(res.invites.map((i) => i.email)).toEqual(["ben@acme.com"]);
+
+    const parsed = parseYaml(
+      await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8"),
+    ) as MembersYaml;
+    expect(parsed.org?.admins).toContain("maria@acme.com");
+    const team = parsed.teams?.find((t) => t.slug === "backend");
+    expect(team?.members).toEqual(expect.arrayContaining(["ben@acme.com"]));
+    // promptQueue stays empty — if any prompt ran, the mock would have thrown "No queued answer".
+    expect(promptQueue).toHaveLength(0);
+  });
+
+  it("names the org from --org with no prompts", async () => {
+    const io = captureIO();
+    const res = await runTeamInitNonInteractive({
+      io,
+      dataDir,
+      teamSlug: "backend",
+      orgName: "Acme Inc",
+      confirmLive: async () => "no-server",
+    });
+    expect(res.orgName).toBe("Acme Inc");
+    expect(res.orgSlug).toBe("acme-inc");
+    expect(promptQueue).toHaveLength(0);
+  });
+
+  it("defaults the admin to the notes-owner when --admin is omitted", async () => {
+    const store = new FactStore(dataDir);
+    await store.writeFact({ scope: "user/old@x.com", title: "n1", body: "a", author: "old@x.com" });
+    await store.writeFact({ scope: "user/old@x.com", title: "n2", body: "b", author: "old@x.com" });
+
+    const io = captureIO();
+    const res = await runTeamInitNonInteractive({
+      io,
+      dataDir,
+      teamSlug: "backend",
+      confirmLive: async () => "no-server",
+    });
+    expect(res.adminEmail).toBe("old@x.com");
+    const parsed = parseYaml(
+      await fs.readFile(path.join(dataDir, ".krimto", "members.yaml"), "utf8"),
+    ) as MembersYaml;
+    expect(parsed.org?.admins).toContain("old@x.com");
+  });
+
+  it("prints migration guidance when an explicit --admin diverges from the notes-owner", async () => {
+    const store = new FactStore(dataDir);
+    await store.writeFact({ scope: "user/old@x.com", title: "n1", body: "a", author: "old@x.com" });
+
+    const io = captureIO();
+    const res = await runTeamInitNonInteractive({
+      io,
+      dataDir,
+      teamSlug: "backend",
+      adminEmail: "new@y.com",
+      confirmLive: async () => "no-server",
+    });
+    expect(res.adminEmail).toBe("new@y.com");
+    const out = io.stdout.join("");
+    expect(out).toContain("stay private to");
+    expect(out).toContain("old@x.com");
+    expect(out).toContain("krimto mv");
+  });
+
+  it("rejects when no team slug is provided", async () => {
+    const io = captureIO();
+    await expect(
+      runTeamInitNonInteractive({ io, dataDir, confirmLive: async () => "no-server" }),
+    ).rejects.toThrow(/--team/);
+  });
+
+  it("rejects an invalid team slug", async () => {
+    const io = captureIO();
+    await expect(
+      runTeamInitNonInteractive({
+        io,
+        dataDir,
+        teamSlug: "Bad Slug!",
+        confirmLive: async () => "no-server",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an invalid invite email", async () => {
+    const io = captureIO();
+    await expect(
+      runTeamInitNonInteractive({
+        io,
+        dataDir,
+        teamSlug: "backend",
+        teammates: ["not-an-email"],
+        confirmLive: async () => "no-server",
+      }),
+    ).rejects.toThrow();
   });
 });

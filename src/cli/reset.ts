@@ -26,6 +26,7 @@ import {
 import { removeMcpConfig } from "./mcpConfig";
 import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 import { detectPlatform, uninstallService } from "./service";
+import { buildTeamSummary } from "./teamSummary";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
   cursor: "Cursor",
@@ -185,6 +186,18 @@ export async function runReset(opts: ResetOptions = {}): Promise<ResetResult | n
       io.out("  This will NOT touch:\n");
       io.out(`    • Your notes folder (${dataDir}) — pass --wipe-notes to also move it\n`);
       io.out("    • The team's git history or members.yaml\n\n");
+    }
+
+    // Footgun guard: reset wipes keys.json. If this machine is in team mode, that's the store
+    // every teammate authenticates against — wiping it locks the whole team out (members.yaml
+    // stays, so the team still "exists" but no key resolves). Warn loudly before the prompt.
+    const team = await buildTeamSummary(dataDir, "");
+    if (team.mode === "team") {
+      io.out("  🛑 TEAM MODE IS ACTIVE — this wipes the API-key store your team logs in with.\n");
+      io.out(
+        `     All ${team.memberCount} member${team.memberCount === 1 ? "" : "s"} get locked out: members.yaml still says "team",\n`,
+      );
+      io.out("     but no key will work until you re-issue them (krimto team init) or disband.\n\n");
     }
 
     const promptMessage = opts.wipeNotes

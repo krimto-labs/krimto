@@ -21,8 +21,14 @@ When the user says "remember", or you learn a durable fact:
 Before any non-trivial task, CALL krimto_recall first. Empty results
 are a write opportunity, not a dead end.
 
-Scopes: user/me = personal, team/<slug> = shared with the team,
-org/<slug> = company-wide. Precedence at recall: user > team > org.
+Scopes — where to save (default to personal unless the user shares):
+- user/me = personal (the default).
+- team/<slug> = shared with that team — when the user says "for the team",
+  "share with the team", or "team-wide".
+- org/<slug> = whole company — "company-wide", "for everyone", "org-wide".
+- If the user says "the team" but belongs to MORE THAN ONE team, call
+  krimto_whoami and pick the team by name or ask — never guess which one.
+Recall precedence (most specific wins): user > team > org.
 
 Don't save secrets, transient state, or one-off chatter.`;
 
