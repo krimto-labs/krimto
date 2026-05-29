@@ -18,12 +18,16 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// The Krimto logomark: a rising two-segment stroke (26,74)→(50,44)→(76,22). Inline SVG using
-// currentColor so callers tint it via CSS (.brand .logo paints it slate). No external asset.
+// The Krimto logomark — the canonical "Krimto symbol" from docs/Krimto Brand _standalone_.html:
+// a rising line (26,74)→(50,44)→(76,22) connecting three growing nodes (r 7 → 9.5 → 12), the
+// largest (top-right) painted in the slate accent. Self-colored via the brand tokens; no asset.
 export const LOGOMARK =
-  `<svg class="logo" width="20" height="20" viewBox="0 0 100 100" aria-hidden="true">` +
-  `<line x1="26" y1="74" x2="50" y2="44" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>` +
-  `<line x1="50" y1="44" x2="76" y2="22" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>` +
+  `<svg class="logo" width="22" height="22" viewBox="0 0 100 100" aria-hidden="true">` +
+  `<line x1="26" y1="74" x2="50" y2="44" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>` +
+  `<line x1="50" y1="44" x2="76" y2="22" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>` +
+  `<circle cx="26" cy="74" r="7" fill="var(--ink)"/>` +
+  `<circle cx="50" cy="44" r="9.5" fill="var(--ink)"/>` +
+  `<circle cx="76" cy="22" r="12" fill="var(--accent)"/>` +
   `</svg>`;
 
 const STYLE = `
