@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_TITLE_LENGTH,
+  applyTagChanges,
   createFact,
   generateFactId,
   isValidFactId,
@@ -11,6 +12,7 @@ import {
   toIsoUtc,
   validateFrontmatter,
   type Fact,
+  type FactFrontmatter,
 } from "../../src/storage/fact";
 
 describe("fact id", () => {
@@ -159,5 +161,50 @@ describe("validateFrontmatter", () => {
   it("requires lowercase kebab-case tags", () => {
     const issues = validateFrontmatter({ ...valid, tags: ["Stripe", "web hooks"] });
     expect(issues.filter((i) => i.field === "tags").length).toBe(2);
+  });
+});
+
+describe("applyTagChanges", () => {
+  const fm = (tags?: string[]): FactFrontmatter => ({
+    id: generateFactId(),
+    scope: "user/a@x.com",
+    title: "T",
+    author: "a@x.com",
+    created: "2026-01-01T00:00:00Z",
+    updated: "2026-01-01T00:00:00Z",
+    ...(tags ? { tags } : {}),
+  });
+
+  it("adds and removes tags, returning the sorted union", () => {
+    const r = applyTagChanges(fm(["deploy"]), { add: ["ops"], remove: [] });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.after).toEqual(["deploy", "ops"]);
+      expect(r.frontmatter.tags).toEqual(["deploy", "ops"]);
+    }
+  });
+
+  it("reports no-change when the resulting set is identical", () => {
+    const r = applyTagChanges(fm(["deploy"]), { add: ["deploy"], remove: ["ghost"] });
+    expect(r.status).toBe("no-change");
+    if (r.status === "no-change") expect(r.tags).toEqual(["deploy"]);
+  });
+
+  it("drops the tags field entirely when the last tag is removed", () => {
+    const r = applyTagChanges(fm(["deploy"]), { add: [], remove: ["deploy"] });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.frontmatter.tags).toBeUndefined();
+  });
+
+  it("rejects a non-kebab-case tag without mutating", () => {
+    const r = applyTagChanges(fm(["deploy"]), { add: ["Bad Tag"], remove: [] });
+    expect(r.status).toBe("invalid");
+    if (r.status === "invalid") expect(r.issues.some((i) => i.field === "tags")).toBe(true);
+  });
+
+  it("does not mutate the input frontmatter", () => {
+    const input = fm(["deploy"]);
+    applyTagChanges(input, { add: ["ops"], remove: [] });
+    expect(input.tags).toEqual(["deploy"]);
   });
 });

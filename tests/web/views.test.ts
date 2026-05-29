@@ -98,12 +98,17 @@ describe("howItWorksPanel", () => {
     expect(h).toContain("Team");
     expect(h).toContain("Org");
     expect(h).toContain("Bring your team");
+    // v0.2.42 de-noise: current path is `krimto team init`, not the obsolete BOOTSTRAP_ADMIN env var.
+    expect(h).toContain("krimto team init");
+    expect(h).not.toContain("BOOTSTRAP_ADMIN");
   });
 });
 
 describe("gettingStartedPanel", () => {
   it("explains AI memory, teaches the save/recall loop, and links to the next step", () => {
     const h = gettingStartedPanel();
+    // v0.2.42 de-noise: no stale BOOTSTRAP_ADMIN restart recipe.
+    expect(h).not.toContain("BOOTSTRAP_ADMIN");
     expect(h).toContain('What "AI memory" means');     // Door 1: for a total beginner
     expect(h).toContain("forgets everything");
     expect(h).toContain("Save your first memory");
@@ -391,6 +396,7 @@ describe("page purpose lines", () => {
   });
   it("adminBody states its purpose for an admin", () => {
     const h = adminBody({ isAdmin: true, users: [], teams: [] });
-    expect(h.toLowerCase()).toContain("manage teams");
+    expect(h).toContain("Team");
+    expect(h.toLowerCase()).toContain("manage members");
   });
 });

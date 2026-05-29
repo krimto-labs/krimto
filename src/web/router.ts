@@ -1,7 +1,8 @@
+import { randomBytes } from "node:crypto";
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, dashboardHeader, dashboardFooter, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, behaviorPanel, machinePanel, reconnectingPanel, dashboardHeader, dashboardFooter, type FactView, type StatusPanelOpts } from "./views";
 import { readDataDirGitInfo } from "../storage/git";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
@@ -9,11 +10,50 @@ import { krimtoRecall, krimtoRead, krimtoListScopes, type ToolContext } from "..
 import { deleteFact } from "../server/deleteFact";
 import { editFact } from "../server/editFact";
 import { moveFact } from "../server/moveFact";
+import { tagFact, parseTagInput, diffTags } from "../server/tagFact";
+import { isLoopbackAddress } from "../server/localOps";
 import { canRead, canWrite } from "../access/membership";
 import { scopeLabel } from "../access/scopeLabels";
 import { KrimtoError } from "../server/errors";
 import { type AdminContext } from "../server/admin";
-import { addUser } from "../access/membershipStore";
+import { addUser, removeUser, createTeam, setTeamMember } from "../access/membershipStore";
+
+/**
+ * In-process server-side config actions for Settings ▸ Behavior (v0.2.42). These operate on the
+ * running server's own data dir / index, so they go through the write serializer in main() rather
+ * than spawning a CLI (which would refuse while the server holds the lock). All are admin-gated.
+ */
+export interface BehaviorOps {
+  /** Point the data-dir git repo's origin at `url` (two-way sync follows). */
+  setRemote: (url: string) => Promise<void>;
+  /** Drop the origin remote (back to local-only). */
+  removeRemote: () => Promise<void>;
+  /** On-demand two-way sync: pull the team's notes, then push ours. Returns both statuses. */
+  syncNow: () => Promise<{ pull: string; push: string }>;
+  /** Rebuild index.db from the markdown source of truth. Returns the resulting fact count. */
+  reindexNow: () => Promise<number>;
+}
+
+/** Read-only runtime snapshot shown in Settings ▸ This machine. */
+export interface MachineStatus {
+  /** "always-running" | "as-needed" | "manual" */
+  runMode: string;
+  serviceRunning: boolean;
+  dataDir: string;
+  identity: string;
+  /** "keyword" | "openai" */
+  searchProvider: string;
+}
+
+/**
+ * Loopback-gated machine controls for Settings ▸ This machine (v0.2.42). `run` spawns the krimto
+ * CLI as a detached child (it cannot run in-process — see src/server/localOps.ts). The router gates
+ * every call on loopback peer + admin role + a CSRF nonce before invoking this.
+ */
+export interface LocalMachineOps {
+  run: (action: string, params: Record<string, string>) => { ok: boolean; message?: string; bounces?: boolean };
+  status: () => Promise<MachineStatus>;
+}
 
 export interface WebRouterDeps {
   ctx: ToolContext;
@@ -28,6 +68,10 @@ export interface WebRouterDeps {
   localIdentity: string;
   /** Live status snapshot for the /ui/facts status panel. Called per request so it's never stale. */
   status?: () => StatusPanelOpts;
+  /** In-process Settings ▸ Behavior actions. Omitted in contexts that don't expose them. */
+  behavior?: BehaviorOps;
+  /** Loopback-gated Settings ▸ This machine controls. Omitted in contexts that don't expose them. */
+  localMachine?: LocalMachineOps;
 }
 
 type WithIdentity = Request & { identity: string };
@@ -35,10 +79,13 @@ type WithIdentity = Request & { identity: string };
 export function buildWebRouter(deps: WebRouterDeps): Router {
   const router = express.Router();
   const secret = deps.sessionSecret;
+  // Per-process CSRF nonce for the loopback machine-ops forms (Settings ▸ This machine). Embedded in
+  // those forms + required on POST, so another local app can't drive the control plane via the browser.
+  const csrfNonce = randomBytes(18).toString("hex");
 
   const page = (res: Response, status: number, title: string, body: string, identity?: string): void => {
     const isAdmin = !!identity && !!deps.admin && isOrgAdmin(deps.membership(), identity);
-    res.status(status).type("html").send(layout(title, body, { identity, isAdmin }));
+    res.status(status).type("html").send(layout(title, body, { identity, isAdmin, teamMode: deps.teamModeActive() }));
   };
   const errorPage = (res: Response, status: number, message: string, identity?: string): void => {
     page(res, status, "Error", `<h1>${escapeHtml(message)}</h1><p><a href="/ui/facts">Back</a></p>`, identity);
@@ -89,6 +136,10 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
     page(res, 200, "Connect", connectPanel({ host, requireAuth: deps.teamModeActive() }), idOf(req));
   });
 
+  // Behavior actions act on the running server's data dir / index. Owner-in-solo / org-admin-in-team.
+  const canManageBehavior = (req: Request): boolean =>
+    !deps.teamModeActive() || isOrgAdmin(deps.membership(), idOf(req));
+
   router.get("/settings", (req, res) => {
     void (async () => {
       const identity = idOf(req);
@@ -97,19 +148,148 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       const activity = deps.ctx.activity ? await deps.ctx.activity.tail(50) : [];
       const m = deps.membership();
       const isAdmin = !!deps.admin && isOrgAdmin(m, identity);
+      const gitInfo = await readDataDirGitInfo(deps.ctx.store.dataDir());
+      const behavior = behaviorPanel({
+        remoteUrl: gitInfo.remote,
+        embeddings: deps.status ? deps.status().embeddings : undefined,
+        canManage: canManageBehavior(req),
+      });
+      const machine = deps.localMachine
+        ? machinePanel({
+            status: await deps.localMachine.status(),
+            loopback: isLoopbackAddress(req.socket.remoteAddress),
+            canManage: canManageBehavior(req),
+            csrfNonce,
+          })
+        : "";
       page(
         res,
         200,
         "Settings",
-        settingsBody({
-          dataDir: deps.ctx.store.dataDir(),
-          status: deps.status ? deps.status() : undefined,
-          activity,
-          isAdmin,
-        }),
+        behavior +
+          machine +
+          settingsBody({
+            dataDir: deps.ctx.store.dataDir(),
+            status: deps.status ? deps.status() : undefined,
+            activity,
+            isAdmin,
+          }),
         identity,
       );
     })();
+  });
+
+  // ── Settings ▸ Behavior actions (in-process; admin-gated) ──────────────────
+  const behaviorGuard = (req: Request, res: Response): boolean => {
+    const identity = idOf(req);
+    if (!canManageBehavior(req)) {
+      errorPage(res, 403, "Org admin required", identity);
+      return false;
+    }
+    if (!deps.behavior) {
+      errorPage(res, 500, "Behavior actions are unavailable on this server.", identity);
+      return false;
+    }
+    return true;
+  };
+
+  router.post("/settings/remote", (req, res) => {
+    void (async () => {
+      if (!behaviorGuard(req, res)) return;
+      const identity = idOf(req);
+      const rawUrl = bodyOf(req).url;
+      const url = typeof rawUrl === "string" ? rawUrl.trim() : "";
+      if (!url) {
+        errorPage(res, 422, "A remote URL is required.", identity);
+        return;
+      }
+      try {
+        await deps.behavior!.setRemote(url);
+        res.redirect("/ui/settings");
+      } catch {
+        errorPage(res, 500, "Could not set the remote — see server logs.", identity);
+      }
+    })();
+  });
+
+  router.post("/settings/remote/remove", (req, res) => {
+    void (async () => {
+      if (!behaviorGuard(req, res)) return;
+      const identity = idOf(req);
+      try {
+        await deps.behavior!.removeRemote();
+        res.redirect("/ui/settings");
+      } catch {
+        errorPage(res, 500, "Could not remove the remote — see server logs.", identity);
+      }
+    })();
+  });
+
+  router.post("/settings/sync", (req, res) => {
+    void (async () => {
+      if (!behaviorGuard(req, res)) return;
+      const identity = idOf(req);
+      try {
+        await deps.behavior!.syncNow();
+        res.redirect("/ui/settings");
+      } catch {
+        errorPage(res, 500, "Sync failed — see server logs.", identity);
+      }
+    })();
+  });
+
+  router.post("/settings/reindex", (req, res) => {
+    void (async () => {
+      if (!behaviorGuard(req, res)) return;
+      const identity = idOf(req);
+      try {
+        await deps.behavior!.reindexNow();
+        res.redirect("/ui/settings");
+      } catch {
+        errorPage(res, 500, "Reindex failed — see server logs.", identity);
+      }
+    })();
+  });
+
+  // ── Settings ▸ This machine — the loopback-gated control plane (LOAD-BEARING) ──────────────────
+  // One endpoint dispatches every allowlisted machine op. Gated on: loopback peer (a remote teammate
+  // can never reach it) + admin role + a per-process CSRF nonce. The allowlist + arg validation +
+  // no-shell spawn live in src/server/localOps.ts (via deps.localMachine.run).
+  router.post("/settings/machine", (req, res) => {
+    const identity = idOf(req);
+    if (!isLoopbackAddress(req.socket.remoteAddress)) {
+      errorPage(res, 403, "Machine controls are only available in a browser on the computer running Krimto.", identity);
+      return;
+    }
+    if (!canManageBehavior(req)) {
+      errorPage(res, 403, "Org admin required", identity);
+      return;
+    }
+    if (!deps.localMachine) {
+      errorPage(res, 500, "Machine controls are unavailable on this server.", identity);
+      return;
+    }
+    const body = bodyOf(req);
+    if (typeof body._csrf !== "string" || body._csrf !== csrfNonce) {
+      errorPage(res, 403, "Invalid or missing form token — reload the page and try again.", identity);
+      return;
+    }
+    const action = typeof body.action === "string" ? body.action : "";
+    const params: Record<string, string> = {};
+    for (const key of ["email", "apiKey", "path"]) {
+      if (typeof body[key] === "string") params[key] = body[key] as string;
+    }
+    const result = deps.localMachine.run(action, params);
+    if (!result.ok) {
+      errorPage(res, 422, result.message ?? "Invalid request", identity);
+      return;
+    }
+    if (result.bounces) {
+      // The op stops/restarts this server; show a page that waits for it to come back.
+      page(res, 200, "Applying…", reconnectingPanel(), identity);
+      return;
+    }
+    res.redirect("/ui/settings");
   });
 
   router.get("/facts", (req, res) => {
@@ -273,6 +453,39 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
     })();
   });
 
+  router.post("/facts/:id/tag", (req, res) => {
+    void (async () => {
+      const identity = idOf(req);
+      const rawTags = bodyOf(req).tags;
+      const desired = typeof rawTags === "string" ? parseTagInput(rawTags) : [];
+      try {
+        // Read first (enforces access; no existence leak) — also gives us the current tag set so a
+        // submitted "full set" can be diffed into the add/remove shape tagFact wants.
+        const fact = await krimtoRead(ctxFor(req), req.params.id);
+        const fm = (fact as { frontmatter?: { tags?: unknown } }).frontmatter ?? {};
+        const current = Array.isArray(fm.tags) ? fm.tags.filter((t): t is string => typeof t === "string") : [];
+        await tagFact(ctxFor(req), req.params.id, diffTags(current, desired));
+        res.redirect(`/ui/facts/${encodeURIComponent(req.params.id)}`);
+      } catch (e) {
+        if (e instanceof KrimtoError) {
+          if (e.code === "not_found") {
+            errorPage(res, 404, "Fact not found", identity);
+            return;
+          }
+          if (e.code === "forbidden") {
+            errorPage(res, 403, "You don't have permission to tag this note.", identity);
+            return;
+          }
+          if (e.code === "invalid_params") {
+            errorPage(res, 422, e.message, identity);
+            return;
+          }
+        }
+        errorPage(res, 500, "Tag update failed — see server logs", identity);
+      }
+    })();
+  });
+
   router.post("/facts/:id/delete", (req, res) => {
     void (async () => {
       const identity = idOf(req);
@@ -336,19 +549,32 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
 
   const isAdmin = (req: Request): boolean => !!deps.admin && isOrgAdmin(deps.membership(), idOf(req));
 
+  const adminOr403 = (req: Request, res: Response): AdminContext | null => {
+    const identity = idOf(req);
+    if (!deps.admin || !isOrgAdmin(deps.membership(), identity)) {
+      errorPage(res, 403, "Org admin required", identity);
+      return null;
+    }
+    return deps.admin;
+  };
+
   router.get("/admin", (req, res) => {
-    const m = deps.membership();
-    page(
-      res,
-      isAdmin(req) ? 200 : 403,
-      "Admin",
-      adminBody({
-        isAdmin: isAdmin(req),
-        users: m.users.map((u) => ({ email: u.email })),
-        teams: m.teams.map((t) => ({ slug: t.slug, members: t.members })),
-      }),
-      idOf(req),
-    );
+    void (async () => {
+      const m = deps.membership();
+      const allKeys = isAdmin(req) && deps.admin ? await deps.admin.keys.list() : [];
+      page(
+        res,
+        isAdmin(req) ? 200 : 403,
+        "Team",
+        adminBody({
+          isAdmin: isAdmin(req),
+          users: m.users.map((u) => ({ email: u.email })),
+          teams: m.teams.map((t) => ({ slug: t.slug, name: t.name, members: t.members })),
+          keys: allKeys.map((k) => ({ hash: k.hash, identity: k.identity, label: k.label, prefix: k.prefix })),
+        }),
+        idOf(req),
+      );
+    })();
   });
   router.post("/admin/members", (req, res) => {
     void (async () => {
@@ -384,6 +610,88 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       const label = typeof rawLabel === "string" && rawLabel.trim() ? rawLabel.trim() : undefined;
       const { key } = await admin.keys.issue(email, "live", label);
       page(res, 200, "API key", newKeyBody(key), identity);
+    })();
+  });
+
+  router.post("/admin/members/remove", (req, res) => {
+    void (async () => {
+      const admin = adminOr403(req, res);
+      if (!admin) return;
+      const rawEmail = bodyOf(req).email;
+      const email = typeof rawEmail === "string" ? rawEmail.trim() : "";
+      if (!email) {
+        res.redirect("/ui/admin");
+        return;
+      }
+      try {
+        await admin.applyChange(() => removeUser(admin.dataDir, email));
+        res.redirect("/ui/admin");
+      } catch (e) {
+        errorPage(res, 409, e instanceof KrimtoError ? e.message : "Could not remove member.", idOf(req));
+      }
+    })();
+  });
+
+  router.post("/admin/teams", (req, res) => {
+    void (async () => {
+      const admin = adminOr403(req, res);
+      if (!admin) return;
+      const b = bodyOf(req);
+      const slug = typeof b.slug === "string" ? b.slug.trim() : "";
+      const name = typeof b.name === "string" && b.name.trim() ? b.name.trim() : undefined;
+      if (!slug) {
+        res.redirect("/ui/admin");
+        return;
+      }
+      try {
+        await admin.applyChange(() => createTeam(admin.dataDir, slug, name));
+        res.redirect("/ui/admin");
+      } catch (e) {
+        errorPage(res, 409, e instanceof KrimtoError ? e.message : "Could not create team.", idOf(req));
+      }
+    })();
+  });
+
+  router.post("/admin/teams/members", (req, res) => {
+    void (async () => {
+      const admin = adminOr403(req, res);
+      if (!admin) return;
+      const b = bodyOf(req);
+      const slug = typeof b.slug === "string" ? b.slug.trim() : "";
+      const email = typeof b.email === "string" ? b.email.trim() : "";
+      const add = b.op !== "remove";
+      if (!slug || !email) {
+        res.redirect("/ui/admin");
+        return;
+      }
+      try {
+        await admin.applyChange(() => setTeamMember(admin.dataDir, slug, email, add));
+        res.redirect("/ui/admin");
+      } catch (e) {
+        errorPage(res, 409, e instanceof KrimtoError ? e.message : "Could not update team membership.", idOf(req));
+      }
+    })();
+  });
+
+  router.post("/admin/keys/revoke", (req, res) => {
+    void (async () => {
+      const admin = adminOr403(req, res);
+      if (!admin) return;
+      const rawHash = bodyOf(req).hash;
+      const hash = typeof rawHash === "string" ? rawHash : "";
+      const all = await admin.keys.list();
+      const rec = all.find((k) => k.hash === hash);
+      if (!rec) {
+        errorPage(res, 404, "Key not found.", idOf(req));
+        return;
+      }
+      // Lockout guard (mirrors the admin REST): never strip a member's only key.
+      if (all.filter((k) => k.identity === rec.identity).length <= 1) {
+        errorPage(res, 409, "That's the member's only key — issue another first.", idOf(req));
+        return;
+      }
+      await admin.keys.revoke(hash);
+      res.redirect("/ui/admin");
     })();
   });
 

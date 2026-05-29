@@ -177,4 +177,73 @@ describe("/ui/admin", () => {
     expect(body).toContain("&lt;script&gt;");
     expect(body).not.toContain("<script>x</script>");
   });
+
+  // v0.2.42: the Team page gains remove-member / create-team / team-membership / revoke-key.
+  it("renders the Team page with create-team + key-revoke controls for an admin", async () => {
+    const alice = await loginCookie(aliceKey);
+    const body = await (await fetch(`${base()}/ui/admin`, { headers: { cookie: alice } })).text();
+    expect(body).toContain("Team");
+    expect(body).toContain('action="/ui/admin/teams"');
+    expect(body).toContain('action="/ui/admin/keys/revoke"'); // alice + carol each have a key
+  });
+
+  it("removes a member via the form", async () => {
+    const alice = await loginCookie(aliceKey);
+    const r = await fetch(`${base()}/ui/admin/members/remove`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: alice, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: "carol@x.com" }).toString(),
+    });
+    expect(r.status).toBe(302);
+    const listed = (await (await fetch(`${base()}/admin/members`, { headers: hdr(aliceKey) })).json()) as {
+      users: { email: string }[];
+    };
+    expect(listed.users.map((u) => u.email)).not.toContain("carol@x.com");
+  });
+
+  it("creates a team and adds a member to it", async () => {
+    const alice = await loginCookie(aliceKey);
+    const create = await fetch(`${base()}/ui/admin/teams`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: alice, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ slug: "payments", name: "Payments" }).toString(),
+    });
+    expect(create.status).toBe(302);
+    const addMember = await fetch(`${base()}/ui/admin/teams/members`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: alice, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ slug: "payments", email: "carol@x.com", op: "add" }).toString(),
+    });
+    expect(addMember.status).toBe(302);
+    const m = (await (await fetch(`${base()}/admin/members`, { headers: hdr(aliceKey) })).json()) as {
+      teams: { slug: string; members: string[] }[];
+    };
+    expect(m.teams.find((t) => t.slug === "payments")?.members).toContain("carol@x.com");
+  });
+
+  it("refuses to revoke a member's only key (409)", async () => {
+    const alice = await loginCookie(aliceKey);
+    const rec = (await keys.list()).find((k) => k.identity === "carol@x.com")!;
+    const r = await fetch(`${base()}/ui/admin/keys/revoke`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: alice, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ hash: rec.hash }).toString(),
+    });
+    expect(r.status).toBe(409);
+  });
+
+  it("blocks a non-admin from the new admin routes (403)", async () => {
+    const carol = await loginCookie(carolKey);
+    const r = await fetch(`${base()}/ui/admin/teams`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie: carol, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ slug: "x" }).toString(),
+    });
+    expect(r.status).toBe(403);
+  });
 });

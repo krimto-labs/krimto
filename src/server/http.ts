@@ -17,7 +17,7 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { healthLive, healthReady, sqliteHealth, indexHealth, gitRemoteCheck, gitSyncCheck } from "./health";
 import { KrimtoTokenVerifier } from "./tokenVerifier";
 import { type RateLimiter } from "./ratelimit";
-import { buildWebRouter } from "../web/router";
+import { buildWebRouter, type BehaviorOps, type LocalMachineOps } from "../web/router";
 import { type StatusPanelOpts } from "../web/views";
 import { sessionConfigFromEnv } from "../web/session";
 import { buildAdminRouter, type AdminContext } from "./admin";
@@ -46,6 +46,10 @@ export interface HttpAppDeps {
   teamModeActive: () => boolean;
   /** Live status snapshot for the /ui dashboard status panel. */
   status?: () => StatusPanelOpts;
+  /** In-process Settings ▸ Behavior actions (git remote / sync / reindex). Admin-gated in the router. */
+  behavior?: BehaviorOps;
+  /** Loopback-gated Settings ▸ This machine controls (service / identity / folder / reset). */
+  localMachine?: LocalMachineOps;
   /** Called once, on the first request to /mcp (any verb). Powers the "🟢 client connected" boot hint. */
   onFirstClient?: () => void;
 }
@@ -164,6 +168,8 @@ export function buildHttpApp(deps: HttpAppDeps): Express {
       teamModeActive: deps.teamModeActive,
       localIdentity: deps.ctx.requester.identity,
       status: deps.status,
+      behavior: deps.behavior,
+      localMachine: deps.localMachine,
     }),
   );
 

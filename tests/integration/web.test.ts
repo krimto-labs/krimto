@@ -8,12 +8,14 @@ import * as path from "node:path";
 import type { Server } from "node:http";
 
 import { FactStore } from "../../src/storage/store";
+import { GitRepo } from "../../src/storage/git";
 import { openIndexDb } from "../../src/index/db";
 import { FactIndex } from "../../src/index/factIndex";
 import { Serializer } from "../../src/index/serialize";
 import { ApiKeyStore } from "../../src/access/auth";
 import { type Membership } from "../../src/access/membership";
 import { buildHttpApp } from "../../src/server/http";
+import { runLocalOp } from "../../src/server/localOps";
 import { krimtoWrite, type ToolContext } from "../../src/server/tools";
 
 // Membership: alice@x.com is an org admin (reads org/* scope) and member of "alpha" team.
@@ -35,6 +37,7 @@ let readableId: string;
 let unreadableId: string;
 let xssId: string;
 let keys: ApiKeyStore;
+let machineSpawns: string[][]; // records the argv each loopback machine-op would have spawned
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-web-"));
@@ -88,6 +91,36 @@ beforeEach(async () => {
     requester: { identity: "unused", teams: [] },
   };
 
+  // Real BehaviorOps backed by a GitRepo on the test root — exercises the in-process Settings ▸
+  // Behavior routes (reindex/remote/sync) end-to-end rather than against a mock.
+  const repo = await GitRepo.open(root);
+  const behavior = {
+    setRemote: (url: string) => repo.setRemote(url),
+    removeRemote: () => repo.removeRemote(),
+    syncNow: async () => ({ pull: "skipped", push: (await repo.push()).status }),
+    reindexNow: async () => {
+      await index.rebuild(await store.allFacts());
+      return index.factCount();
+    },
+  };
+  // Real allowlist/validation via runLocalOp, but the spawn is recorded instead of executed (no real
+  // `krimto stop` etc.). Exercises the loopback machine-ops route end-to-end without side effects.
+  machineSpawns = [];
+  const localMachine = {
+    run: (action: string, params: Record<string, string>) => {
+      // spawn receives [binPath, ...argv]; record just the krimto argv for assertions.
+      const r = runLocalOp(action, params, { binPath: "/fake/krimto.mjs", spawn: (_c, a) => machineSpawns.push(a.slice(1)) });
+      return r.ok ? { ok: true, bounces: r.bounces } : { ok: false, message: r.message };
+    },
+    status: async () => ({
+      runMode: "as-needed",
+      serviceRunning: true,
+      dataDir: root,
+      identity: "alice@x.com",
+      searchProvider: "keyword",
+    }),
+  };
+
   const app = buildHttpApp({
     ctx: baseCtx,
     keys,
@@ -99,6 +132,8 @@ beforeEach(async () => {
     isBuilding: () => false,
     gitRemoteStatus: () => "none",
     teamModeActive: () => true,
+    behavior,
+    localMachine,
   });
 
   await new Promise<void>((r) => {
@@ -151,12 +186,12 @@ describe("/ui web surface", () => {
   });
 
   // Helper: log in and return the raw cookie value (name=value before first ";")
-  async function loginAndGetCookie(): Promise<string> {
+  async function loginAndGetCookie(key: string = aliceKey): Promise<string> {
     const res = await fetch(`${base()}/ui/login`, {
       method: "POST",
       redirect: "manual",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ key: aliceKey }).toString(),
+      body: new URLSearchParams({ key }).toString(),
     });
     const setCookie = res.headers.get("set-cookie") ?? "";
     // "krimto_session=<value>; Path=/; ..."  → we need "krimto_session=<value>"
@@ -370,6 +405,53 @@ describe("/ui web surface", () => {
     expect(mv.status).toBe(422);
   });
 
+  // v0.2.42: inline Tag editor on the fact-detail page (curation, no new-note authoring)
+  it("GET /ui/facts/:id renders a Tag editor prefilled with the current tags", async () => {
+    const cookie = await loginAndGetCookie();
+    const res = await fetch(`${base()}/ui/facts/${readableId}`, { headers: { cookie } });
+    const body = await res.text();
+    expect(body).toContain(`action="/ui/facts/${readableId}/tag"`);
+    expect(body).toContain('name="tags"');
+    expect(body).toContain('value="deploy"'); // current tag prefilled into the editor
+  });
+
+  it("POST /ui/facts/:id/tag replaces the whole tag set and redirects", async () => {
+    const cookie = await loginAndGetCookie();
+    const r = await fetch(`${base()}/ui/facts/${readableId}/tag`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ tags: "deploy ops" }).toString(),
+    });
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe(`/ui/facts/${readableId}`);
+    const after = await fetch(`${base()}/ui/facts/${readableId}`, { headers: { cookie } });
+    const body = await after.text();
+    expect(body).toContain("ops"); // newly added tag rendered
+  });
+
+  it("POST /ui/facts/:id/tag returns 422 for a non-kebab-case tag (no write)", async () => {
+    const cookie = await loginAndGetCookie();
+    const r = await fetch(`${base()}/ui/facts/${readableId}/tag`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ tags: "NOTKEBAB" }).toString(),
+    });
+    expect(r.status).toBe(422);
+  });
+
+  it("POST /ui/facts/:id/tag returns 404 when the fact is unreadable to the viewer", async () => {
+    const cookie = await loginAndGetCookie();
+    const r = await fetch(`${base()}/ui/facts/${unreadableId}/tag`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ tags: "ops" }).toString(),
+    });
+    expect(r.status).toBe(404);
+  });
+
   it("Edit + Move forms are absent when the viewer can't write to the fact's scope", async () => {
     // Issue a key for bob (beta member) and read alice's fact... wait, alice's fact is in her
     // personal scope which bob can't see. Simpler: ensure alice viewing an org-scoped fact she
@@ -422,6 +504,140 @@ describe("/ui web surface", () => {
     const res = await fetch(`${base()}/ui/keys`, { headers: { cookie } });
     const body = await res.text();
     expect(body).toContain('<a href="/ui/settings">Settings</a>');
+  });
+
+  // v0.2.42: Settings ▸ Behavior — in-process git remote / sync / reindex (admin-gated)
+  it("GET /ui/settings renders the Behavior panel with remote + reindex controls for an admin", async () => {
+    const cookie = await loginAndGetCookie(); // alice is org admin
+    const body = await (await fetch(`${base()}/ui/settings`, { headers: { cookie } })).text();
+    expect(body).toContain("Behavior");
+    expect(body).toContain('action="/ui/settings/remote"');
+    expect(body).toContain('action="/ui/settings/reindex"');
+  });
+
+  it("POST /ui/settings/reindex rebuilds the index and redirects (admin)", async () => {
+    const cookie = await loginAndGetCookie();
+    const r = await fetch(`${base()}/ui/settings/reindex`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+    });
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe("/ui/settings");
+  });
+
+  it("POST /ui/settings/remote sets the origin remote, then /remove clears it (admin)", async () => {
+    const cookie = await loginAndGetCookie();
+    const set = await fetch(`${base()}/ui/settings/remote`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ url: "/tmp/krimto-remote-fixture.git" }).toString(),
+    });
+    expect(set.status).toBe(302);
+    const afterSet = await (await fetch(`${base()}/ui/settings`, { headers: { cookie } })).text();
+    expect(afterSet).toContain("/tmp/krimto-remote-fixture.git");
+
+    const rm = await fetch(`${base()}/ui/settings/remote/remove`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+    });
+    expect(rm.status).toBe(302);
+    const afterRm = await (await fetch(`${base()}/ui/settings`, { headers: { cookie } })).text();
+    expect(afterRm).not.toContain("/tmp/krimto-remote-fixture.git");
+  });
+
+  it("POST /ui/settings/reindex returns 403 for a non-admin in team mode", async () => {
+    const bobKey = (await keys.issue("bob@x.com", "live", "bob")).key;
+    const cookie = await loginAndGetCookie(bobKey); // bob is a team member, not org admin
+    const r = await fetch(`${base()}/ui/settings/reindex`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+    });
+    expect(r.status).toBe(403);
+  });
+
+  // v0.2.42: Settings ▸ This machine — loopback control plane (allowlist + admin + CSRF nonce)
+  async function getMachineCsrf(cookie: string): Promise<string> {
+    const body = await (await fetch(`${base()}/ui/settings`, { headers: { cookie } })).text();
+    return body.match(/name="_csrf" value="([^"]+)"/)?.[1] ?? "";
+  }
+
+  it("GET /ui/settings renders the This-machine panel + action forms + a CSRF token (admin, loopback)", async () => {
+    const cookie = await loginAndGetCookie();
+    const body = await (await fetch(`${base()}/ui/settings`, { headers: { cookie } })).text();
+    expect(body).toContain("This machine");
+    expect(body).toContain('action="/ui/settings/machine"');
+    expect(body).toContain('name="_csrf"');
+    expect(body).toContain('value="restart"');
+  });
+
+  it("POST /ui/settings/machine runs a non-bouncing op and redirects (admin, loopback, CSRF ok)", async () => {
+    const cookie = await loginAndGetCookie();
+    const csrf = await getMachineCsrf(cookie);
+    const r = await fetch(`${base()}/ui/settings/machine`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "search-keyword", _csrf: csrf }).toString(),
+    });
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe("/ui/settings");
+    expect(machineSpawns).toContainEqual(["search", "--keyword"]);
+  });
+
+  it("POST /ui/settings/machine shows a reconnecting page for a bouncing op (restart)", async () => {
+    const cookie = await loginAndGetCookie();
+    const csrf = await getMachineCsrf(cookie);
+    const r = await fetch(`${base()}/ui/settings/machine`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "restart", _csrf: csrf }).toString(),
+    });
+    expect(r.status).toBe(200);
+    expect(await r.text()).toContain("Applying");
+    expect(machineSpawns).toContainEqual(["restart"]);
+  });
+
+  it("POST /ui/settings/machine rejects a wrong CSRF token with 403 and never spawns", async () => {
+    const cookie = await loginAndGetCookie();
+    const r = await fetch(`${base()}/ui/settings/machine`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "restart", _csrf: "wrong" }).toString(),
+    });
+    expect(r.status).toBe(403);
+    expect(machineSpawns).toHaveLength(0);
+  });
+
+  it("POST /ui/settings/machine rejects an unknown action with 422 and never spawns", async () => {
+    const cookie = await loginAndGetCookie();
+    const csrf = await getMachineCsrf(cookie);
+    const r = await fetch(`${base()}/ui/settings/machine`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "evil", _csrf: csrf }).toString(),
+    });
+    expect(r.status).toBe(422);
+    expect(machineSpawns).toHaveLength(0);
+  });
+
+  it("POST /ui/settings/machine returns 403 for a non-admin (team mode), no spawn", async () => {
+    const bobKey = (await keys.issue("bob@x.com", "live", "bob")).key;
+    const cookie = await loginAndGetCookie(bobKey);
+    const r = await fetch(`${base()}/ui/settings/machine`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "restart", _csrf: "x" }).toString(),
+    });
+    expect(r.status).toBe(403);
+    expect(machineSpawns).toHaveLength(0);
   });
 
   // 7. XSS escaping: title with <script>alert(1)</script> is escaped in search results

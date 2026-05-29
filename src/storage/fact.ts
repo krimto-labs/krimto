@@ -179,3 +179,46 @@ export function validateFrontmatter(fm: Partial<FactFrontmatter>): ValidationIss
   }
   return issues;
 }
+
+/** A set of tag additions/removals to apply to a fact. */
+export interface TagChange {
+  add: string[];
+  remove: string[];
+}
+
+/**
+ * Outcome of {@link applyTagChanges}:
+ *   • `ok`         — the tag set changed; `frontmatter` is the next frontmatter (tags sorted, the
+ *                    field dropped when empty). `before`/`after` are the sorted tag sets.
+ *   • `no-change`  — the resulting set equals the current one; nothing to write.
+ *   • `invalid`    — a resulting tag fails the kebab-case rule; `issues` lists the offenders.
+ */
+export type TagApplyResult =
+  | { status: "ok"; frontmatter: FactFrontmatter; before: string[]; after: string[] }
+  | { status: "no-change"; tags: string[] }
+  | { status: "invalid"; issues: ValidationIssue[] };
+
+/**
+ * Pure tag-set transform shared by the web tag editor (`src/server/tagFact.ts`) and the CLI
+ * (`krimto tag`). Adds then removes, dedupes, sorts. Does NOT touch `updated` — the caller bumps
+ * it before persisting — and never mutates the input frontmatter.
+ */
+export function applyTagChanges(fm: FactFrontmatter, change: TagChange): TagApplyResult {
+  const beforeSet = new Set(fm.tags ?? []);
+  const afterSet = new Set(beforeSet);
+  for (const t of change.add) afterSet.add(t);
+  for (const t of change.remove) afterSet.delete(t);
+
+  const before = [...beforeSet].sort();
+  const after = [...afterSet].sort();
+  const unchanged = before.length === after.length && before.every((t, i) => t === after[i]);
+  if (unchanged) return { status: "no-change", tags: before };
+
+  const next: FactFrontmatter = { ...fm };
+  if (after.length === 0) delete next.tags;
+  else next.tags = after;
+
+  const issues = validateFrontmatter(next).filter((i) => i.field === "tags");
+  if (issues.length > 0) return { status: "invalid", issues };
+  return { status: "ok", frontmatter: next, before, after };
+}

@@ -23,6 +23,8 @@ import { type AdminContext } from "./admin";
 import { localModeBanner, stdioStartupBanner, teamModeBanner } from "./banner";
 import { acquireLock, LockHeldError, type LockHandle } from "./lock";
 import { ActivityLog } from "./activity";
+import { runLocalOp, defaultBinPath } from "./localOps";
+import { inspectRuntime } from "../cli/inspectRuntime";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -55,7 +57,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.41";
+export const KRIMTO_VERSION = "0.2.42";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -446,6 +448,50 @@ export async function main(): Promise<void> {
     // `members.yaml` edit flips the running server with no restart.
     const teamModeActive = (): boolean =>
       hasOrgAdmin(membership) || process.env.KRIMTO_REQUIRE_AUTH === "1";
+    // Settings ▸ Behavior actions — operate on this server's own repo/index, so they run through
+    // the write serializer (never a CLI spawn, which would deadlock on the lock this process holds).
+    const behavior = {
+      setRemote: (url: string): Promise<void> => ctx.writeQueue.run(() => repo.setRemote(url)),
+      removeRemote: (): Promise<void> => ctx.writeQueue.run(() => repo.removeRemote()),
+      syncNow: async (): Promise<{ pull: string; push: string }> => {
+        const result = { pull: "skipped", push: "skipped" };
+        await ctx.writeQueue.run(async () => {
+          result.pull = (await sync.pullOnce()).status;
+          result.push = (await repo.push()).status;
+        });
+        return result;
+      },
+      reindexNow: async (): Promise<number> => {
+        await ctx.writeQueue.run(async () => {
+          await index.rebuild(await store.allFacts());
+        });
+        return index.factCount();
+      },
+    };
+    // Settings ▸ This machine — loopback-gated CLI spawns (see src/server/localOps.ts) + a runtime
+    // snapshot from inspectRuntime. Only reachable from a loopback browser by an admin (router gate).
+    const localMachine = {
+      run: (action: string, params: Record<string, string>) => {
+        const r = runLocalOp(action, params, { binPath: defaultBinPath() });
+        return r.ok ? { ok: true, bounces: r.bounces } : { ok: false, message: r.message };
+      },
+      status: async (): Promise<{
+        runMode: string;
+        serviceRunning: boolean;
+        dataDir: string;
+        identity: string;
+        searchProvider: string;
+      }> => {
+        const rt = await inspectRuntime(dataDir);
+        return {
+          runMode: rt.runMode,
+          serviceRunning: !!(rt.lock && rt.lock.alive),
+          dataDir,
+          identity,
+          searchProvider: rt.searchProvider,
+        };
+      },
+    };
     const app = buildHttpApp({
       ctx,
       keys,
@@ -469,6 +515,8 @@ export async function main(): Promise<void> {
           ? { provider: embeddingProvider.name, dimensions: embeddingProvider.dimensions }
           : undefined,
       }),
+      behavior,
+      localMachine,
       // Gap #5c — print a one-time confirmation banner when an MCP client first hits /mcp.
       onFirstClient: () => {
         process.stderr.write(

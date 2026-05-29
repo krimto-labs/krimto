@@ -4,6 +4,48 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.42] — 2026-05-29 — `/ui` becomes the post-setup control panel (on-brand)
+
+Setup stays in the CLI; once you've run it, the web UI is now where you **use and control** Krimto.
+Previously `/ui` could only browse/search/edit facts and manage keys — every CLI knob (search
+provider, git remote, sync, reindex, run mode, service lifecycle, identity, data folder, fuller team
+management) was terminal-only — and the page used a warm-paper aesthetic that didn't match the brand,
+with panels still telling users to "restart with `KRIMTO_BOOTSTRAP_ADMIN=…`" (obsolete since live
+team mode). No architecture changes: storage, index, access, the 6-tool MCP surface, the retrieval
+algorithm, and the write coordinator are unchanged.
+
+### Changed — brand alignment + de-noise
+`/ui` now follows the official brand (`docs/Krimto Brand _standalone_.html`): cool-gray paper
+(`#F1F3F2`), a desaturated slate accent, and the rising two-segment logomark — driven by one design
+token layer in `src/web/html.ts` (brand colors + mark; system-font fallbacks, **no webfont CDN**, so
+the page makes no third-party request). The nav is role-adaptive (solo → Memory · Settings; team adds
+Keys/Logout; admins add Team). Stale "turn on team mode" copy now points at `krimto team init`
+(`src/web/views.ts`).
+
+### Added — human curation of memory
+Inline **tag editing** on the fact-detail page (`POST /ui/facts/:id/tag`), plus deep-linked
+Edit/Move/Tag/Delete actions in the note list. The tag-set math is shared with `krimto tag` via a new
+pure `applyTagChanges` (`src/storage/fact.ts`); the web path is `src/server/tagFact.ts` (same atomic
+write-queue → index → git pipeline as an MCP write). Fact **creation** stays with agents + CLI.
+
+### Added — Settings ▸ Behavior (in-process)
+Git remote set/remove, **Sync now**, **Reindex**, and embedding status — server-side actions that run
+through the write serializer, admin-gated (owner in solo / org admin in team).
+`GitRepo.removeRemote()` added (`src/storage/git.ts`).
+
+### Added — Settings ▸ This machine (loopback control plane)
+Run mode, stop/restart, change identity, switch search provider, move the data folder, and reset —
+real one-click controls, **only** from a browser on the machine running Krimto. The route
+(`POST /ui/settings/machine`) is gated on loopback peer + admin role + a per-process CSRF nonce, and
+dispatches through a strict allowlist that spawns the `krimto` CLI as a detached child with an arg
+array and **no shell** (`src/server/localOps.ts`) — so free-text params can't inject. Self-restarting
+ops show a page that polls `/health/live` and reconnects.
+
+### Added — fuller Team page
+The admin page (served at `/ui/admin`, labelled **Team**) gains remove-member, create-team, add/remove
+team members, and revoke-key (with the same "never strip a member's only key" guard as the admin REST),
+reusing `membershipStore` via `AdminContext.applyChange`.
+
 ## [0.2.41] — 2026-05-29 — git sync made real: one switch, a `sync` verb, honest status
 
 "How does a new teammate pull, and how do team vs personal notes sync?" exposed a broken model.

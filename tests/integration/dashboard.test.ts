@@ -133,15 +133,18 @@ describe("factsList — notes timeline", () => {
     expect(html).toContain("saved by ben@acme.com");
   });
 
-  it("shows Edit/Move/Delete/View file action buttons for the viewer's own notes", () => {
+  it("shows Edit/Move/Tag/Delete actions deep-linking into the detail sections for own notes", () => {
     const html = factsList([baseRow()], 1, membership, "maria@acme.com");
     expect(html).toContain(">Edit<");
     expect(html).toContain(">Move<");
+    expect(html).toContain(">Tag<");
     expect(html).toContain(">Delete<");
-    expect(html).toContain(">View file<");
+    // v0.2.42: actions deep-link to the relevant section on the detail page (not 4 identical links).
+    expect(html).toContain("#edit");
+    expect(html).toContain("#tag");
   });
 
-  it("hides write actions for notes the viewer didn't author (only View / View file)", () => {
+  it("hides write actions for notes the viewer didn't author (only View)", () => {
     const html = factsList(
       [baseRow({ author: "ben@acme.com" })],
       1,
@@ -149,7 +152,6 @@ describe("factsList — notes timeline", () => {
       "maria@acme.com",
     );
     expect(html).toContain(">View<");
-    expect(html).toContain(">View file<");
     expect(html).not.toContain(">Edit<");
     expect(html).not.toContain(">Delete<");
   });

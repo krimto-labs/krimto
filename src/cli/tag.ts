@@ -11,9 +11,9 @@ import * as path from "node:path";
 
 import { canWrite } from "../access/membership";
 import {
+  applyTagChanges,
   serializeFact,
   toIsoUtc,
-  validateFrontmatter,
   type Fact,
 } from "../storage/fact";
 import { buildCliContext, getLockHolder } from "./cliRuntime";
@@ -86,31 +86,21 @@ export async function runTag(opts: TagOptions): Promise<TagResult> {
       };
     }
 
-    const before = new Set(found.fact.frontmatter.tags ?? []);
-    const after = new Set(before);
-    for (const t of changes.add) after.add(t);
-    for (const t of changes.remove) after.delete(t);
-
-    if (setsEqual(before, after)) {
+    const result = applyTagChanges(found.fact.frontmatter, changes);
+    if (result.status === "no-change") {
       return { status: "no-change", message: `\nNo change — tags already as requested.\n` };
     }
-
-    const fm = { ...found.fact.frontmatter };
-    if (after.size === 0) delete fm.tags;
-    else fm.tags = [...after].sort();
-    fm.updated = toIsoUtc(new Date());
-
-    const validation = validateFrontmatter(fm);
-    if (validation.length > 0) {
+    if (result.status === "invalid") {
       return {
         status: "invalid_change",
         message:
           `\n🔴 Tag validation failed:\n` +
-          validation.map((v) => `   • ${v.field}: ${v.message}`).join("\n") +
+          result.issues.map((v) => `   • ${v.field}: ${v.message}`).join("\n") +
           `\n\n   Tags must be lowercase kebab-case (a-z, 0-9, dashes).\n`,
       };
     }
 
+    const fm = { ...result.frontmatter, updated: toIsoUtc(new Date()) };
     const next: Fact = { frontmatter: fm, body: found.fact.body };
     const absPath = path.join(ctx.store.dataDir(), found.path);
 
@@ -135,16 +125,10 @@ export async function runTag(opts: TagOptions): Promise<TagResult> {
       status: "ok",
       message:
         `\n✅ Tags updated on ${opts.id}\n` +
-        `\n   Before: ${[...before].sort().join(", ") || "(none)"}\n` +
-        `   After:  ${[...after].sort().join(", ") || "(none)"}\n`,
+        `\n   Before: ${result.before.join(", ") || "(none)"}\n` +
+        `   After:  ${result.after.join(", ") || "(none)"}\n`,
     };
   } finally {
     await close();
   }
-}
-
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const x of a) if (!b.has(x)) return false;
-  return true;
 }

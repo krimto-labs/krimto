@@ -113,6 +113,12 @@ export class GitRepo {
     }
   }
 
+  /** Remove the `origin` remote if present. No-op (never throws) when there is none. */
+  async removeRemote(): Promise<void> {
+    if (!(await this.hasRemote())) return;
+    await exec("git", ["-C", this.dir, "remote", "remove", "origin"]);
+  }
+
   /** Ensure the repo is on DEFAULT_BRANCH (rename a committed branch; set the ref when unborn). */
   private async ensureBranch(): Promise<void> {
     let current = "";

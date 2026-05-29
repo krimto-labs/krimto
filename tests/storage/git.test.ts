@@ -102,6 +102,16 @@ describe("GitRepo remote", () => {
     await repo.setRemote(remoteDir);
     expect(await repo.hasRemote()).toBe(true);
   });
+
+  it("removeRemote drops the origin remote and is idempotent", async () => {
+    const repo = await GitRepo.open(dir);
+    await repo.setRemote(remoteDir);
+    expect(await repo.hasRemote()).toBe(true);
+    await repo.removeRemote();
+    expect(await repo.hasRemote()).toBe(false);
+    await repo.removeRemote(); // no-op, must not throw
+    expect(await repo.hasRemote()).toBe(false);
+  });
 });
 
 describe("GitRepo pull", () => {

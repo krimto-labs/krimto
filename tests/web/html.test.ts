@@ -8,15 +8,50 @@ describe("escapeHtml", () => {
 });
 
 describe("layout", () => {
-  it("includes the escaped title and raw body, with nav when identity is present", () => {
+  it("includes the escaped title and raw body", () => {
     const html = layout("T<>", "<p>hi</p>", { identity: "a@x.com" });
     expect(html).toContain("T&lt;&gt;");
     expect(html).toContain("<p>hi</p>");
-    expect(html).toContain("/ui/logout");
     expect(html).toContain("a@x.com");
   });
   it("omits nav when there is no identity", () => {
-    expect(layout("T", "<p>x</p>")).not.toContain("/ui/logout");
+    const html = layout("T", "<p>x</p>");
+    expect(html).not.toContain("/ui/logout");
+    expect(html).not.toContain(">Memory<");
+  });
+});
+
+describe("layout — brand", () => {
+  it("applies brand tokens + the rising-stroke logomark, with no webfont CDN", () => {
+    const html = layout("T", "x", { identity: "a@x.com" });
+    expect(html).toContain("#F1F3F2"); // brand paper background
+    expect(html).toContain("--accent"); // slate accent token
+    expect(html).toContain("<svg"); // inline logomark
+    expect(html).not.toContain("fonts.googleapis.com"); // no Google Fonts CDN
+    expect(html).not.toContain("Fraunces"); // old warm-paper serif removed
+  });
+});
+
+describe("layout — role-adaptive nav", () => {
+  it("solo: Memory + Settings, no Team, no Keys/Logout (no auth)", () => {
+    const solo = layout("T", "x", { identity: "me@local" });
+    expect(solo).toContain(">Memory<");
+    expect(solo).toContain('<a href="/ui/settings">Settings</a>');
+    expect(solo).not.toContain(">Team<");
+    expect(solo).not.toContain("/ui/logout");
+    expect(solo).not.toContain("/ui/keys");
+  });
+  it("team member: adds Keys + Logout, still no Team", () => {
+    const member = layout("T", "x", { identity: "a@acme.com", teamMode: true });
+    expect(member).toContain(">Memory<");
+    expect(member).toContain('<a href="/ui/settings">Settings</a>');
+    expect(member).toContain("/ui/keys");
+    expect(member).toContain("/ui/logout");
+    expect(member).not.toContain(">Team<");
+  });
+  it("team admin: shows the Team link", () => {
+    const admin = layout("T", "x", { identity: "a@acme.com", isAdmin: true, teamMode: true });
+    expect(admin).toContain('href="/ui/admin">Team<');
   });
 });
 
@@ -26,17 +61,5 @@ describe("layout copy-button support", () => {
     expect(html).toContain("data-copy");
     expect(html).toContain("navigator.clipboard");
     expect(html).toContain("getElementById");
-  });
-});
-
-describe("layout nav labels", () => {
-  it("uses plain labels and shows Team only for admins", () => {
-    const member = layout("T", "x", { identity: "a@acme.com" });
-    expect(member).toContain(">Memory<");
-    expect(member).toContain("/ui/connect");
-    expect(member).not.toContain(">Team<");
-
-    const admin = layout("T", "x", { identity: "a@acme.com", isAdmin: true });
-    expect(admin).toContain('href="/ui/admin">Team<');
   });
 });
