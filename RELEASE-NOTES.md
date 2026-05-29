@@ -3,7 +3,7 @@
 User-facing notes for each Krimto release. For the full technical changelog see
 [CHANGELOG.md](CHANGELOG.md).
 
-## v0.2 — shipped (v0.2.5 → v0.2.41, 2026-05-25 → 2026-05-29)
+## v0.2 — shipped (v0.2.5 → v0.2.44, 2026-05-25 → 2026-05-29)
 
 The first public release. Krimto is a **team memory layer** you can self-host with `npx`, `pnpm
 dev`, or the published Docker image at `ghcr.io/krimto-labs/krimto`:
@@ -69,5 +69,18 @@ new teammate who runs their own Krimto now has a clear path: `krimto remote --se
 `krimto sync`. The README/usage/help now explain the two ways a team shares memory — one shared
 server (thin clients via `krimto join`) vs. each machine syncing over the git remote — and that
 personal and team notes live in one data dir and sync together.
+
+**v0.2.42 → v0.2.43 — `/ui` becomes a control panel.** The web dashboard is now where you use and
+control Krimto after setup: browse and curate notes (inline tag / edit / move / delete), a Behavior
+panel (git remote, sync now, reindex, embedding status), and a loopback-only This-machine panel (run
+mode, identity, search provider, data folder, reset) — all brand-aligned, with no third-party
+requests.
+
+**v0.2.44 — first-run friction.** A bare MCP install (no `krimto init`) now routes "remember X" to
+`krimto_write`: the standing memory directive is advertised at the MCP protocol level, so the agent
+gets it without any project file. The startup banner and the first-write hint make it clear your
+notes live in `~/.krimto` regardless of which folder you're in; `krimto --help` and `/ui/connect`
+show which editors auto-connect vs. need a manual snippet; and the README is a lean newcomer-first
+read.
 
 Install instructions and the connect-your-agent guide are in the [README](README.md).
