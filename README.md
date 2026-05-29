@@ -1,556 +1,127 @@
 # Krimto
 
-> **Krimto — open-source team memory for AI coding agents.** Personal, team, and org knowledge your
-> agents share, in plain markdown you own (git-backed, Apache-2.0). **Try it solo in two minutes, then
-> bring your team.**
+> Open-source team memory for AI coding agents. Markdown files in git, a `user → team → org` hierarchy, one cross-vendor MCP server. Apache-2.0.
 
-One shared brain for every agent at your company. Every agent at every team writes facts to one
-place and reads the right slice of it — Alice's preferences override the team's defaults, the team's
-conventions override the org's standards, and every fact carries a paper trail (author, source,
-timestamp, reviewer).
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@krimto-labs/krimto)](https://www.npmjs.com/package/@krimto-labs/krimto)
+[![CI](https://github.com/krimto-labs/krimto/actions/workflows/test.yml/badge.svg)](https://github.com/krimto-labs/krimto/actions/workflows/test.yml)
 
-> **Where we are:** **v0.2.42** is the current release — the v0.2.17 wizard redesign shipped
-> end-to-end, and the web `/ui` is now a brand-aligned **post-setup control panel** (v0.2.42), on
-> top of twenty-five patch releases of correctness fixes and agent-friendly surface.
-> The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
-> hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
-> image, the web UI) is unchanged. What you get on top of v0.2.16:
->
-> **The setup story (v0.2.17 → v0.2.21).**
-> - **One-command interactive setup wizard** (`krimto init`) — five questions, preselected
->   defaults. Reads `git config user.email` for identity; detects editors at both project
->   level (`.cursor/`, `CLAUDE.md`) and machine level (`~/.cursor/`, `~/.claude.json`).
-> - **Reconfigure menu** — re-runs of `krimto init` show a "Krimto on this machine:"
->   summary with a real **Service:** line driven by lock + launchctl reality (not just
->   config snapshot). "Keep current" prompts let you Enter-through.
->
-> **The teardown story (v0.2.32 → v0.2.33).**
-> - **`krimto stop` / `start` / `restart`** — first-class verbs for the off-ramp the original
->   wizard forgot. Idempotent. `stop` keeps the plist on disk so `start` can reload it.
-> - **`krimto reset [--yes] [--wipe-notes]`** — aggressive sweep across all editors (Cursor
->   JSON + Claude Code CLI scopes user/project/local) + launchd/systemd uninstall + lock
->   cleanup. `--wipe-notes` collapses to one named-consequence prompt.
->
-> **The runtime story (v0.2.26 → v0.2.30).**
-> - **`/ui` notes-app redesign** — scope cards with emoji icons (📔 Just me / 📓 Team / 🏢 Org)
->   and a notes timeline with per-row Edit / Move / Delete. `krimto ui` opens it. (Re-skinned to
->   the official brand and turned into a control panel in **v0.2.42** — see below.)
-> - **Single reconciled runtime view** (`inspectRuntime`) — every read-side command (status,
->   verify-connection, whoami, reconfigure menu) routes through the same lock + launchctl +
->   editor-config probe. No more "status says one thing, verify says another."
-> - **Service-first install ordering + port-ready probe** — wizard installs the service
->   first, waits for `:8080` to accept TCP, then writes editor configs. Cursor's file
->   watcher never fires into an unbound port (the v0.2.27/28 ECONNREFUSED fix).
->
-> **The agent story (v0.2.34 → v0.2.40).**
-> - **Phase B agent flags** — `editors --add cursor`, `service --always`, `search --keyword`,
->   `reset --yes`, `remote --set <url>`, `folder --to <path>`. Every command that used to
->   open an interactive prompt now has a flag form.
-> - **Non-TTY guards** — interactive commands without flags exit 2 with copy-pasteable
->   usage instead of hanging on an unanswerable prompt.
-> - **`krimto whoami` + `set identity <email>`** + a **`krimto_whoami` MCP tool** so agents
->   stop hallucinating identity.
-> - **Editor attribution via User-Agent sniffing** — facts saved over HTTP automatically
->   carry `source: "cursor"` / `"claude-code"` / etc., so the dashboard's "saved from a
->   Cursor chat" line works without prompting agents.
-> - **Cursor `alwaysApply: true` frontmatter** so `.cursor/rules/krimto.mdc` auto-attaches
->   instead of requiring the user to type "krimto" first.
-> - **`krimto team init` lands you in team mode (v0.2.36)** — the wizard restarts the running
->   service into team mode itself (no copy-paste recipe, no lock conflict), saves invite keys
->   to a 0600 backup file, and validates the git remote URL at the prompt. `krimto notes` now
->   works from any terminal (identity falls back to `git config user.email`).
-> - **Write-time duplicate backstop (v0.2.37)** — `krimto_write` flags a near-duplicate fact in
->   the same scope (a `related` list + a hint to `krimto_supersede`), so memory doesn't silently
->   accumulate two facts about the same thing even when the agent skips `krimto_recall`. Backed
->   by a new retrieval-quality eval that asserts recall returns the right fact first.
-> - **Team mode activates live (v0.2.38)** — `krimto team init` writes `members.yaml` and the
->   running server flips to team mode on its own within ~2s (it polls the file) — no restart, no
->   env var. The wizard verifies auth is genuinely enforced before printing "🟢 live", and
->   auto-reconnects the admin's own editor with their key.
-> - **Team init keeps your identity (v0.2.39)** — the admin defaults to the identity that already
->   owns your notes (not git config), so going solo→team is an upgrade of your existing account,
->   not a silent second one. Type a different email and it warns + offers a one-key "use your
->   existing identity," so your notes never get orphaned by accident.
-> - **Team UX hardening (v0.2.40)** — `krimto team status` (and a Team block in `krimto status`)
->   shows team mode, members, your role, and whether THIS machine is the server. `krimto reset`
->   warns before wiping the keys your team logs in with; `krimto stop` warns before disconnecting
->   teammates; `krimto team disband` says it's per-machine + prints the reconnect command; and
->   `krimto team leave` covers the joined-teammate case.
->
-> **The control-panel story (v0.2.42).** Setup stays in the CLI; once you've run it, the web `/ui`
-> is now where you **use and control** Krimto.
-> - **On-brand** — official cool-gray palette + slate accent + the rising-stroke logomark via one
->   token layer; system fonts, **no webfont CDN**; role-adaptive nav (solo / member / admin).
-> - **Curate by hand** — inline tag editing + Edit/Move/Delete on a note (fact *creation* stays with
->   agents + CLI). Stale "restart with `KRIMTO_BOOTSTRAP_ADMIN`" copy replaced with `krimto team init`.
-> - **Settings ▸ Behavior** — git remote, **Sync now**, **Reindex**, embedding status (in-process,
->   admin-gated).
-> - **Settings ▸ This machine** — run mode, stop/restart, identity, search provider, move data
->   folder, reset — **loopback-only**, admin-gated, CSRF-protected, run via an allow-listed,
->   no-shell CLI spawn (`src/server/localOps.ts`).
-> - **Team page** — add/remove members, create teams, manage membership, issue/revoke keys.
->
-> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the
-> v0.2.17 proposal-vs-reality diff in
-> [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
-> for the design rationale + what each patch caught.
+Krimto gives every AI coding agent on your team one shared memory. Tell your agent "remember X" in
+any editor and it saves a durable, attributable fact; ask later — in a new chat, a different editor,
+or from a teammate's machine — and it recalls the right answer. Your personal notes override the
+team's; the team's override the org's.
 
-## Try it in 90 seconds (solo, no account)
+Facts are plain markdown files in a git repo you own — readable, reviewable, and yours. No lock-in,
+no proprietary store.
+
+## Why Krimto
+
+- **Markdown-in-git storage.** Every fact is a markdown file with frontmatter. Audit it with
+  `git log`, edit it in any editor, review it in a pull request.
+- **`user → team → org` hierarchy.** Knowledge is scoped to a person, a team, or the whole company,
+  and the most specific scope wins at recall time.
+- **Cross-vendor + Apache-2.0.** One MCP server works with Claude Code, Cursor, Codex, Gemini CLI,
+  and more — fully open source, with no managed-service restriction.
+
+## Try it in 2 minutes (solo, no account)
 
 ```bash
 npx @krimto-labs/krimto init
 ```
 
-That's it. The wizard scans your machine, then walks you through 5 questions — each one has a
-preselected default and a plain-English explanation. Hit Enter five times if our defaults look
-right and your AI has a memory.
+The setup wizard detects your editor, wires it up, and turns on automatic memory. Then, in any chat:
 
-What you'll be asked:
-
-| Question | Default | What it means |
-|---|---|---|
-| Which editors? | (detected ones) | Cursor / Claude Code / Codex / Gemini CLI — toggle which ones get Krimto wired in. |
-| How should Krimto run? | As needed | Editor launches it on demand. Pick "Always running" to install a launchd/systemd service. |
-| Who's this for? | Just me | Solo mode (no auth). You can flip to team mode any time — facts you save now will stay. |
-| Smarter search? | Keyword (free) | Pick OpenAI to enable semantic search. Same key you'd use for GPT. |
-| Apply? | Yes | Wizard writes the editor's MCP config + the standing rule, then prints what changed. |
-
-After the wizard finishes:
-
-```bash
-"Remember that our staging DB resets every Sunday."   # in any chat
-# new chat:
-"What do you know about staging?"                     # → it remembers
+```
+"Remember that our staging DB resets every Sunday."
 ```
 
-Look at what was saved with **`krimto notes`** or **`krimto ui`** (opens `http://localhost:8080`).
-Diagnose with **`krimto status`** — one screen tells you what's wired, what's configured, and
-what your agent has been calling.
+Open a new chat and ask:
 
-**Want a server with the browser dashboard?**
-`npx @krimto-labs/krimto serve` (defaults to port 8080), or Docker:
-`docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest`.
-
-**Want to bring teammates in?** `krimto team init` walks you through it (admin email + team slug
-+ optional git remote + teammate emails). Each teammate runs `krimto join --server <url> --key
-<key>` from the DM template the wizard prints. Step back any time with `krimto team disband`
-(notes are preserved). All shipped in v0.2.17.1.
-
-**Power-user / CI:** `npx @krimto-labs/krimto init --yes` skips all prompts and applies
-defaults non-interactively. `--all` and `--minimal` keep their v0.2.16 meaning.
-
-### Setting Krimto up programmatically (AI agents, CI)
-
-Krimto is designed to be driven by Claude Code, Cursor, Codex, and similar AI agents that
-don't have a stdin TTY. Every interactive command has a flag form:
-
-```bash
-# The one-command full install (defaults: detected editors, as-needed run mode):
-krimto init --yes
-
-# Or pick the pieces:
-krimto editors --add cursor --add claude-code --yes    # wire editors
-krimto service --always                                # install background service
-krimto search --keyword                                # keyword search (default)
-krimto search --openai --api-key sk-...                # semantic search
-krimto remote --set git@github.com:acme/krimto.git     # cross-machine sync
-krimto status                                          # machine-readable check
-krimto stop / start / restart                          # idempotent service control
+```
+"What do you know about staging?"   → it remembers.
 ```
 
-Run any interactive command (`editors`, `service`, `search`, `remote`, `folder`, `reset`)
-without a flag from a non-TTY shell and you get `exit 2` with copy-pasteable flag usage,
-not a hung-prompt warning. `krimto --help` has a dedicated **For AI agents (no TTY)**
-block at the top.
-
-The HTTP MCP handler also **sniffs `User-Agent`** to auto-stamp facts with `source:
-"cursor"` / `"claude-code"` / etc. — no agent-prompt convention needed.
+See your notes with `krimto notes` (terminal) or `krimto ui` (browser dashboard). Your data lives in
+`~/.krimto` — the same folder no matter which project you're working in.
 
 ## Connect your agent
 
-Krimto is one MCP server — point any client at `http://localhost:8080/mcp`. Verified for **Claude Code**
-and **Cursor**:
+`krimto init` wires supported editors for you. What auto-connects vs. needs one copy-paste step:
 
-**Claude Code** (local, no key):
-
-```bash
-claude mcp add --transport http krimto http://localhost:8080/mcp
-```
-
-**Cursor** (local, no key) — add to `~/.cursor/mcp.json` and restart Cursor:
-
-```json
-{ "mcpServers": { "krimto": { "url": "http://localhost:8080/mcp" } } }
-```
-
-…or one-click: open **http://localhost:8080/ui/connect** and click **Add to Cursor**.
-
-**Team mode** (after `KRIMTO_BOOTSTRAP_ADMIN`): connecting needs your API key. The server prints a
-ready-to-paste config (with the key) on boot, and `/ui/connect` shows it too. Add the key as a header:
-
-- Claude Code: append `--header "Authorization: Bearer krm_live_…"`
-- Cursor: add `"headers": { "Authorization": "Bearer krm_live_…" }` to the server block
-
-Other clients (Codex, Gemini CLI, Copilot, Cline) use the same `url` (plus the `Bearer` header in team
-mode); those are best-effort and not yet individually verified.
-
-### Make it automatic
-
-By default your agent uses Krimto only when you ask ("use krimto to remember X"). One command, run
-once in your project, makes it call Krimto **on its own** (recall before tasks, write when you say
-"remember"):
-
-```bash
-npx @krimto-labs/krimto init
-```
-
-`init` auto-detects which editor you're using (`.cursor/`, `.claude/`, existing `CLAUDE.md` /
-`AGENTS.md` / `GEMINI.md`, `gemini-extension.json`) and writes the rule only into the files that
-match. Pass `--all` to write to every supported rules file. Change your mind later? Run
-`npx @krimto-labs/krimto uninit` to cleanly strip the rule (and delete files that held only it).
-
-The rule it writes:
-
-```
-# Krimto memory — always use
-- Before a task, call krimto_recall to load what we already know.
-- When I say "remember", or you learn a durable fact, call krimto_write
-  (user/me = personal, team/<slug> = shared).
-- Respect precedence: user beats team beats org.
-- Don't save secrets or one-off chatter.
-```
-
-The in-product **Connect** page (`/ui/connect`) shows this same rule with a copy button.
-
-### The CLI surface
-
-Everything is reachable via `npx`. Run `npx @krimto-labs/krimto --help` for the full list. All
-commands print clean, sectioned output with ✅ / ⚠️ / 🟢 status indicators and copy-paste shell
-commands. The seven groups below match `--help`'s structure.
-
-**Get connected (start here)**
-
-| Command | What it does |
+| Editor | Setup |
 |---|---|
-| `init [--yes]` | Interactive setup wizard — five questions, preselected defaults. Connects detected editors, applies the standing rule, optionally installs a background service. `--yes` skips prompts; legacy `--all` / `--minimal` still work. |
-| `connect` | Print copy-paste config for Claude Code & Cursor (manual path) — substitutes your real `git config user.email` for the identity. |
-| `uninit [--also-stop | --keep-running]` | Strip the standing rule from this project's rules files. Offers to stop the service too (or skip the prompt with the flags). |
+| Cursor | auto-connects |
+| Claude Code | auto-connects |
+| Codex | manual snippet |
+| Gemini CLI | manual snippet |
 
-**Look at your notes**
-
-| Command | What it does |
-|---|---|
-| `notes [query]` | List notes grouped by plain-English scope (`Just me` / team name / org name). With a query: ranked search via `krimto_recall`. |
-| `ui` | Open `http://localhost:8080/ui` in your browser. |
-| `open` | Reveal the notes folder in your OS file manager (`open` / `xdg-open` / `explorer`). |
-| `edit <id>` | Open the fact's `.md` in `$EDITOR`; reindexes on save. |
-| `mv <id> <scope>` | Move a note between scopes (id preserved). |
-| `supersede <id>` | Replace a note with a new version. Old stays in git. |
-| `tag <id> +new -old ...` | Add or remove tags via frontmatter rewrite. |
-| `rm <id>` | Delete a fact (file + index + git deletion commit). |
-
-**Stop & reset** (v0.2.32+)
-
-| Command | What it does |
-|---|---|
-| `stop` | Stop the running krimto (uninstalls/unloads service if installed, SIGTERMs an ad-hoc PID). Plist stays on disk so `start` can reload it. Idempotent. |
-| `start` | Start krimto (re-bootstraps the existing plist). Honest message when no service is configured. |
-| `restart` | `stop` + `start`. Atomic on always-running mode via `launchctl kickstart -k`. |
-| `uninit` | Project-only undo (rule files only). Offers to stop the service too. |
-| `reset [--yes] [--wipe-notes]` | Disconnect every editor (Cursor JSON + Claude Code CLI across user/project/local scopes) + uninstall service + wipe API-key store. `--wipe-notes` collapses to one named-consequence prompt. |
-
-**Is it working?**
-
-| Command | What it does |
-|---|---|
-| `status` | One-screen consolidator: running PID + mode + launched-by, editors, storage, add-ons, recent activity, hijack warning. Nudges toward `service --always` when running ad-hoc. |
-| `whoami` | Print the active `KRIMTO_IDENTITY` and every place it's set (each editor's MCP config + the service unit env). Flags mismatches. |
-| `verify-connection` / `where` / `storage` / `usage` | Back-compat aliases — preserve their original stdout, point at `status` on stderr. |
-
-**Configure (after first run)** — every command accepts flags so agents can drive them non-interactively.
-
-| Command | What it does |
-|---|---|
-| `editors --add <name> / --remove <name> / --set <list>` | Wire / unwire editors (Cursor / Claude Code / Codex / Gemini). `--list` prints current connections. No-flag form prompts interactively when a TTY is available. |
-| `service --as-needed / --always / --manual` | Switch run mode. Flag form skips the prompt. `service stop` / `service start` are aliases for `stop` / `start`. |
-| `search --keyword / --openai --api-key sk-...` | Switch search provider. The OpenAI path verifies the key before persisting. |
-| `remote --show / --set <url> / --remove` | Manage the git remote (also reachable as `setup-remote <url>`). Setting a remote turns on **two-way sync** — Krimto auto-pushes every commit and a running server auto-pulls every ~60s. |
-| `sync` (alias `pull`) | Pull the team's pushed notes now (`git pull --rebase` + re-index) and push your local commits. Refuses while a live server holds the lock. |
-| `folder --to <path> [--yes]` | Guided move of the data dir. Stops service, atomic rename (cross-fs fallback), reinstalls service with new env, prints `export KRIMTO_DATA=` hint. |
-| `set identity <email>` | Change `KRIMTO_IDENTITY` everywhere atomically (editor MCP configs + service env). Preserves other env keys. |
-
-**Team**
-
-| Command | What it does |
-|---|---|
-| `team init` | Admin-side wizard: admin email, **org name**, team slug, optional git remote, initial teammates. Prints admin key + per-teammate keys + a DM template. Has a non-interactive `--yes --team <slug> [--org/--admin/--invite/--remote]` form. |
-| `team status` | Team mode, members, your role, whether THIS machine is the server, and your **Save targets** (which phrase saves to which scope). |
-| `team disband [--yes]` | Per-machine step-back to solo mode. Notes / `members.yaml` / git history untouched; prints the reconnect command. |
-| `team leave [--yes]` | Disconnect this machine from a team you joined. |
-| `join --server <url> --key <key>` | Teammate-side (HTTP model): detects editors, writes HTTP MCP config with the bearer header + the standing rule. |
-| `sync` (alias `pull`) | Git-sync model: pull the team's notes now + push yours. |
-
-**Advanced / scripting**
-
-| Command | What it does |
-|---|---|
-| `serve` | Start the HTTP server in the foreground (port 8080) + browser `/ui` dashboard. |
-| `setup-remote <url>` | One-shot git remote setup (verifies the initial push). |
-| `setup-embeddings` | Send a real test embedding to verify a `KRIMTO_EMBED_*` config. |
-| `reindex` | Rebuild `index.db` from markdown (fixes orphans). |
-| `delete <id>` | Alias for `rm`. |
-| (no args) | Start the stdio MCP server (default; for MCP clients to launch). |
-| `--help`, `-h` | Show the full CLI surface — includes a `For AI agents (no TTY)` block at the top with copy-paste flag examples. |
-
-The stdio entrypoint enforces a **single-writer lock** on the data dir (`.krimto/lock.json`) — two
-Krimto processes can no longer race on the same `~/.krimto`. A second `serve`/stdio launch is
-refused with a precise error pointing at the holder's PID.
-
-## How it works
-
-Three layers, one source of truth:
-
-1. **Storage** — facts are **markdown files in a git repository**. Humans read them, edit them, and
-   review them via pull request. Git is the audit log.
-2. **Index** — a **SQLite + sqlite-vec** hybrid index (BM25 + vector) sits on top for fast semantic
-   retrieval, with hierarchical scope precedence applied at ranking time.
-3. **Access** — an **API server** enforces who can read/write which scope. Folder paths are the data
-   model; the server is the access enforcer (filesystem permissions are not RBAC).
-
-This hybrid pattern (markdown for storage + index for retrieval + server for access) is the
-verified-successful approach used by Claude Code's CLAUDE.md system, Manus, OpenClaw, and
-[memweave](https://towardsdatascience.com/) (Towards Data Science, April 2026). Krimto's
-differentiator is the storage *choice within* that pattern — human-readable markdown in git — plus
-`user → team → org` hierarchy as the primary primitive.
-
-## Quick start (self-host)
-
-```bash
-git clone https://github.com/krimto-labs/krimto && cd krimto
-pnpm install
-```
-
-Facts live as markdown files under `KRIMTO_DATA` (default `~/.krimto/`) — a folder you can open in any
-editor and version with git. Run Krimto with `pnpm` (Options A/B) or in **Docker** (Option C).
-
-### Option A — local, over stdio (no auth)
-
-For a single developer on one machine. **Fastest path — no clone, no Docker** (Claude Code shown):
+To connect any MCP client manually, point it at Krimto over stdio:
 
 ```bash
 claude mcp add krimto -- npx -y @krimto-labs/krimto
 ```
 
-…or the config-file form any stdio MCP client accepts (Cursor, Codex CLI, Gemini CLI, Copilot,
-OpenClaw, Cline use the same shape):
+…or the config-file form (Cursor, Codex, Gemini CLI, etc. use the same shape):
 
 ```json
-{
-  "mcpServers": {
-    "krimto": {
-      "command": "npx",
-      "args": ["-y", "@krimto-labs/krimto"],
-      "env": { "KRIMTO_IDENTITY": "you@acme.com" }
-    }
-  }
-}
+{ "mcpServers": { "krimto": { "command": "npx", "args": ["-y", "@krimto-labs/krimto"] } } }
 ```
 
-The first run downloads dependencies (including `better-sqlite3`, which ships prebuilt binaries), then
-starts the **stdio** server with data in `~/.krimto` (override with `KRIMTO_DATA`; run
-`npx @krimto-labs/krimto where` to print the exact path). Want the browser dashboard too? Stop the
-stdio process and run `npx @krimto-labs/krimto serve` (Option B) — same data folder, plus `/ui`.
+By default an agent uses Krimto only when you ask. Running `krimto init` once in your project drops a
+standing rule so it uses Krimto on its own.
 
-**Make your agent actually use Krimto.** By default an editor's agent routes "remember X" to its own
-built-in memory. Run this once in your project so it calls Krimto instead:
+## How it works
+
+Three layers, one source of truth:
+
+1. **Storage** — facts are markdown files in a git repository (the source of truth; git is the audit log).
+2. **Index** — a SQLite + sqlite-vec hybrid index (keyword + vector) for fast retrieval, with scope
+   precedence applied at ranking time.
+3. **Access** — an API server enforces who can read and write each scope (`user` / `team` / `org`).
+
+## Team mode
+
+When you're ready to share memory with teammates:
 
 ```bash
-npx @krimto-labs/krimto init
+npx @krimto-labs/krimto team init
 ```
 
-It auto-detects which editor you're using and writes the idempotent "always use Krimto" rule into the
-matching rules file (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules/krimto.mdc`). Pass
-`--all` to write all four. Run `npx @krimto-labs/krimto uninit` to cleanly remove the rule later.
-Restart your editor afterward.
-
-From a clone instead of npm, swap the command for `pnpm`:
-
-```json
-{
-  "mcpServers": {
-    "krimto": {
-      "command": "pnpm",
-      "args": ["--dir", "/absolute/path/to/krimto", "dev"],
-      "env": { "KRIMTO_DATA": "/Users/you/.krimto", "KRIMTO_IDENTITY": "you@acme.com" }
-    }
-  }
-}
-```
-
-`KRIMTO_IDENTITY` is who the agent writes as (fact author + access scope). Stdio mode has **no network
-auth** — run it locally/trusted.
-
-### Option B — over HTTP (browser dashboard + optional team auth)
-
-For solo with a browser UI, or a shared/networked deployment with bearer auth. **No clone, no
-Docker** — `npx` starts the HTTP server (default port 8080):
+This walks you through an admin email, your org/team name, an optional shared git remote, and
+teammate invites — then prints a join command for each teammate:
 
 ```bash
-# Solo, local-only (no auth, no login on /ui)
+krimto join --server <url> --key <key>
+```
+
+Teammates can connect to one shared server, or each run their own Krimto synced over a shared git
+remote. Personal and team notes live together and sync as a unit. Step back to solo any time with
+`krimto team disband` (your notes are preserved).
+
+## Self-host
+
+Krimto runs anywhere Node 20+ runs.
+
+```bash
+# HTTP server + browser dashboard at http://localhost:8080
 npx @krimto-labs/krimto serve
 
-# Team mode (first run prints an admin API key once)
-KRIMTO_BOOTSTRAP_ADMIN=you@acme.com npx @krimto-labs/krimto serve
-# → "issued admin API key for you@acme.com (shown once): krm_live_…"
-# MCP at http://localhost:8080/mcp ; health at http://localhost:8080/health/ready
+# or Docker
+docker run -d -p 8080:8080 -v ~/.krimto:/data ghcr.io/krimto-labs/krimto:latest
 ```
 
-(`pnpm dev` is the dev-mode equivalent — only useful when working on Krimto itself.)
-
-Then point your agent at it with that key:
-
-```json
-{
-  "mcpServers": {
-    "krimto": {
-      "url": "http://localhost:8080/mcp",
-      "headers": { "Authorization": "Bearer krm_live_..." }
-    }
-  }
-}
-```
-
-**Two ways a team shares memory.** (A) **One server, thin clients:** teammates run `krimto join
---server <url> --key <key>` and their editor reads/writes the admin's running server live — no local
-data, nothing to pull. (B) **Each runs their own Krimto, synced over git:** every machine points its
-data dir at the same shared repo (`krimto remote --set <url>` or `KRIMTO_GIT_REMOTE`). Personal
-(`user/<you>`) and team notes live in the same data dir and sync together. **Setting a remote turns
-on two-way sync** — Krimto auto-pushes every commit and a running server auto-pulls every ~60s; run
-`krimto sync` to pull (and push) on demand. A new teammate's first pull is just
-`krimto remote --set <shared-url>` then `krimto sync`. (`KRIMTO_GIT_REMOTE` still works as a boot-time
-override that also sets the remote.)
-
-Optional HTTP knobs (both **off by default**): set `KRIMTO_RATE_LIMIT_PER_MINUTE=<n>` to rate-limit
-each API key on `/mcp` (responses carry `X-RateLimit-*`; over the limit returns `429` with
-`Retry-After`); set `KRIMTO_TELEMETRY_ENDPOINT=<url>` to send anonymous, **bucketed** usage counts
-(version, install id, and size buckets only — never fact content, identities, queries, scopes, or git
-remotes).
-
-**Locked out of the admin account?** Restart with `KRIMTO_REISSUE_ADMIN_KEY=you@acme.com` to mint and
-print a fresh admin key. (The web UI also refuses to revoke your last remaining key.)
-
-**Multi-instance sync:** Krimto pushes and pulls on the repo's current branch, so give every instance
-the same default branch — e.g. `git config --global init.defaultBranch main` before first run. A
-stuck pull is reported at `/health/ready` under `git_sync` (it never blocks readiness).
-
-When an agent saves a personal note, point it at `user/me` — the server resolves that to the caller's
-own scope, so facts never land in an unreadable scope.
-
-**Inviting teammates (org admins).** Easiest path: `npx @krimto-labs/krimto team init` — interactive
-wizard that bootstraps the admin, creates the team, issues per-teammate keys, optionally wires a
-shared git remote, and prints a copy-paste DM template ending with `krimto join --server <url> --key
-<key>` for each teammate. The browser admin panel (`/ui/admin`) and the admin REST API
-(`POST /admin/members`, `POST /admin/keys`, `POST /admin/teams`, `PATCH /admin/teams/:slug`, all
-bearer-authed and org-admin-only) are still there for live edits — no file edits or restarts.
-`KRIMTO_BOOTSTRAP_ADMIN` only makes the **first** admin; add later admins/members through the
-admin surface.
-
-### Option C — Docker (HTTP + bearer auth, containerized)
-
-The published multi-arch image at `ghcr.io/krimto-labs/krimto:latest` (built for `linux/amd64` and
-`linux/arm64`) is the default path:
-
-```bash
-docker run -d --name krimto -p 8080:8080 \
-  -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com \
-  -v ~/.krimto:/data \
-  ghcr.io/krimto-labs/krimto:latest
-docker logs krimto | grep "admin API key"   # the key is printed once
-```
-
-The container serves MCP at `http://localhost:8080/mcp` (bearer auth) and health at
-`/health/ready`; facts persist in the mounted `/data` volume. Point your agent at it with the same
-`"url"` + `Bearer` config as Option B.
-
-**Building locally** — only needed if you're developing Krimto or pinning to an unreleased
-commit:
-
-```bash
-docker build -t krimto .
-docker run -d --name krimto -p 8080:8080 \
-  -e KRIMTO_BOOTSTRAP_ADMIN=you@acme.com -v ~/.krimto:/data \
-  krimto
-```
-
-The published image is built and pushed by
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) on every `v*` tag.
-
-### Web UI (humans)
-
-When the HTTP server is running, open `http://localhost:8080/ui`. In local mode (no
-`KRIMTO_BOOTSTRAP_ADMIN`), there's no login. In team mode, sign in with any Krimto API key.
-
-Nav: **Memory** · **Connect** · **Keys** · **Settings** · *Team* (admins only) · *Logout*.
-
-**`/ui/facts` (Memory)** — focused on the notes:
-
-- **Plain-English scope labels** — `Just me` / your team's display name / your org's display name,
-  computed from `members.yaml` (falls back to the literal `<kind>/<id>` when no name configured).
-- **Inline Edit, Move, Delete** on every note's detail page when you have `canWrite` on its scope.
-  Edit replaces the body; Move drops down every scope you can write to; Delete is git-tracked.
-- **Search box + scope cards + flat notes list** — newest first, capped at 50.
-- **Hijack warning** — shown when 3+ recalls land with 0 writes in 5min (signature of an editor's
-  built-in memory intercepting "remember X"). Points at `krimto init` to refresh the standing rule.
-- **One-line activity blurb** that links to `/ui/settings` for the full log.
-
-**`/ui/settings`** — engineering panels in one place: how Krimto works, where your data lives
-(markdown/git/index explainer), status dots for the optional add-ons, recent MCP-tool-call log,
-quick links to keys / connect / team admin.
-
-**`/ui/keys`** — issue or revoke your own API keys (team mode).
-
-**`/ui/connect`** — copy-paste config for any MCP client + the always-use standing rule.
-
-**`/ui/admin`** (org admins only) — invite teammates, manage teams, issue keys for others.
-
-The UI reuses the same access control as the MCP tools — you only ever see what you can read. Set
-`KRIMTO_SESSION_SECRET` to keep sessions valid across restarts (otherwise a random per-boot secret
-is used). Inline Edit/Move/Delete shipped in v0.2.17-3; the formal review/approval flow for shared
-scopes still lands in v0.3.
-
-## The eight promises (current status)
-
-| # | Promise | Status |
-|---|---------|--------|
-| 1 | Markdown-first hybrid storage | ✓ v0.2 |
-| 2 | Hierarchical scope (`user`/`team`/`org`) as primary primitive | ✓ v0.2 |
-| 3 | Cross-vendor SDK (MCP server + per-marketplace plugins) | ✓ MCP server over stdio + HTTP v0.2; native plugins planned |
-| 4 | Attribution baked into every fact | ✓ v0.2 |
-| 5 | Self-hostable, single Docker | ✓ v0.2 — published multi-arch image at `ghcr.io/krimto-labs/krimto`; also `npx krimto serve` (no Docker needed) and `pnpm dev` |
-| 6 | Apache-2.0 — fully open, no rug-pull | ✓ |
-| 7 | Web interface for humans, on top of git | ✓ v0.2.8 + v0.2.17 — `/ui` with browse/search, fact detail, plain-English scope labels, inline Edit/Move/Delete, a dedicated `/ui/settings` consolidator, API keys, team admin. Formal PR-approval flow lands in v0.3. |
-| 8 | Zero-friction migration between self-hosted and Cloud | ⏳ full flow with v1.0 Cloud (`git clone` works today) |
-
-## How Krimto compares
-
-Krimto combines three properties that are each uncommon among existing memory tools:
-
-- **Apache-2.0** — fully open, with no managed-service restriction. (ByteRover/Cipher is
-  source-available under the Elastic License 2.0, which is not OSI-approved open source.)
-- **Markdown-files-in-git storage** — human-readable and reviewable in git. (Hindsight uses
-  PostgreSQL; Mem0 uses a vector + graph database.)
-- **`user → team → org` hierarchy as the primary primitive.** (Mem0 organizes by user/session/agent.)
-
-Cross-vendor reach — working across Claude Code, Cursor, Codex, Gemini CLI, Copilot, OpenClaw, and
-Cline — is table stakes today, so Krimto ships it but doesn't lead with it.
+Run `npx @krimto-labs/krimto --help` for the full command surface.
 
 ## Roadmap
 
-`v0.2` (teams, v0.2.5) → `v0.2.18` (v0.2.17 wizard redesign — published as one SemVer-clean
-release) → `v0.2.40` (correctness + agent-friendly polish — current) → `v0.3` (OAuth + PR approval
-flow) → `v1.0` (Krimto Cloud). See [ROADMAP.md](ROADMAP.md) for the per-release breakdown.
+v0.2 (current) ships the memory core, teams, the web dashboard, and the cross-vendor MCP server.
+Next: OAuth sign-in and a pull-request approval flow (v0.3), then a hosted Krimto Cloud (v1.0). See
+[ROADMAP.md](ROADMAP.md).
 
-## License
+## Contributing & license
 
-[Apache-2.0](LICENSE). The same code is self-hostable by a solo developer, a startup, or an
-enterprise — no tier walls in the open-source distribution.
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and our
+[Code of Conduct](CODE_OF_CONDUCT.md). Security reports: [SECURITY.md](SECURITY.md).
+
+Licensed under [Apache-2.0](LICENSE). The same code is self-hostable by a solo developer or an
+enterprise — no tier walls.
