@@ -4,6 +4,30 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.44] — 2026-05-29 — first-run friction gate
+
+The pre–go-to-market gate: a bare MCP install (no `krimto init`) now routes "remember X" to
+`krimto_write`, and the GitHub-facing docs read cleanly to a newcomer.
+
+### Added
+- **MCP server `instructions`** — the standing memory directive is now advertised at the protocol
+  level (`mcpServerInstructions()` in `src/agentRule.ts`), so an agent gets discovery guidance even
+  when no standing rule file was written. Single-sourced with the rule file (no drift).
+- **Client matrix** (`src/cli/clientMatrix.ts`) — one source of truth for which editors auto-wire,
+  rendered in `krimto --help`, the README, and `/ui/connect`; bound by test to init's `mcpWire`.
+- Repo community-health files: `CONTRIBUTING.md`, `SECURITY.md`, GitHub issue templates.
+
+### Changed
+- **Banner v2** — the stdio + local banners now lead with what Krimto is, surface `~/.krimto` and
+  its CWD-independence, and drop deprecated verbs (`where` / `verify-connection` / `storage`); the
+  local banner points teams at `krimto team init` instead of `KRIMTO_BOOTSTRAP_ADMIN`.
+- **First-write hint** states the data dir is the same regardless of working directory.
+- **README** — lean newcomer-first rewrite (556 → 127 lines); version history lives in this
+  changelog. ROADMAP de-insidered; RELEASE-NOTES extended to v0.2.44.
+
+No storage / index / access / retrieval / write-coordinator changes. The 6 MCP tools and their
+input schemas are unchanged.
+
 ## [0.2.43] — 2026-05-29 — dashboard polish: real logomark + de-cluttered Settings
 
 Follow-up to the v0.2.42 control panel — visual + layout refinement of `/ui`. No behavior or route

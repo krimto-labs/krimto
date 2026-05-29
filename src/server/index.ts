@@ -58,7 +58,7 @@ import { mcpServerInstructions } from "../agentRule";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.43";
+export const KRIMTO_VERSION = "0.2.44";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
