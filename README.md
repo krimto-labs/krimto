@@ -90,8 +90,7 @@ timestamp, reviewer).
 >   no-shell CLI spawn (`src/server/localOps.ts`).
 > - **Team page** — add/remove members, create teams, manage membership, issue/revoke keys.
 >
-> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), the v0.2.42 walkthrough in
-> [docs/krimto-v0.2.42-maria-journey.html](docs/krimto-v0.2.42-maria-journey.html), and the
+> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the
 > v0.2.17 proposal-vs-reality diff in
 > [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
 > for the design rationale + what each patch caught.

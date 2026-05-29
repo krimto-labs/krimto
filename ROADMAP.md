@@ -111,8 +111,7 @@ a control panel:
 - **Team page** — remove member, create team, manage team membership, issue/revoke keys.
 
 No architecture changes (storage, index, access, the 6 MCP tools, retrieval, the write coordinator
-are unchanged). See
-[docs/krimto-v0.2.42-maria-journey.html](docs/krimto-v0.2.42-maria-journey.html).
+are unchanged).
 
 ## v0.3 — Humans on top of git
 
