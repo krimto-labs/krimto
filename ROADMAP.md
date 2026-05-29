@@ -111,11 +111,37 @@ a control panel:
 - **Team page** — remove member, create team, manage team membership, issue/revoke keys.
 
 No architecture changes (storage, index, access, the 6 MCP tools, retrieval, the write coordinator
-are unchanged).
+are unchanged). **v0.2.43** polished it further: the canonical rising-three-node logomark and a
+de-cluttered Settings page.
+
+## Next — the first-run friction gate (still v0.2)
+
+v0.2 is feature-complete, and the **post-setup** experience is now solid (the `/ui` control panel +
+brand, v0.2.42–0.2.43). The remaining v0.2.x priority is **near-zero first-run friction**: a
+brand-new person should run `npx @krimto-labs/krimto`, talk to their agent, and succeed on the
+**first try** with no confusion.
+
+This is the gate before any go-to-market push (getting Krimto into the AI-tool ecosystem /
+directories). People who discover Krimto that way install it and judge it **once** — so a rough
+first run reads back as a false "no demand" signal. We close first-run friction first, *then* push.
+
+Open items (the **cold-start** half — the post-setup half is done):
+
+- **Discovery** — "remember X" must reliably route to `krimto_write`, not the agent's own built-in
+  memory. Mitigated today (the `krimto init` standing rule + strong MCP tool descriptions + the
+  recall-without-write warning panel), but not yet airtight.
+- **Data location** — make it obvious that facts live in `~/.krimto`, regardless of working dir.
+- **Guided first run** — empty-state coaching, a plain-English "what this is", and a client matrix
+  (which editors auto-wire vs. need a manual snippet).
+
+**Sequencing:** first-run friction gate → go-to-market push → v0.3 → v1.0. The detailed go-to-market
+plan lives in the internal strategy doc; the ordering is a deliberate, reasoned bet (the go-to-market
+push is a one-shot first impression and the demand signal), not yet backed by demand data.
 
 ## v0.3 — Humans on top of git
 
-Remaining items that didn't ship in the v0.2.17 series:
+Comes **after** the friction gate + the go-to-market push above. Note: the user-facing **on-ramp**
+work is v0.2.x, *not* v0.3 — v0.3 is the remaining product items from the v0.2.17 series:
 
 - Real human sign-in (OAuth) on top of the v0.2 API-key session scaffold
 - Pull-request approval flow for member-edited facts in shared scopes (team / org)
