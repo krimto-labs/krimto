@@ -1,0 +1,23 @@
+{
+  "name": "krimto",
+  "owner": {
+    "name": "Krimto",
+    "email": "security@krimto.com"
+  },
+  "description": "Open-source team memory layer for AI coding agents.",
+  "plugins": [
+    {
+      "name": "krimto",
+      "source": "./",
+      "description": "Open-source team memory layer for AI coding agents — markdown files in git, user→team→org hierarchy, cross-vendor MCP server. Apache-2.0.",
+      "version": "0.2.44",
+      "category": "memory",
+      "author": {
+        "name": "Krimto",
+        "url": "https://github.com/krimto-labs/krimto"
+      },
+      "license": "Apache-2.0",
+      "homepage": "https://krimto.com"
+    }
+  ]
+}

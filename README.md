@@ -70,6 +70,18 @@ claude mcp add krimto -- npx -y @krimto-labs/krimto
 By default an agent uses Krimto only when you ask. Running `krimto init` once in your project drops a
 standing rule so it uses Krimto on its own.
 
+### Install as a Claude Code plugin
+
+Prefer Claude Code's plugin system? Add Krimto's marketplace and install it directly:
+
+```bash
+/plugin marketplace add krimto-labs/krimto
+/plugin install krimto@krimto
+```
+
+This bundles the MCP server together with Krimto's skills, the `/krimto-status` command, and the
+memory hooks — no separate `krimto init` needed.
+
 ## How it works
 
 Three layers, one source of truth:
