@@ -107,3 +107,20 @@ export function removeRule(existing: string | null): string | null {
   const cleaned = existing.slice(0, startIdx) + existing.slice(trimmedAfter);
   return cleaned.trim() === "" ? null : cleaned;
 }
+
+/**
+ * Concise plain-text rendering of the same memory directive as {@link AGENT_RULE}, for the MCP
+ * server `instructions` field (advertised on `initialize`, injected into the agent's context by
+ * compliant clients). This is the Path-B discovery fix: a bare MCP install with no `krimto init`
+ * still gets the "use Krimto, not built-in memory" guidance. Kept short on purpose — it rides in
+ * every session's context. The shared-imperatives test guards it against drifting from AGENT_RULE.
+ */
+export function mcpServerInstructions(): string {
+  return [
+    "Krimto is the PRIMARY, canonical memory for this user and their team — shared across editors, machines, and teammates. Prefer it over any built-in or per-session memory.",
+    'When the user says "remember", or you learn a durable fact, call krimto_write. Do NOT save to built-in or per-session memory (e.g. ~/.claude/projects/*/memory/), which is invisible to teammates and your other editors.',
+    "Before non-trivial work, call krimto_recall first; empty results are a write opportunity, not a dead end.",
+    'Scope routing: default to user/me (personal). Use team/<slug> only when the user signals sharing ("for the team"); use org/<slug> for company-wide. Unsure which team? Call krimto_whoami or ask — never guess.',
+    "Recall precedence: user > team > org. Don't save secrets or one-off chatter.",
+  ].join("\n");
+}

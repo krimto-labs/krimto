@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AGENT_RULE, applyRule, removeRule, ruleBlock } from "../src/agentRule";
+import { AGENT_RULE, applyRule, mcpServerInstructions, removeRule, ruleBlock } from "../src/agentRule";
 
 describe("agentRule", () => {
   it("the rule tells the agent to recall and write to Krimto", () => {
@@ -126,5 +126,26 @@ describe("agentRule", () => {
     it("default (no opts) matches cursorMdc=false — back-compat", () => {
       expect(applyRule(null)).toBe(applyRule(null, { cursorMdc: false }));
     });
+  });
+});
+
+describe("mcpServerInstructions", () => {
+  it("carries the load-bearing imperatives", () => {
+    const s = mcpServerInstructions();
+    expect(s).toMatch(/krimto_write/);
+    expect(s).toMatch(/krimto_recall/);
+    expect(s).toMatch(/krimto_whoami/);
+    expect(s).toMatch(/user\/me/);
+    expect(s).toMatch(/Do NOT/i);
+    // concise — it rides in every session's context
+    expect(s.split("\n").length).toBeLessThanOrEqual(12);
+  });
+
+  it("shares its core imperatives with the rule-file rendering (no drift)", () => {
+    const s = mcpServerInstructions();
+    for (const token of ["krimto_write", "krimto_recall", "krimto_whoami", "user/me"]) {
+      expect(AGENT_RULE).toContain(token);
+      expect(s).toContain(token);
+    }
   });
 });
