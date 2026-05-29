@@ -60,4 +60,12 @@ describe("buildServer resolveRequester wiring", () => {
     const r = await c.callTool({ name: "krimto_list_scopes", arguments: {} });
     expect(r.isError).toBe(true);
   });
+
+  it("advertises the memory-directive instructions on initialize", async () => {
+    const c = await connect();
+    const instructions = c.getInstructions();
+    expect(instructions).toBeTruthy();
+    expect(instructions).toMatch(/krimto_write/);
+    expect(instructions).toMatch(/Do NOT/i);
+  });
 });

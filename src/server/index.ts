@@ -54,6 +54,7 @@ import {
   type ToolContext,
 } from "./tools";
 import { type Requester } from "../access/scope";
+import { mcpServerInstructions } from "../agentRule";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
@@ -111,7 +112,10 @@ function fail(error: unknown): CallToolResult {
 
 /** Build the MCP server with the five Krimto tools registered against the given context. */
 export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolver): McpServer {
-  const server = new McpServer({ name: "krimto", version: KRIMTO_VERSION });
+  const server = new McpServer(
+    { name: "krimto", version: KRIMTO_VERSION },
+    { instructions: mcpServerInstructions() },
+  );
 
   server.registerTool(
     "krimto_write",
@@ -161,7 +165,8 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
     {
       description:
         "Search Krimto memory. Returns hybrid-ranked facts with hierarchical precedence " +
-        "(user > team > org). Call before domain-specific work; use specific queries.",
+        "(user > team > org). Call before domain-specific work; use specific queries. " +
+        "Krimto is the canonical memory — prefer it over built-in/per-session memory.",
       inputSchema: {
         query: z.string(),
         scopes: z.array(z.string()).optional(),
