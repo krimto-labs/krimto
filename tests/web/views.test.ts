@@ -54,6 +54,17 @@ describe("connectPanel", () => {
     expect(h).not.toContain("Authorization");           // no key in local mode
   });
 
+  it("shows the client matrix (which editors auto-connect vs. manual)", () => {
+    const h = connectPanel({ host: "localhost:8080", requireAuth: false });
+    expect(h).toContain("Which client?");
+    expect(h).toContain("Cursor");
+    expect(h).toContain("Claude Code");
+    expect(h).toContain("Codex");
+    expect(h).toContain("Gemini CLI");
+    expect(h).toMatch(/auto-connects/);
+    expect(h).toMatch(/manual snippet/);
+  });
+
   it("team: key placeholder, Issue-a-key callout to /ui/keys, generic header, no one-click", () => {
     const h = connectPanel({ host: "memory.acme.com", requireAuth: true });
     expect(h).toContain("memory.acme.com/mcp");

@@ -1,6 +1,7 @@
 import { escapeHtml } from "./html";
 import { connectSnippets, cursorDeeplink, genericContract } from "../server/connect";
 import { AGENT_RULE } from "../agentRule";
+import { clientMatrix } from "../cli/clientMatrix";
 import { scopeLabel } from "../access/scopeLabels";
 import { type Membership } from "../access/membership";
 
@@ -477,9 +478,17 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
       `This page is for clients you haven't connected yet. Two configs pointing at one Krimto ` +
       `aren't needed — and adding the HTTP one alongside stdio risks two processes fighting ` +
       `over the same data folder.</p>`;
+  const matrixRows = clientMatrix()
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.label)}</td><td>${r.autoWires ? "auto-connects (<code>krimto init</code>)" : "manual snippet (below)"}</td></tr>`,
+    )
+    .join("");
   return (
     `<h1>Connect your agent</h1>` +
     `<p class="muted">Point your editor at Krimto: pick it, copy the config, paste it, then check the connection.</p>` +
+    `<h2>Which client?</h2>` +
+    `<table><tr><th>Editor</th><th>Setup</th></tr>${matrixRows}</table>` +
     stdioAlreadyNotice +
     `<h2>1. Claude Code</h2>` +
     `<pre id="cc-cmd">${escapeHtml(claude)}</pre>${copy("cc-cmd")}` +
