@@ -93,6 +93,27 @@ patch is an audit-driven correctness fix or a surface upgrade for AI-agent calle
   launchctl-derived run mode); Claude Code reset sweep across user / project / local config
   scopes.
 
+## v0.2.42 — `/ui` becomes the post-setup control panel — ✅ Shipped
+
+The web dashboard caught up to the CLI. Setup stays in the terminal; once configured, `/ui` is
+where you **use and control** Krimto. Brand-aligned (official cool-gray palette + slate accent +
+the rising-stroke logomark via one token layer; system fonts, no webfont CDN; role-adaptive nav),
+de-noised (stale `KRIMTO_BOOTSTRAP_ADMIN` copy → `krimto team init`), and turned from a viewer into
+a control panel:
+
+- **Curation** — inline tag editing + Edit/Move/Delete on a note (`src/server/tagFact.ts` + a shared
+  pure `applyTagChanges`, reused by `krimto tag`). Fact *creation* stays with agents + CLI.
+- **Settings ▸ Behavior** (in-process, admin-gated) — git remote set/remove, Sync now, Reindex,
+  embedding status. `GitRepo.removeRemote()` added.
+- **Settings ▸ This machine** (loopback-gated control plane) — run mode, stop/restart, identity,
+  search provider, move data folder, reset. Gated on loopback peer + admin role + CSRF nonce; a
+  strict allowlist spawns the `krimto` CLI with an arg array and no shell (`src/server/localOps.ts`).
+- **Team page** — remove member, create team, manage team membership, issue/revoke keys.
+
+No architecture changes (storage, index, access, the 6 MCP tools, retrieval, the write coordinator
+are unchanged). See
+[docs/krimto-v0.2.42-maria-journey.html](docs/krimto-v0.2.42-maria-journey.html).
+
 ## v0.3 — Humans on top of git
 
 Remaining items that didn't ship in the v0.2.17 series:

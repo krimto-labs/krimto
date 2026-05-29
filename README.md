@@ -9,9 +9,10 @@ place and reads the right slice of it — Alice's preferences override the team'
 conventions override the org's standards, and every fact carries a paper trail (author, source,
 timestamp, reviewer).
 
-> **Where we are:** **v0.2.40** is the current release — the v0.2.17 wizard redesign is now
-> shipped end-to-end, plus twenty-three patch releases of correctness fixes and agent-friendly
-> surface. The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
+> **Where we are:** **v0.2.42** is the current release — the v0.2.17 wizard redesign shipped
+> end-to-end, and the web `/ui` is now a brand-aligned **post-setup control panel** (v0.2.42), on
+> top of twenty-five patch releases of correctness fixes and agent-friendly surface.
+> The v0.2.16 architecture (markdown-in-git storage, `user → team → org` hierarchy,
 > hybrid retrieval, server-enforced access, two-way git sync, MCP over stdio + HTTP, the Docker
 > image, the web UI) is unchanged. What you get on top of v0.2.16:
 >
@@ -31,9 +32,9 @@ timestamp, reviewer).
 >   cleanup. `--wipe-notes` collapses to one named-consequence prompt.
 >
 > **The runtime story (v0.2.26 → v0.2.30).**
-> - **`/ui` notes-app redesign** — warm-paper Fraunces serif aesthetic, scope cards with
->   emoji icons (📔 Just me / 📓 Team / 🏢 Org), notes timeline with per-row Edit / Move /
->   Delete / View file. `krimto ui` opens it.
+> - **`/ui` notes-app redesign** — scope cards with emoji icons (📔 Just me / 📓 Team / 🏢 Org)
+>   and a notes timeline with per-row Edit / Move / Delete. `krimto ui` opens it. (Re-skinned to
+>   the official brand and turned into a control panel in **v0.2.42** — see below.)
 > - **Single reconciled runtime view** (`inspectRuntime`) — every read-side command (status,
 >   verify-connection, whoami, reconfigure menu) routes through the same lock + launchctl +
 >   editor-config probe. No more "status says one thing, verify says another."
@@ -76,8 +77,23 @@ timestamp, reviewer).
 >   teammates; `krimto team disband` says it's per-machine + prints the reconnect command; and
 >   `krimto team leave` covers the joined-teammate case.
 >
-> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), and the proposal-vs-reality
-> diff in [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
+> **The control-panel story (v0.2.42).** Setup stays in the CLI; once you've run it, the web `/ui`
+> is now where you **use and control** Krimto.
+> - **On-brand** — official cool-gray palette + slate accent + the rising-stroke logomark via one
+>   token layer; system fonts, **no webfont CDN**; role-adaptive nav (solo / member / admin).
+> - **Curate by hand** — inline tag editing + Edit/Move/Delete on a note (fact *creation* stays with
+>   agents + CLI). Stale "restart with `KRIMTO_BOOTSTRAP_ADMIN`" copy replaced with `krimto team init`.
+> - **Settings ▸ Behavior** — git remote, **Sync now**, **Reindex**, embedding status (in-process,
+>   admin-gated).
+> - **Settings ▸ This machine** — run mode, stop/restart, identity, search provider, move data
+>   folder, reset — **loopback-only**, admin-gated, CSRF-protected, run via an allow-listed,
+>   no-shell CLI spawn (`src/server/localOps.ts`).
+> - **Team page** — add/remove members, create teams, manage membership, issue/revoke keys.
+>
+> See [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), the v0.2.42 walkthrough in
+> [docs/krimto-v0.2.42-maria-journey.html](docs/krimto-v0.2.42-maria-journey.html), and the
+> v0.2.17 proposal-vs-reality diff in
+> [docs/krimto-v0.2.17-maria-journey.html §09](docs/krimto-v0.2.17-maria-journey.html)
 > for the design rationale + what each patch caught.
 
 ## Try it in 90 seconds (solo, no account)
