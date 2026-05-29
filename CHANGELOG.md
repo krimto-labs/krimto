@@ -4,6 +4,27 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.43] — 2026-05-29 — dashboard polish: real logomark + de-cluttered Settings
+
+Follow-up to the v0.2.42 control panel — visual + layout refinement of `/ui`. No behavior or route
+changes.
+
+### Fixed — the canonical logomark
+The nav mark was only the two rising strokes. The real "Krimto symbol" from the brand doc is a
+rising line connecting three growing nodes (r 7 → 9.5 → 12), the largest (top-right) in the slate
+accent. Reproduced faithfully, self-colored via the brand tokens (`src/web/html.ts`).
+
+### Changed — declutter + proper form/layout styling
+- **Memory** (`/ui/facts`): dropped the footer (the copy-folder-path + settings links duplicated
+  the nav).
+- **Settings** (`/ui/settings`): removed the "Shared memory for your team", "Behind the scenes",
+  "Status", and "Other settings" panels. The page is now **Behavior + This machine + Recent
+  activity** under a clean page header. The unused renderers (`howItWorksPanel`,
+  `behindTheScenesPanel`, `statusPanel`, `dashboardFooter`, `settingsBody`) were deleted.
+- **Forms + layout**: a reusable CSS layer (`page-head`, `.field`, `.form-row`, `fieldset`/`legend`,
+  `.kv`, `.actions`, `.member-list`) gives consistent spacing; `/ui/keys` and the Team page
+  (`/ui/admin`) are restyled with sectioned layouts, fieldset-wrapped forms, and aligned actions.
+
 ## [0.2.42] — 2026-05-29 — `/ui` becomes the post-setup control panel (on-brand)
 
 Setup stays in the CLI; once you've run it, the web UI is now where you **use and control** Krimto.
