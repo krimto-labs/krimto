@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
-import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, settingsBody, behaviorPanel, machinePanel, reconnectingPanel, dashboardHeader, dashboardFooter, type FactView, type StatusPanelOpts } from "./views";
+import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, activityPanel, behaviorPanel, machinePanel, reconnectingPanel, dashboardHeader, type FactView, type StatusPanelOpts } from "./views";
 import { readDataDirGitInfo } from "../storage/git";
 import { type ApiKeyStore } from "../access/auth";
 import { type Membership, requesterFor, isOrgAdmin } from "../access/membership";
@@ -146,8 +146,6 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
       // Read the full activity log (cap matches the panel's tail; no truncation here so the
       // dedicated Settings page is the full record).
       const activity = deps.ctx.activity ? await deps.ctx.activity.tail(50) : [];
-      const m = deps.membership();
-      const isAdmin = !!deps.admin && isOrgAdmin(m, identity);
       const gitInfo = await readDataDirGitInfo(deps.ctx.store.dataDir());
       const behavior = behaviorPanel({
         remoteUrl: gitInfo.remote,
@@ -166,14 +164,11 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         res,
         200,
         "Settings",
-        behavior +
+        `<div class="page-head"><h1>Settings</h1>` +
+          `<p class="muted">Customize Krimto and see what your agents have been doing.</p></div>` +
+          behavior +
           machine +
-          settingsBody({
-            dataDir: deps.ctx.store.dataDir(),
-            status: deps.status ? deps.status() : undefined,
-            activity,
-            isAdmin,
-          }),
+          activityPanel(activity),
         identity,
       );
     })();
@@ -348,8 +343,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
             identity,
           ) +
           factsList(allFacts, totalFacts, deps.membership(), identity) +
-          recentBlurb +
-          dashboardFooter(deps.ctx.store.dataDir());
+          recentBlurb;
         page(res, 200, "Memory", body, identity);
       } catch (e) {
         errorPage(res, 500, e instanceof KrimtoError ? e.message : "Something went wrong", identity);

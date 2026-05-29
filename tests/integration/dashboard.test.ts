@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   dashboardHeader,
-  dashboardFooter,
   factsList,
   scopeList,
   type FactListRow,
@@ -177,26 +176,5 @@ describe("factsList — notes timeline", () => {
 
   it("returns empty string when there are no notes (header takes over the empty state)", () => {
     expect(factsList([], 0, membership, "maria@acme.com")).toBe("");
-  });
-});
-
-describe("dashboardFooter", () => {
-  it("emits a copy-button wired to the data dir path via data-copy-text", () => {
-    const html = dashboardFooter("/Users/maria/.krimto");
-    expect(html).toContain('data-copy-text="/Users/maria/.krimto"');
-    expect(html).toContain("📂");
-    expect(html).toContain("Copy notes folder path");
-  });
-
-  it("links to /ui/settings", () => {
-    const html = dashboardFooter("/x");
-    expect(html).toContain('href="/ui/settings"');
-    expect(html).toContain("⚙");
-  });
-
-  it("escapes the data-dir path (no attribute injection)", () => {
-    const html = dashboardFooter('"; alert(1); //');
-    expect(html).not.toContain('"; alert(1)');
-    expect(html).toContain("&quot;");
   });
 });

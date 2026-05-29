@@ -465,24 +465,19 @@ describe("/ui web surface", () => {
   });
 
   // v0.2.17-5: /ui/settings consolidation
-  it("GET /ui/settings renders the engineering panels in one place", async () => {
+  it("GET /ui/settings renders the control panels (Behavior, This machine, Recent activity), not the old explainers", async () => {
     const cookie = await loginAndGetCookie();
     const res = await fetch(`${base()}/ui/settings`, { headers: { cookie } });
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("Settings");
-    // How-it-works panel moved here
-    expect(body).toContain("Shared memory for your team");
-    // Behind-the-scenes moved here
-    expect(body).toContain("Behind the scenes");
-    expect(body).toContain("Markdown files");
-    // Recent activity moved here
-    expect(body).toContain("Recent activity");
-    // Pointers to keys + admin
-    expect(body).toContain('href="/ui/keys"');
-    expect(body).toContain('href="/ui/connect"');
-    // Admin link is gated by deps.admin (AdminContext), which this fixture doesn't set.
-    // The admin-side rendering is covered in tests/integration/admin.test.ts.
+    expect(body).toContain("Behavior"); // in-process config panel
+    expect(body).toContain("This machine"); // loopback control panel
+    expect(body).toContain("Recent activity"); // activity panel kept
+    // v0.2.42 de-noise: the explainer / status / other-settings panels are gone.
+    expect(body).not.toContain("Shared memory for your team");
+    expect(body).not.toContain("Behind the scenes");
+    expect(body).not.toContain("Other settings");
   });
 
   it("GET /ui/facts no longer renders the heavy engineering panels (moved to /ui/settings)", async () => {

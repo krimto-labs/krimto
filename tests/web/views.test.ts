@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keysBody, howItWorksPanel, behindTheScenesPanel, connectPanel, factDetail, factsList, gettingStartedPanel, adminBody, statusPanel, activityPanel, hijackWarningPanel } from "../../src/web/views";
+import { keysBody, connectPanel, factDetail, factsList, gettingStartedPanel, adminBody, activityPanel, hijackWarningPanel } from "../../src/web/views";
 
 interface K {
   hash: string;
@@ -87,20 +87,6 @@ describe("connectPanel", () => {
     // The "go check the activity panel" loop-closer
     expect(h).toContain("Recent activity");
     expect(h).toContain("verify-connection");
-  });
-});
-
-describe("howItWorksPanel", () => {
-  it("leads with team memory and names the three layers + a bring-your-team step", () => {
-    const h = howItWorksPanel();
-    expect(h).toContain("Shared memory for your team");
-    expect(h).toContain("Personal");
-    expect(h).toContain("Team");
-    expect(h).toContain("Org");
-    expect(h).toContain("Bring your team");
-    // v0.2.42 de-noise: current path is `krimto team init`, not the obsolete BOOTSTRAP_ADMIN env var.
-    expect(h).toContain("krimto team init");
-    expect(h).not.toContain("BOOTSTRAP_ADMIN");
   });
 });
 
@@ -313,80 +299,6 @@ describe("hijackWarningPanel (Gap #5+#6)", () => {
     expect(h).toContain("saving facts somewhere else");
     expect(h).toContain("auto-memory");
     expect(h).toContain("npx @krimto-labs/krimto init");
-  });
-});
-
-describe("statusPanel", () => {
-  it("warns when neither add-on is configured and points at the setup commands", () => {
-    const h = statusPanel({});
-    expect(h).toContain("not configured");
-    expect(h).toContain("krimto setup-remote");
-    expect(h).toContain("krimto setup-embeddings");
-    expect(h).toContain("BM25");
-  });
-
-  it("confirms healthy git remote sync when configured + last status is ok", () => {
-    const h = statusPanel({
-      gitRemoteUrl: "git@github.com:acme/krimto.git",
-      lastPushStatus: "ok",
-      lastPullStatus: "ok",
-      embeddings: { provider: "openai", dimensions: 1536 }, // both rows healthy
-    });
-    expect(h).toContain("git@github.com:acme/krimto.git");
-    expect(h).toContain("auto-push every batch");
-    expect(h).not.toContain("not configured");
-  });
-
-  it("reports a failed sync state with detail when push or pull last errored", () => {
-    const h = statusPanel({
-      gitRemoteUrl: "git@github.com:acme/krimto.git",
-      lastPushStatus: "error",
-      lastPullStatus: "conflict",
-    });
-    expect(h).toContain("last sync failed");
-    expect(h).toContain("error");
-    expect(h).toContain("conflict");
-    expect(h).toContain("/health/ready");
-  });
-
-  it("confirms embeddings provider + dim when configured", () => {
-    const h = statusPanel({ embeddings: { provider: "openai", dimensions: 1536 } });
-    expect(h).toContain("openai");
-    expect(h).toContain("1536-dim");
-    expect(h).toContain("semantic + keyword");
-  });
-
-  it("escapes a malicious git URL (no XSS)", () => {
-    const h = statusPanel({ gitRemoteUrl: '"><script>alert(1)</script>' });
-    expect(h).not.toContain("<script>alert(1)</script>");
-    expect(h).toContain("&lt;script&gt;");
-  });
-});
-
-describe("behindTheScenesPanel", () => {
-  it("teaches the markdown-in-git storage model and names the three layers", () => {
-    const h = behindTheScenesPanel("/Users/maria/.krimto");
-    expect(h).toContain("Behind the scenes");
-    expect(h).toContain("plain markdown files");
-    expect(h).toContain("/Users/maria/.krimto");
-    expect(h).toContain("Markdown");
-    expect(h).toContain("Git");
-    expect(h).toContain("index.db");
-    expect(h).toContain("storage"); // the `krimto storage` CLI shortcut
-  });
-
-  it("escapes the data dir (no XSS via the path)", () => {
-    const h = behindTheScenesPanel('/tmp/<script>alert(1)</script>');
-    expect(h).not.toContain("<script>alert(1)</script>");
-    expect(h).toContain("&lt;script&gt;");
-  });
-});
-
-describe("howItWorksPanel team expectations", () => {
-  it("tells the user what to expect when turning on team mode", () => {
-    const h = howItWorksPanel();
-    expect(h).toContain("What to expect when you turn on team mode");
-    expect(h).toContain("Team page");
   });
 });
 

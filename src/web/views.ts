@@ -209,24 +209,6 @@ export function scopeList(
   return `<div class="scope-row">${cards}</div>`;
 }
 
-/**
- * v0.2.30 — page footer on the dashboard. Two buttons matching the mockup:
- *   📂 Open notes folder  →  copies the absolute data-dir path to the clipboard via the
- *                            existing `data-copy-text` hook in html.ts. Shelling out to
- *                            `open <path>` from a browser POST is an attack surface we
- *                            don't need; the CLI `krimto open` is the right tool.
- *   ⚙ Settings            →  links to /ui/settings (existing route).
- */
-export function dashboardFooter(dataDir: string): string {
-  return (
-    `<div class="dashboard-footer">` +
-    `<button class="btn" data-copy-text="${escapeHtml(dataDir)}">📂 Copy notes folder path</button>` +
-    `<a class="btn" href="/ui/settings">⚙ Settings</a>` +
-    `<span class="muted" style="margin-left:auto">${escapeHtml(dataDir)}</span>` +
-    `</div>`
-  );
-}
-
 export interface FactView {
   id: string; scope: string; title: string; body: string;
   author?: string; source?: string; created?: string; tags?: string[];
@@ -330,7 +312,7 @@ export function keysBody(keys: KeyRow[]): string {
               : `<form method="post" action="/ui/keys/revoke" ` +
                 `onsubmit="return confirm('Revoke this key? You will lose access from it — this cannot be undone.')">` +
                 `<input type="hidden" name="hash" value="${escapeHtml(k.hash)}">` +
-                `<button type="submit" aria-label="Revoke key ${escapeHtml(id)}">Revoke</button></form>`;
+                `<button class="btn danger" type="submit" aria-label="Revoke key ${escapeHtml(id)}">Revoke</button></form>`;
             return (
               `<tr><td>${escapeHtml(label)}</td>` +
               `<td class="muted">${escapeHtml(k.prefix)}…${escapeHtml(k.hash.slice(0, 8))} · ${escapeHtml(k.created)}</td>` +
@@ -339,10 +321,14 @@ export function keysBody(keys: KeyRow[]): string {
           })
           .join("");
   return (
-    `<h1>API keys</h1><p class="muted">Issue and revoke the keys your agents use to authenticate.</p>` +
+    `<div class="page-head"><h1>API keys</h1>` +
+    `<p class="muted">Issue and revoke the keys your agents use to authenticate.</p></div>` +
     `<table><thead><tr><th>Label</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +
-    `<h2>Issue a new key</h2><form method="post" action="/ui/keys">` +
-    `<input name="label" placeholder="label (optional)"><button type="submit">Issue key</button></form>`
+    `<fieldset><legend>Issue a new key</legend>` +
+    `<form method="post" action="/ui/keys">` +
+    `<div class="form-row"><input name="label" placeholder="Label (optional) — e.g. laptop, ci"><button type="submit">Issue key</button></div>` +
+    `<p class="form-hint">Each key lets one agent or editor authenticate. It's shown only once, at creation.</p>` +
+    `</form></fieldset>`
   );
 }
 
@@ -367,44 +353,48 @@ export interface AdminView {
  * to a /ui/admin/* route that goes through AdminContext.applyChange (commit + reload membership).
  */
 export function adminBody(v: AdminView): string {
-  if (!v.isAdmin) return `<h1>Team</h1><p class="muted">Org-admin access required.</p>`;
+  if (!v.isAdmin) return `<div class="page-head"><h1>Team</h1><p class="muted">Org-admin access required.</p></div>`;
 
   const memberRows = v.users.length
     ? v.users
         .map(
           (u) =>
-            `<tr><td>${escapeHtml(u.email)}</td><td>` +
-            `<form method="post" action="/ui/admin/members/remove" style="display:inline" ` +
+            `<tr><td>${escapeHtml(u.email)}</td>` +
+            `<td style="text-align:right">` +
+            `<form method="post" action="/ui/admin/members/remove" ` +
             `onsubmit="return confirm('Remove this member from the org?')">` +
             `<input type="hidden" name="email" value="${escapeHtml(u.email)}">` +
             `<button class="btn danger" type="submit">Remove</button></form></td></tr>`,
         )
         .join("")
-    : `<tr><td class="muted">No members yet.</td></tr>`;
+    : `<tr><td colspan="2" class="muted">No members yet.</td></tr>`;
 
   const teamBlocks = v.teams.length
     ? v.teams
         .map((t) => {
-          const heading = t.name ? `${escapeHtml(t.name)} <code>${escapeHtml(t.slug)}</code>` : `<code>${escapeHtml(t.slug)}</code>`;
+          const heading = t.name
+            ? `${escapeHtml(t.name)} <code>${escapeHtml(t.slug)}</code>`
+            : `<code>${escapeHtml(t.slug)}</code>`;
           const members = t.members.length
             ? t.members
                 .map(
                   (m) =>
-                    `<li>${escapeHtml(m)} ` +
-                    `<form method="post" action="/ui/admin/teams/members" style="display:inline">` +
+                    `<li><span>${escapeHtml(m)}</span>` +
+                    `<form method="post" action="/ui/admin/teams/members">` +
                     `<input type="hidden" name="slug" value="${escapeHtml(t.slug)}">` +
                     `<input type="hidden" name="email" value="${escapeHtml(m)}">` +
                     `<input type="hidden" name="op" value="remove">` +
-                    `<button class="btn" type="submit">remove</button></form></li>`,
+                    `<button class="btn" type="submit">Remove</button></form></li>`,
                 )
                 .join("")
-            : `<li class="muted">no members</li>`;
+            : `<li class="muted">No members yet.</li>`;
           return (
             `<div class="panel"><h3>${heading}</h3>` +
-            `<ul style="list-style:none;padding-left:0;margin:.3rem 0">${members}</ul>` +
-            `<form method="post" action="/ui/admin/teams/members">` +
+            `<ul class="member-list">${members}</ul>` +
+            `<form method="post" action="/ui/admin/teams/members"><div class="form-row">` +
             `<input type="hidden" name="slug" value="${escapeHtml(t.slug)}"><input type="hidden" name="op" value="add">` +
-            `<input name="email" placeholder="teammate@acme.com" required> <button type="submit">Add to team</button></form></div>`
+            `<input name="email" placeholder="teammate@acme.com" required><button type="submit">Add to team</button>` +
+            `</div></form></div>`
           );
         })
         .join("")
@@ -415,8 +405,9 @@ export function adminBody(v: AdminView): string {
         .map(
           (k) =>
             `<tr><td>${escapeHtml(k.identity)}</td>` +
-            `<td class="muted">${escapeHtml(k.label ?? "(no label)")} · ${escapeHtml(k.prefix)}…${escapeHtml(k.hash.slice(0, 8))}</td><td>` +
-            `<form method="post" action="/ui/admin/keys/revoke" style="display:inline" ` +
+            `<td class="mono muted">${escapeHtml(k.label ?? "(no label)")} · ${escapeHtml(k.prefix)}…${escapeHtml(k.hash.slice(0, 8))}</td>` +
+            `<td style="text-align:right">` +
+            `<form method="post" action="/ui/admin/keys/revoke" ` +
             `onsubmit="return confirm('Revoke this key? The holder loses access from it.')">` +
             `<input type="hidden" name="hash" value="${escapeHtml(k.hash)}">` +
             `<button class="btn danger" type="submit">Revoke</button></form></td></tr>`,
@@ -425,20 +416,28 @@ export function adminBody(v: AdminView): string {
     : `<tr><td colspan="3" class="muted">No keys issued.</td></tr>`;
 
   return (
-    `<h1>Team</h1><p class="muted">Manage members, teams, and the keys your teammates' agents log in with.</p>` +
-    `<h2>Members</h2><table><tbody>${memberRows}</tbody></table>` +
-    `<form method="post" action="/ui/admin/members">` +
+    `<div class="page-head"><h1>Team</h1>` +
+    `<p class="muted">Manage members, teams, and the keys your teammates' agents log in with.</p></div>` +
+    `<h2>Members</h2>` +
+    `<table><thead><tr><th>Member</th><th></th></tr></thead><tbody>${memberRows}</tbody></table>` +
+    `<fieldset><legend>Add a member</legend>` +
+    `<form method="post" action="/ui/admin/members"><div class="form-row">` +
     `<input name="email" placeholder="teammate@acme.com" required>` +
     `<input name="team" placeholder="team slug (optional)">` +
-    `<button type="submit">Add member</button></form>` +
+    `<button type="submit">Add member</button></div></form></fieldset>` +
     `<h2>Teams</h2>${teamBlocks}` +
-    `<form method="post" action="/ui/admin/teams" style="margin-top:.6rem">` +
-    `<input name="slug" placeholder="team-slug" required> ` +
-    `<input name="name" placeholder="Display name (optional)"> <button type="submit">Create team</button></form>` +
-    `<h2>Keys</h2><table><thead><tr><th>Member</th><th>Key</th><th></th></tr></thead><tbody>${keyRows}</tbody></table>` +
-    `<form method="post" action="/ui/admin/keys">` +
+    `<fieldset><legend>Create a team</legend>` +
+    `<form method="post" action="/ui/admin/teams"><div class="form-row">` +
+    `<input name="slug" placeholder="team-slug" required>` +
+    `<input name="name" placeholder="Display name (optional)">` +
+    `<button type="submit">Create team</button></div></form></fieldset>` +
+    `<h2>Keys</h2>` +
+    `<table><thead><tr><th>Member</th><th>Key</th><th></th></tr></thead><tbody>${keyRows}</tbody></table>` +
+    `<fieldset><legend>Issue a key</legend>` +
+    `<form method="post" action="/ui/admin/keys"><div class="form-row">` +
     `<input name="email" placeholder="teammate@acme.com" required>` +
-    `<input name="label" placeholder="label (optional)"><button type="submit">Issue key</button></form>`
+    `<input name="label" placeholder="label (optional)">` +
+    `<button type="submit">Issue key</button></div></form></fieldset>`
   );
 }
 
@@ -524,32 +523,6 @@ export function connectPanel(opts: { host: string; requireAuth: boolean }): stri
     `<p>Then come back here → <a href="/ui/facts">/ui/facts</a> — the <strong>Recent activity</strong> panel ` +
     `should show both calls within a few seconds. If it's empty, run ` +
     `<code>npx @krimto-labs/krimto verify-connection</code> in your terminal to diagnose.</p>`
-  );
-}
-
-/**
- * "You own your data" explainer — taught at the moment a user is looking at their facts. Surfaces
- * the markdown-in-git storage model (Krimto's wedge vs. Mem0 / Cursor's built-in memory) so a
- * first-timer learns it from the product, not from the README they didn't read.
- */
-export function behindTheScenesPanel(dataDir: string): string {
-  return (
-    `<section class="panel">` +
-    `<h2 style="margin-top:0">Behind the scenes — your data, your files</h2>` +
-    `<p class="muted">Your facts aren't locked in a database. They live as <strong>plain markdown files</strong> ` +
-    `you can open in any editor, tracked by <strong>git</strong> (audit log + history).</p>` +
-    `<ul>` +
-    `<li><strong>📝 Markdown files</strong> — one fact per file at ` +
-    `<code>${escapeHtml(dataDir)}/{user,team,org}/&lt;id&gt;/&lt;slug&gt;.md</code>. ` +
-    `The real source of truth. Open one with any editor.</li>` +
-    `<li><strong>📚 Git repo</strong> — every change is committed (batched every 30s). ` +
-    `Run <code>git log</code> inside the folder for the full history.</li>` +
-    `<li><strong>⚡ index.db</strong> — a fast search index. Just a cache — Krimto rebuilds ` +
-    `it from your markdown on next boot. You can ignore it.</li>` +
-    `</ul>` +
-    `<p class="muted">If Krimto disappeared tomorrow, you'd still have every fact: they're just files in a folder you own. ` +
-    `Run <code>npx @krimto-labs/krimto storage</code> in your terminal for the full explanation.</p>` +
-    `</section>`
   );
 }
 
@@ -648,60 +621,6 @@ export interface StatusPanelOpts {
   lastPullStatus?: "ok" | "skipped" | "up-to-date" | "conflict" | "error" | "none";
   /** Configured embedding provider name + dim, or undefined when lexical-only. */
   embeddings?: { provider: string; dimensions: number };
-}
-
-/**
- * "Operational status" panel — shows whether the two optional add-ons (git remote sync, semantic
- * embeddings) are configured and working, so Maria doesn't have to grep stderr or `git remote -v`
- * to know whether her facts are syncing.
- */
-export function statusPanel(opts: StatusPanelOpts): string {
-  const dot = (color: string): string =>
-    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>`;
-  const ok = dot("var(--ok)");
-  const warn = dot("var(--warn)");
-  const err = dot("var(--danger)");
-
-  // Git remote row — three states: configured + healthy, configured + recent error, not configured.
-  let gitRow: string;
-  if (opts.gitRemoteUrl) {
-    const pushBad = opts.lastPushStatus === "error";
-    const pullBad = opts.lastPullStatus === "conflict" || opts.lastPullStatus === "error";
-    if (pushBad || pullBad) {
-      gitRow =
-        `<li>${err}<strong>Git remote:</strong> <code>${escapeHtml(opts.gitRemoteUrl)}</code>` +
-        ` — last sync failed (push: ${escapeHtml(opts.lastPushStatus ?? "?")}, ` +
-        `pull: ${escapeHtml(opts.lastPullStatus ?? "?")}). Check <code>/health/ready</code> for detail.</li>`;
-    } else {
-      gitRow =
-        `<li>${ok}<strong>Git remote:</strong> <code>${escapeHtml(opts.gitRemoteUrl)}</code>` +
-        ` — auto-push every batch, auto-pull every 60s.</li>`;
-    }
-  } else {
-    gitRow =
-      `<li>${warn}<strong>Git remote:</strong> not configured — facts stay on this machine only. ` +
-      `Set up cross-machine sync with: <code>npx @krimto-labs/krimto setup-remote &lt;url&gt;</code></li>`;
-  }
-
-  // Embedding row — two states: provider configured (semantic+lexical) vs none (lexical only).
-  let embedRow: string;
-  if (opts.embeddings) {
-    embedRow =
-      `<li>${ok}<strong>Embeddings:</strong> ${escapeHtml(opts.embeddings.provider)} ` +
-      `(${opts.embeddings.dimensions}-dim) — semantic + keyword search enabled.</li>`;
-  } else {
-    embedRow =
-      `<li>${warn}<strong>Embeddings:</strong> not configured — recall uses keyword search (BM25) only. ` +
-      `Turn on semantic search with: <code>npx @krimto-labs/krimto setup-embeddings</code></li>`;
-  }
-
-  return (
-    `<section class="panel">` +
-    `<h2 style="margin-top:0">Status</h2>` +
-    `<p class="muted">Both rows below are optional add-ons. Krimto works fully without them.</p>` +
-    `<ul style="list-style:none;padding-left:0;margin:0">${gitRow}${embedRow}</ul>` +
-    `</section>`
-  );
 }
 
 /**
@@ -854,53 +773,6 @@ export function reconnectingPanel(): string {
     `<p>Krimto is restarting on this machine. This page reconnects automatically.</p>` +
     `<p class="muted">If it doesn't, <a href="/ui/settings">return to Settings</a> in a few seconds.</p>` +
     `<script>(function(){var t=setInterval(function(){fetch('/health/live',{cache:'no-store'}).then(function(r){if(r.ok){clearInterval(t);location.href='/ui/settings';}}).catch(function(){});},1500);})();</script>` +
-    `</section>`
-  );
-}
-
-export function settingsBody(opts: {
-  dataDir: string;
-  status?: StatusPanelOpts;
-  activity: ActivityRow[];
-  isAdmin?: boolean;
-}): string {
-  const adminLinkRow = opts.isAdmin
-    ? `<li><strong>Team admin</strong> — invite members, manage teams, issue keys: <a href="/ui/admin">/ui/admin</a></li>`
-    : "";
-  return (
-    `<h1>Settings</h1>` +
-    `<p class="muted">How Krimto works, where your data lives, what's configured, and recent agent activity.</p>` +
-    howItWorksPanel() +
-    behindTheScenesPanel(opts.dataDir) +
-    (opts.status ? statusPanel(opts.status) : "") +
-    activityPanel(opts.activity) +
-    `<section class="panel">` +
-    `<h2 style="margin-top:0">Other settings</h2>` +
-    `<ul>` +
-    `<li><strong>API keys</strong> — issue or revoke your own keys: <a href="/ui/keys">/ui/keys</a></li>` +
-    `<li><strong>Connect a new editor</strong> — copy-paste config + standing rule: <a href="/ui/connect">/ui/connect</a></li>` +
-    adminLinkRow +
-    `</ul></section>`
-  );
-}
-
-/** Team-first explainer for the dashboard landing. The wedge (personal→team→org) is the headline. */
-export function howItWorksPanel(): string {
-  return (
-    `<section class="panel">` +
-    `<h2 style="margin-top:0">Shared memory for your team's AI</h2>` +
-    `<p class="muted">Every agent on your team reads and writes the same memory, in three layers:</p>` +
-    `<ul>` +
-    `<li><strong>Personal</strong> — just you (your preferences, your notes).</li>` +
-    `<li><strong>Team</strong> — your squad's shared conventions and facts.</li>` +
-    `<li><strong>Org</strong> — company-wide rules everyone inherits.</li>` +
-    `</ul>` +
-    `<p class="muted">More specific wins: your personal note overrides the team's, which overrides the org's.</p>` +
-    `<p class="muted"><strong>What to expect when you turn on team mode:</strong> Krimto starts asking ` +
-    `for a key (so only your team gets in), prints your ready-to-paste config, and unlocks the Team page ` +
-    `to invite people.</p>` +
-    `<p><strong>Bring your team:</strong> run <code>krimto team init</code> to turn on team mode and ` +
-    `invite teammates (hosted Krimto Cloud is on the roadmap).</p>` +
     `</section>`
   );
 }

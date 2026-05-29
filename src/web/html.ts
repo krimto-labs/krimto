@@ -106,8 +106,41 @@ td,th{text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--line-2
 th{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); background:var(--surface)}
 
 /* ── Reusable panel (cards / sections) ───────────────────────────────────── */
-.panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1rem 1.1rem; margin:0 0 1rem}
-.panel h2{margin-top:0}
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1.1rem 1.25rem; margin:0 0 1.1rem}
+.panel > h2:first-child,.panel > h3:first-child{margin-top:0}
+.panel h3{font-size:15px; margin:1.1rem 0 .5rem; color:var(--ink)}
+.panel p:last-child,.panel form:last-child{margin-bottom:0}
+
+/* ── Page header + forms + key/value rows ─────────────────────────────────── */
+.page-head{margin-bottom:1.3rem}
+.page-head h1{margin-bottom:.15rem}
+.page-head .muted{margin:0}
+
+form{margin:.9rem 0}
+form:last-child{margin-bottom:0}
+label{display:block; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:5px}
+/* stacked field: label above a full-width control */
+.field{margin:.85rem 0; max-width:540px}
+.field input,.field select,.field textarea{width:100%}
+/* inline row: controls sit on one line, wrapping gracefully, with even spacing */
+.form-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:.7rem 0}
+.form-row input,.form-row select{flex:1 1 200px; min-width:160px}
+.form-row button{flex:0 0 auto}
+.form-hint{font-size:.82rem; color:var(--muted); margin:.4rem 0 0; max-width:560px}
+fieldset{border:1px solid var(--line); border-radius:var(--radius); padding:1rem 1.15rem 1.1rem; margin:1.1rem 0; max-width:620px}
+legend{font-family:var(--serif); font-weight:500; font-size:16px; padding:0 7px; color:var(--ink)}
+/* key/value status grid (e.g. "This machine") */
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:7px 18px; margin:.5rem 0 0; font-size:14px}
+.kv dt{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); align-self:center}
+.kv dd{margin:0; color:var(--ink)}
+/* a row of buttons with consistent spacing */
+.actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:.6rem 0}
+.actions form{margin:0}
+/* team member list: name left, action right, divided rows */
+.member-list{list-style:none; padding-left:0; margin:.4rem 0}
+.member-list li{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; border-top:1px solid var(--line-2); font-size:14px}
+.member-list li:first-child{border-top:none}
+.member-list form{margin:0}
 
 /* ── Dashboard chrome ─────────────────────────────────────────────────── */
 
@@ -144,8 +177,6 @@ th{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spa
 .btn.danger:hover{background:var(--danger); color:#fff}
 
 .section-label{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--muted); margin:1.4rem 0 .5rem}
-
-.dashboard-footer{margin-top:2rem; padding-top:1rem; border-top:1px solid var(--line-2); display:flex; gap:12px; align-items:center; flex-wrap:wrap}
 `;
 
 // Wires any <button data-copy="ID"> to copy the text of <pre id="ID"> (friction-log #9).
