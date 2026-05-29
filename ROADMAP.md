@@ -33,8 +33,7 @@ Krimto Cloud in v1.0.
 
 The setup + day-to-day UX caught up to the architecture. Six commands collapse into one
 interactive wizard, the team door becomes one wizard + one join command, and the `/ui` becomes
-a notes-app instead of an engineering dashboard. See
-[docs/krimto-v0.2.17-maria-journey.html](docs/krimto-v0.2.17-maria-journey.html) for the design.
+a notes-app instead of an engineering dashboard.
 
 - **`0.2.17` — Phase A — Wizard-driven onboarding.** `krimto init` is now an interactive 5-question
   wizard (TTY) with preselected defaults; non-interactive `--yes` for CI. Self-aware rerun shows a
@@ -72,8 +71,7 @@ patch is an audit-driven correctness fix or a surface upgrade for AI-agent calle
   on each invocation.
 - **`0.2.24` → `0.2.25`** — empty-result safety nets: `krimto_recall` returns a write-opportunity
   hint when results are empty; `krimto_list_scopes` returns a getting-started hint when no scopes
-  exist; **`krimto_whoami` MCP tool** added so agents stop hallucinating identity (Gap 3 from the
-  smoke-6 audit).
+  exist; **`krimto_whoami` MCP tool** added so agents stop hallucinating identity.
 - **`0.2.26` → `0.2.30`** — runtime reliability: service-first install ordering, port-ready probe
   (the v0.2.27/28 ECONNREFUSED fix), single reconciled runtime view (`inspectRuntime`) shared by
   every read-side command, warm-paper `/ui` aesthetic with scope-icon cards (📔 / 📓 / 🏢),
@@ -116,27 +114,28 @@ de-cluttered Settings page.
 
 ## Next — the first-run friction gate (still v0.2)
 
-v0.2 is feature-complete, and the **post-setup** experience is now solid (the `/ui` control panel +
-brand, v0.2.42–0.2.43). The remaining v0.2.x priority is **near-zero first-run friction**: a
+v0.2 is feature-complete, and the **post-setup** experience is solid (the `/ui` control panel +
+brand, v0.2.42–0.2.43). The remaining v0.2.x priority was **near-zero first-run friction**: a
 brand-new person should run `npx @krimto-labs/krimto`, talk to their agent, and succeed on the
 **first try** with no confusion.
 
 This is the gate before any go-to-market push (getting Krimto into the AI-tool ecosystem /
-directories). People who discover Krimto that way install it and judge it **once** — so a rough
-first run reads back as a false "no demand" signal. We close first-run friction first, *then* push.
+directories). People who discover Krimto that way install it and judge it **once**, so we close
+first-run friction first, *then* push.
 
-Open items (the **cold-start** half — the post-setup half is done):
+Addressed in **v0.2.44** (the cold-start half — the post-setup half shipped earlier):
 
-- **Discovery** — "remember X" must reliably route to `krimto_write`, not the agent's own built-in
-  memory. Mitigated today (the `krimto init` standing rule + strong MCP tool descriptions + the
-  recall-without-write warning panel), but not yet airtight.
-- **Data location** — make it obvious that facts live in `~/.krimto`, regardless of working dir.
-- **Guided first run** — empty-state coaching, a plain-English "what this is", and a client matrix
-  (which editors auto-wire vs. need a manual snippet).
+- **Discovery** — the standing memory directive is now advertised at the MCP protocol level (the
+  server `instructions` field), so "remember X" routes to `krimto_write` even on a bare install
+  with no `krimto init`. Backed by the rule file + strong tool descriptions.
+- **Data location** — the startup banner and the first-write hint state that facts live in
+  `~/.krimto`, the same folder regardless of working directory.
+- **Guided first run** — a rewritten startup banner, a code-derived client matrix (which editors
+  auto-wire vs. need a manual snippet) shown in `--help` and `/ui/connect`, and a newcomer-first
+  README.
 
-**Sequencing:** first-run friction gate → go-to-market push → v0.3 → v1.0. The detailed go-to-market
-plan lives in the internal strategy doc; the ordering is a deliberate, reasoned bet (the go-to-market
-push is a one-shot first impression and the demand signal), not yet backed by demand data.
+**Sequencing:** first-run friction gate → broader availability → v0.3 → v1.0. We close first-run
+friction before widening distribution, because a first impression only happens once.
 
 ## v0.3 — Humans on top of git
 
