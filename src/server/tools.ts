@@ -278,8 +278,9 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
       ctx.firstSaveHintEmitted = true;
       hint =
         `${baseHint}\n` +
-        `(First save in this session — quick orientation: your data lives at ${ctx.store.dataDir()}, ` +
-        `git auto-commits every 30s, run \`npx @krimto-labs/krimto --help\` for the full CLI surface, ` +
+        `(First save in this session — quick orientation: your data lives at ${ctx.store.dataDir()} ` +
+        `(the same folder no matter which project you're in), git auto-commits every 30s, run ` +
+        `\`npx @krimto-labs/krimto --help\` for the full CLI surface, ` +
         `or \`npx @krimto-labs/krimto storage\` for the storage model.)`;
     }
     if (related.length > 0) {

@@ -72,6 +72,9 @@ describe("krimto_write", () => {
     expect(first.hint).toContain("git auto-commits every 30s");
     expect(first.hint).toContain("krimto --help");
     expect(first.hint).toContain("krimto storage");
+    // States the data dir AND that it's the same regardless of working directory (data-location surprise).
+    expect(first.hint).toContain(ctx.store.dataDir());
+    expect(first.hint).toMatch(/no matter which (project|folder)|regardless of/i);
     // Subsequent writes: normal one-line hint, no orientation
     const second = await krimtoWrite(ctx, {
       scope: "user/alice@acme.com",
