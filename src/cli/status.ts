@@ -82,7 +82,7 @@ export async function runStatus(
 
   const connectionsBlock = renderConnections(envs, snapshot, recent);
   const storageBlock = renderStorage(dataDir, gitInfo, indexStats);
-  const addonsBlock = renderAddons(snapshot);
+  const addonsBlock = renderAddons(snapshot, gitInfo);
   // Team block — only rendered in team mode (identity unused here; role isn't shown in the summary).
   const teamBlock = renderTeam(await buildTeamSummary(dataDir, ""));
   const activityBlock = renderActivity(recent, now);
@@ -209,12 +209,15 @@ function renderTeam(t: TeamSummary): string {
   return body;
 }
 
-function renderAddons(snapshot: SetupSnapshot): string {
+function renderAddons(snapshot: SetupSnapshot, gitInfo: DataDirGitInfo): string {
   let body = `\n━━ Optional add-ons ━━\n\n`;
-  // Team sync (git remote) — best-effort: configured iff KRIMTO_GIT_REMOTE is set, or the data
-  // dir's git already has an origin (read by status.ts via readGitInfo, but we drop that detail
-  // into the renderStorage path; here we just say "not detected at this run").
-  body += `  ●  Team sync (git remote):  ${process.env.KRIMTO_GIT_REMOTE ? "configured via env" : "not configured"}\n`;
+  // Team sync — read the ACTUAL git remote (not just the env var). A configured remote means
+  // Krimto pushes AND (v0.2.41+) auto-pulls every ~60s; `krimto sync` forces it now. Reading the
+  // env var alone used to mis-report a push-configured machine as "not configured".
+  const sync = gitInfo.remote
+    ? `⇅ push + pull · ${gitInfo.remote}`
+    : "off · no remote (set one with `krimto remote --set <url>`)";
+  body += `  ●  Team sync (git remote):  ${sync}\n`;
   body += `  ●  Semantic search:         ${snapshot.searchProvider === "openai" ? "OpenAI" : "not configured · using keyword"}\n`;
   return body;
 }

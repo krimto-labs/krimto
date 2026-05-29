@@ -694,7 +694,14 @@ function printApplyResult(
     io.out(`      npx @krimto-labs/krimto serve\n`);
     io.out(`  • Then open http://${res.serverHost}/ui/admin and sign in with your admin key.\n`);
   }
-  io.out("  • Step back to solo with `krimto team disband` (data preserved)\n\n");
+  io.out("  • Step back to solo with `krimto team disband` (data preserved)\n");
+  if (res.remote) {
+    io.out(
+      `  • Teammates who run their OWN Krimto (instead of connecting to this server):\n` +
+        `      krimto remote --set ${res.remote.url}   then   krimto sync\n`,
+    );
+  }
+  io.out("\n");
 
   // Discoverability: there's no save syntax — you signal scope by how you phrase it to your AI.
   // Show that here (and in `krimto team status`) so nobody has to know the phrasings in advance.

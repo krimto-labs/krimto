@@ -659,6 +659,18 @@ try {
     const result = await runDeleteFact(resolveDataDir(), await resolveIdentity(), id);
     process.stdout.write(result.message);
     if (result.status !== "ok") process.exitCode = 1;
+  } else if (cmd === "sync" || cmd === "pull") {
+    // `krimto sync` (alias `pull`) — on-demand two-way git sync: pull the team's pushed notes
+    // (+ re-index), then push local commits. Refuses while a live server holds the lock.
+    const { runSync } = await tsImport("../src/cli/syncCmd.ts", import.meta.url);
+    const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runSync(resolveDataDir());
+    process.stdout.write(result.message);
+    if (result.status === "ok" || result.status === "up_to_date") {
+      /* success */
+    } else {
+      process.exitCode = 1;
+    }
   } else if (cmd === "reindex") {
     // `krimto reindex` — rebuild index.db from the markdown source-of-truth on disk. Use case:
     // user manually deleted a .md file; the index has an orphan. Also recovers from corruption.

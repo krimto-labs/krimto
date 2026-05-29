@@ -70,7 +70,7 @@ export async function runRemoteCmd(opts: RemoteCmdOptions): Promise<RemoteCmdRes
             value: "set",
             name: current ? "Change the remote URL" : "Set a remote URL",
             description:
-              "Wire (or rewire) the data dir's git repo to a remote. Krimto will auto-push every batched commit; set KRIMTO_GIT_REMOTE in the env to also auto-pull.",
+              "Wire (or rewire) the data dir's git repo to a remote. Turns on two-way sync: Krimto auto-pushes every batched commit AND a running server auto-pulls every ~60s. `krimto sync` pulls on demand.",
           },
           {
             value: "remove",
@@ -85,7 +85,7 @@ export async function runRemoteCmd(opts: RemoteCmdOptions): Promise<RemoteCmdRes
         action,
         url: current,
         message: current
-          ? `\n  ${current}\n\n  Krimto auto-pushes here on every batched commit.\n  To also auto-pull (every 60s on next boot):\n    $ export KRIMTO_GIT_REMOTE=${current}\n\n`
+          ? `\n  ${current}\n\n  Two-way sync: Krimto auto-pushes here on every batched commit, and a running\n  server auto-pulls every ~60s. Pull right now with:  krimto sync\n\n`
           : `\n  (no remote configured)\n\n  To wire one up: re-run \`krimto remote\` and pick "Set".\n\n`,
       };
     }

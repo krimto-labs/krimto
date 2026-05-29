@@ -259,7 +259,8 @@ commands. The seven groups below match `--help`'s structure.
 | `editors --add <name> / --remove <name> / --set <list>` | Wire / unwire editors (Cursor / Claude Code / Codex / Gemini). `--list` prints current connections. No-flag form prompts interactively when a TTY is available. |
 | `service --as-needed / --always / --manual` | Switch run mode. Flag form skips the prompt. `service stop` / `service start` are aliases for `stop` / `start`. |
 | `search --keyword / --openai --api-key sk-...` | Switch search provider. The OpenAI path verifies the key before persisting. |
-| `remote --show / --set <url> / --remove` | Manage the git remote (also reachable as `setup-remote <url>`). |
+| `remote --show / --set <url> / --remove` | Manage the git remote (also reachable as `setup-remote <url>`). Setting a remote turns on **two-way sync** — Krimto auto-pushes every commit and a running server auto-pulls every ~60s. |
+| `sync` (alias `pull`) | Pull the team's pushed notes now (`git pull --rebase` + re-index) and push your local commits. Refuses while a live server holds the lock. |
 | `folder --to <path> [--yes]` | Guided move of the data dir. Stops service, atomic rename (cross-fs fallback), reinstalls service with new env, prints `export KRIMTO_DATA=` hint. |
 | `set identity <email>` | Change `KRIMTO_IDENTITY` everywhere atomically (editor MCP configs + service env). Preserves other env keys. |
 
@@ -267,9 +268,12 @@ commands. The seven groups below match `--help`'s structure.
 
 | Command | What it does |
 |---|---|
-| `team init` | Admin-side wizard: admin email, team slug, optional git remote, initial teammates. Prints admin key + per-teammate keys + a DM template. |
-| `team disband [--yes]` | Per-machine step-back to solo mode. Notes / `members.yaml` / git history untouched. |
-| `join --server <url> --key <key>` | Teammate-side: detects editors, writes HTTP MCP config with the bearer header + the standing rule. |
+| `team init` | Admin-side wizard: admin email, **org name**, team slug, optional git remote, initial teammates. Prints admin key + per-teammate keys + a DM template. Has a non-interactive `--yes --team <slug> [--org/--admin/--invite/--remote]` form. |
+| `team status` | Team mode, members, your role, whether THIS machine is the server, and your **Save targets** (which phrase saves to which scope). |
+| `team disband [--yes]` | Per-machine step-back to solo mode. Notes / `members.yaml` / git history untouched; prints the reconnect command. |
+| `team leave [--yes]` | Disconnect this machine from a team you joined. |
+| `join --server <url> --key <key>` | Teammate-side (HTTP model): detects editors, writes HTTP MCP config with the bearer header + the standing rule. |
+| `sync` (alias `pull`) | Git-sync model: pull the team's notes now + push yours. |
 
 **Advanced / scripting**
 
@@ -401,7 +405,15 @@ Then point your agent at it with that key:
 }
 ```
 
-To sync with teammates, set `KRIMTO_GIT_REMOTE` to a git remote you can push/pull over SSH.
+**Two ways a team shares memory.** (A) **One server, thin clients:** teammates run `krimto join
+--server <url> --key <key>` and their editor reads/writes the admin's running server live — no local
+data, nothing to pull. (B) **Each runs their own Krimto, synced over git:** every machine points its
+data dir at the same shared repo (`krimto remote --set <url>` or `KRIMTO_GIT_REMOTE`). Personal
+(`user/<you>`) and team notes live in the same data dir and sync together. **Setting a remote turns
+on two-way sync** — Krimto auto-pushes every commit and a running server auto-pulls every ~60s; run
+`krimto sync` to pull (and push) on demand. A new teammate's first pull is just
+`krimto remote --set <shared-url>` then `krimto sync`. (`KRIMTO_GIT_REMOTE` still works as a boot-time
+override that also sets the remote.)
 
 Optional HTTP knobs (both **off by default**): set `KRIMTO_RATE_LIMIT_PER_MINUTE=<n>` to rate-limit
 each API key on `/mcp` (responses carry `X-RateLimit-*`; over the limit returns `429` with

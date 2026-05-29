@@ -3,7 +3,7 @@
 User-facing notes for each Krimto release. For the full technical changelog see
 [CHANGELOG.md](CHANGELOG.md).
 
-## v0.2 — shipped (v0.2.5 → v0.2.40, 2026-05-25 → 2026-05-28)
+## v0.2 — shipped (v0.2.5 → v0.2.41, 2026-05-25 → 2026-05-29)
 
 The first public release. Krimto is a **team memory layer** you can self-host with `npx`, `pnpm
 dev`, or the published Docker image at `ghcr.io/krimto-labs/krimto`:
@@ -58,5 +58,16 @@ team setup — `krimto team init` asks "What's your organization called?" (or pa
 so company-wide notes read as **"Acme Inc (whole org)"** instead of the old `org/default` placeholder;
 the path-safe slug is derived from the name you type (no guessing), and if you skip it, `team status`
 shows the one command to set it.
+
+**v0.2.41 — git sync made real.** Krimto always auto-committed and auto-pushed your notes, but
+pulling teammates' notes was a hidden second switch — gated on an env var no command ever set, with
+no "pull now" verb, and `krimto status` reported it wrong. Now **setting a git remote turns on
+two-way sync** (auto-push every commit + a running server auto-pulls every ~60s — `krimto remote
+--set <url>` or `team init` is all it takes), there's a first-class **`krimto sync`** (alias `pull`)
+to pull/push on demand, and `krimto status` shows the truth (`Team sync: ⇅ push + pull · <url>`). A
+new teammate who runs their own Krimto now has a clear path: `krimto remote --set <shared-repo>` then
+`krimto sync`. The README/usage/help now explain the two ways a team shares memory — one shared
+server (thin clients via `krimto join`) vs. each machine syncing over the git remote — and that
+personal and team notes live in one data dir and sync together.
 
 Install instructions and the connect-your-agent guide are in the [README](README.md).

@@ -4,6 +4,49 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.41] — 2026-05-29 — git sync made real: one switch, a `sync` verb, honest status
+
+"How does a new teammate pull, and how do team vs personal notes sync?" exposed a broken model.
+Krimto auto-committed + auto-pushed, but auto-**pull** was gated on a `KRIMTO_GIT_REMOTE` env var
+that **no command ever persisted** (every `installService` caller hardcoded a 3-var env without it,
+and `restart` dropped it). So on the recommended always-running service, auto-pull was unreachable;
+there was no manual "pull now" verb; and `krimto status` reported sync off the env var, ignoring the
+actual `git remote`.
+
+### Changed — a configured remote means two-way sync
+The server starts the inbound pull loop whenever the data dir has a git remote (`repo.hasRemote()`),
+not only when `KRIMTO_GIT_REMOTE` is set (`src/server/index.ts`). So `krimto remote --set` and
+`team init`'s git step enable **push AND pull** in one action; the env var stays a boot-time override
+(it still sets the remote). Pull is unchanged: `git pull --rebase`, best-effort, conflict-safe (the
+rebase is aborted, local state kept, the conflict surfaced — never auto-merged).
+
+### Added — `krimto sync` (alias `pull`)
+On-demand two-way sync: pull the team's pushed notes (`git pull --rebase` + re-index), then push
+local commits, with a one-line summary. Refuses while a live server holds the data-dir lock (mirrors
+`reindex`/`rm` — the server already auto-pulls every ~60s). This is the missing "pull the team's
+memory now" verb, and a new teammate's first pull is just `krimto remote --set <shared-url>` then
+`krimto sync`. (`src/cli/syncCmd.ts`, dispatched in `bin/krimto.mjs`.)
+
+### Fixed — honest `status` sync line
+`krimto status` reads the real remote via `readDataDirGitInfo` and reports
+`Team sync: ⇅ push + pull · <url>` (or `off · no remote`), instead of mis-reading a push-configured
+machine as "not configured" from the env var (`src/cli/status.ts`).
+
+### Docs
+A "two ways a team shares memory" explanation — (A) one HTTP server + thin clients via `join`, (B)
+each runs its own Krimto synced over a shared git remote — plus the new-user pull path, added to the
+README, `krimto usage`, `--help` (a `sync` line + agent block), and the maria-journey doc. `team
+status` / `team leave` added to the README CLI table (were missing). `remote` / `setup-remote` /
+`team init` success messages now say sync is two-way and point at `krimto sync`.
+
+### Tests
+- `tests/integration/sync.test.ts` — `runSync` against a real bare remote + two clones: pulls a
+  teammate's pushed fact and re-indexes it; up-to-date; rejects with `no_remote` guidance.
+- `tests/integration/status.test.ts` — a configured `origin` with no env var shows "push + pull".
+
+705 tests passing (vitest run). Lint + types clean. Deferred: a `sync --watch` daemon (the ~60s
+loop already covers continuous), auto-conflict resolution.
+
 ## [0.2.40] — 2026-05-28 — Team UX hardening: visibility + safety + lifecycle clarity + agent-safe setup + frictionless saves + org naming
 
 Real testing showed the "Team" lifecycle had confusing and dangerous edges: no way to see team

@@ -53,7 +53,7 @@ describe("runSetupRemote", () => {
     const r = await runSetupRemote(dataDir, bareRemote);
     expect(r.status).toBe("ok");
     expect(r.message).toContain("✅");
-    expect(r.message).toContain("KRIMTO_GIT_REMOTE");
+    expect(r.message).toContain("krimto sync"); // two-way sync is on; pull now with `krimto sync`
     // Verify by listing refs on the bare remote — `main` must now point at the seeded commit.
     const { stdout } = await exec("git", ["-C", bareRemote, "rev-parse", "main"]);
     expect(stdout.trim()).toMatch(/^[0-9a-f]{40}$/);

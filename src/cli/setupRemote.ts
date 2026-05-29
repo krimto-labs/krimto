@@ -51,9 +51,10 @@ export async function runSetupRemote(dataDir: string, url: string): Promise<Setu
         `\n✅ Remote configured and initial push succeeded.\n` +
         `\n   ${url}\n` +
         `\n━━ Next ━━\n` +
-        `\n   To also auto-pull teammates' edits (every 60s), set on next boot:\n` +
-        `     export KRIMTO_GIT_REMOTE=${url}\n` +
-        `\n   The batcher will auto-push every commit from now on regardless.\n`,
+        `\n   Two-way sync is on: Krimto auto-pushes every commit, and a running server\n` +
+        `   auto-pulls teammates' edits every ~60s. If one's already running, restart it\n` +
+        `   to start pulling:  krimto restart\n` +
+        `\n   Pull right now (or from a machine with no server running):  krimto sync\n`,
     };
   }
   return {

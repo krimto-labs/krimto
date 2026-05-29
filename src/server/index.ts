@@ -55,7 +55,7 @@ import { type Requester } from "../access/scope";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.40";
+export const KRIMTO_VERSION = "0.2.41";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -386,7 +386,11 @@ export async function main(): Promise<void> {
     },
     syncConfigFromEnv(),
   );
-  if (process.env.KRIMTO_GIT_REMOTE) {
+  // A configured git remote = two-way sync. Start the inbound pull loop whenever the data dir has
+  // a remote (set via `krimto remote --set` or `team init`), not only when KRIMTO_GIT_REMOTE is
+  // set. Previously, setting a remote enabled push only — auto-pull was gated on the env var, which
+  // no install path ever baked into the service env, so it was unreachable for service users.
+  if (await repo.hasRemote()) {
     sync.start((fn) => ctx.writeQueue.run(fn));
   }
 

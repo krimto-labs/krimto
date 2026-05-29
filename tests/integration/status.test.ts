@@ -13,8 +13,13 @@ import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
 import { runStatus } from "../../src/cli/status";
 import { runInitNonInteractive } from "../../src/cli/wizard";
+
+const exec = promisify(execFile);
 
 let dataDir: string;
 let projectDir: string;
@@ -36,6 +41,22 @@ describe("runStatus — error path (nothing set up)", () => {
     expect(res.status).toBe("error");
     expect(res.message).toContain("isn't set up");
     expect(res.message).toContain("krimto init");
+  });
+});
+
+describe("runStatus — team sync reflects the real git remote", () => {
+  it("shows push + pull when an origin remote is configured (no KRIMTO_GIT_REMOTE needed)", async () => {
+    await exec("git", ["-C", dataDir, "init"]);
+    await exec("git", ["-C", dataDir, "remote", "add", "origin", "git@github.com:acme/krimto-data.git"]);
+    const prev = process.env.KRIMTO_GIT_REMOTE;
+    delete process.env.KRIMTO_GIT_REMOTE; // prove it reads the remote, not the env var
+    try {
+      const res = await runStatus(dataDir, { cwd: projectDir, homeDir: home });
+      expect(res.message).toContain("git@github.com:acme/krimto-data.git");
+      expect(res.message).toMatch(/push \+ pull/);
+    } finally {
+      if (prev !== undefined) process.env.KRIMTO_GIT_REMOTE = prev;
+    }
   });
 });
 
