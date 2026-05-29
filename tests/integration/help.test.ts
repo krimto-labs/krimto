@@ -71,6 +71,14 @@ describe("formatHelp", () => {
     expect(out).toContain("Team");
     expect(out).toContain("Advanced");
   });
+
+  it("lists each editor with its auto/manual setup (the client matrix)", () => {
+    const h = formatHelp("9.9.9");
+    expect(h).toMatch(/Cursor\s+.*auto/i);
+    expect(h).toMatch(/Claude Code\s+.*auto/i);
+    expect(h).toMatch(/Codex\s+.*manual/i);
+    expect(h).toMatch(/Gemini CLI\s+.*manual/i);
+  });
 });
 
 describe("krimto --help (bin dispatch)", () => {

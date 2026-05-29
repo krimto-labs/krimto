@@ -5,6 +5,8 @@
 // stranded in the source — users had no way to find them. Now everything is grouped by what
 // the user wants to accomplish, not by which internal subsystem owns the implementation.
 
+import { clientMatrix } from "./clientMatrix";
+
 /** Build the help text printed by `krimto --help` / `krimto -h` / `krimto help`. */
 export function formatHelp(version: string): string {
   return [
@@ -38,6 +40,13 @@ export function formatHelp(version: string): string {
     "━━ Usage ━━",
     "",
     "  $ npx @krimto-labs/krimto [command]",
+    "",
+    "━━ Which client? ━━",
+    "",
+    ...clientMatrix().map(
+      (r) =>
+        `  ${r.label.padEnd(14)} ${r.autoWires ? "auto-connects (`krimto init`)" : "manual snippet (`krimto connect`)"}`,
+    ),
     "",
     "━━ Get connected ━━",
     "",
