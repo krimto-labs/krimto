@@ -1,23 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_IDENTITY, identityWarning, localModeBanner, stdioStartupBanner, teamModeBanner } from "../../src/server/banner";
 
-describe("stdioStartupBanner", () => {
-  it("names the version, data dir, and lists every CLI command", () => {
+describe("stdioStartupBanner (v2)", () => {
+  it("orients the user — version, data dir, CWD-independence, useful next steps", () => {
     const b = stdioStartupBanner("0.2.7", "/tmp/k-data");
     expect(b).toContain("0.2.7");
     expect(b).toContain("/tmp/k-data");
     expect(b).toContain("stdio MCP server ready");
-    expect(b).toContain("serve");
-    expect(b).toContain("connect");
-    expect(b).toContain("init");
-    expect(b).toContain("uninit");
-    expect(b).toContain("usage");
-    expect(b).toContain("storage");
-    expect(b).toContain("setup-remote");
-    expect(b).toContain("setup-embeddings");
-    expect(b).toContain("verify-connection");
-    expect(b).toContain("where");
+    expect(b).toMatch(/no matter which (project|folder)/i); // data dir is CWD-independent
+    expect(b).toContain("krimto init");
+    expect(b).toContain("krimto notes");
     expect(b).toContain("--help");
+  });
+
+  it("drops the deprecated verbs the old banner listed", () => {
+    const b = stdioStartupBanner("0.2.7", "/tmp/k-data");
+    expect(b).not.toMatch(/verify-connection/);
+    expect(b).not.toMatch(/\bstorage\b/);
   });
 });
 
@@ -40,7 +39,9 @@ describe("localModeBanner", () => {
     expect(b).toContain("http://localhost:8080");
     expect(b).toContain("/ui/connect");
     expect(b).toContain("/tmp/k-data");
-    expect(b).toContain("KRIMTO_BOOTSTRAP_ADMIN");
+    expect(b).toContain("krimto team init"); // v2: live team mode, not the old env var
+    expect(b).not.toContain("KRIMTO_BOOTSTRAP_ADMIN");
+    expect(b).toMatch(/no matter which (project|folder)/i); // data dir is CWD-independent
   });
 
   it("teaches that facts are plain markdown files in that folder", () => {

@@ -33,13 +33,21 @@ export function identityWarning(identity: string): string {
 export function stdioStartupBanner(version: string, dataDir: string, identity = DEFAULT_IDENTITY): string {
   const warn = identityWarning(identity);
   return (
-    `\n✅ Krimto v${version} — stdio MCP server ready\n` +
-    `   Data: ${dataDir}\n` +
+    `\n✅ Krimto v${version} — your AI's shared memory (stdio MCP server ready)\n` +
     `\n` +
-    `   This process speaks MCP over stdin/stdout. Point an MCP client at it.\n` +
-    `   Other commands: serve · connect · init · uninit · usage · storage · rm · reindex\n` +
-    `                   setup-remote · setup-embeddings · verify-connection\n` +
-    `                   where · --help\n` +
+    `   This process speaks MCP over stdin/stdout — an MCP client (your editor) drives it.\n` +
+    `\n` +
+    `━━ Where your notes live ━━\n` +
+    `\n` +
+    `   ${dataDir}\n` +
+    `   Plain markdown files — the same folder no matter which project you're in.\n` +
+    `\n` +
+    `━━ Useful next steps ━━\n` +
+    `\n` +
+    `   $ npx @krimto-labs/krimto init      Make your agent use Krimto automatically\n` +
+    `   $ npx @krimto-labs/krimto notes     List your saved notes\n` +
+    `   $ npx @krimto-labs/krimto ui        Open the browser dashboard\n` +
+    `   $ npx @krimto-labs/krimto --help    Full command list + which editors auto-connect\n` +
     (warn ? `\n${warn}` : "") +
     `\n`
   );
@@ -66,8 +74,8 @@ export function localModeBanner(port: number, dataDir: string, identity = DEFAUL
     `━━ Where things live ━━\n` +
     `\n` +
     `  Data:  ${dataDir}\n` +
-    `  Files: plain markdown — open any .md in that folder to read it.\n` +
-    `  Mode:  Local (no auth). Teams: set KRIMTO_BOOTSTRAP_ADMIN=<email>.\n` +
+    `  Files: plain markdown — the same folder no matter which project you're in.\n` +
+    `  Mode:  Local (no auth). Bring teammates in with \`npx @krimto-labs/krimto team init\`.\n` +
     `\n` +
     `  Already connected via stdio (the npx path)? Keep that config —\n` +
     `  this HTTP server is just for the browser dashboard.\n` +
