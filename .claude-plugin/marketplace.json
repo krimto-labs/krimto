@@ -4,7 +4,7 @@
     "name": "Krimto",
     "email": "security@krimto.com"
   },
-  "description": "Open-source team memory layer for AI coding agents.",
+  "description": "Open-source team memory layer for AI coding agents — markdown files in git, user→team→org hierarchy, cross-vendor MCP server. Apache-2.0.",
   "plugins": [
     {
       "name": "krimto",

@@ -1,6 +1,6 @@
 # Krimto
 
-> Open-source team memory for AI coding agents. Markdown files in git, a `user → team → org` hierarchy, one cross-vendor MCP server. Apache-2.0.
+> Open-source team memory layer for AI coding agents — markdown files in git, user→team→org hierarchy, cross-vendor MCP server. Apache-2.0.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/npm/v/@krimto-labs/krimto)](https://www.npmjs.com/package/@krimto-labs/krimto)
