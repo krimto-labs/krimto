@@ -3,7 +3,7 @@
 User-facing notes for each Krimto release. For the full technical changelog see
 [CHANGELOG.md](CHANGELOG.md).
 
-## v0.2 — shipped (v0.2.5 → v0.2.44, 2026-05-25 → 2026-05-29)
+## v0.2 — shipped (v0.2.5 → v0.2.45, 2026-05-25 → 2026-05-31)
 
 The first public release. Krimto is a **team memory layer** you can self-host with `npx`, `pnpm
 dev`, or the published Docker image at `ghcr.io/krimto-labs/krimto`:
@@ -82,5 +82,19 @@ gets it without any project file. The startup banner and the first-write hint ma
 notes live in `~/.krimto` regardless of which folder you're in; `krimto --help` and `/ui/connect`
 show which editors auto-connect vs. need a manual snippet; and the README is a lean newcomer-first
 read.
+
+**v0.2.45 — security & correctness hardening.** An audit pass closed the gaps that mattered most for
+running Krimto safely and for AI agents driving it. **Security:** the HTTP server now binds to
+`127.0.0.1` by default — solo mode is no longer reachable from your network without a key (opening it
+to the LAN takes an explicit opt-in); `/ui` has CSRF protection; and the API-key store is written
+atomically so concurrent key changes can't corrupt it and lock out a team. **Search:** vector recall is
+now scope-aware (your notes aren't crowded out by other scopes in a big team), and `reindex` / `sync` /
+`rm` no longer silently turn vector search off. **Sync:** a teammate's update now arrives even while you
+have an unsaved edit in flight. **Agents:** the commands that used to freeze a no-keyboard shell
+(`set identity`, `remote --remove`, `folder --to`) now print clear flag usage and exit; `stop --yes`
+finally takes effect; `edit` / `supersede` accept `--body` (no `$EDITOR` needed); and the setup wizard
+no longer crashes if the `claude` CLI isn't installed. **Plus:** superseding a note keeps its tags,
+source, and expiry, and the Claude Code plugin now actually registers its MCP server on `/plugin
+install`. The index schema (now v3) migrates automatically on first open.
 
 Install instructions and the connect-your-agent guide are in the [README](README.md).

@@ -196,6 +196,20 @@ describe("writeMcpConfig — CLI wire method (Claude Code, dry-run)", () => {
     });
   });
 
+  it("falls back to a manual snippet (no crash) when the CLI binary isn't on PATH (batch 5)", async () => {
+    const base = await envFor("claude-code");
+    if (!base.mcpWire || base.mcpWire.method !== "cli") throw new Error("expected claude-code cli wire");
+    const env: EditorEnvironment = {
+      ...base,
+      mcpWire: { ...base.mcpWire, command: "krimto-definitely-missing-binary-zzz" },
+    };
+    // Real exec (no dryRun) → the binary doesn't exist → ENOENT. Must NOT throw (that crashes the
+    // wizard); instead fall back to the copy-paste snippet so the user can wire it by hand.
+    const res = await writeMcpConfig(env, stdioEntry);
+    expect(res.action).toBe("manual");
+    expect(res.snippet).toContain("@krimto-labs/krimto");
+  });
+
   it("returns the http argv shape with --transport http and the server URL", async () => {
     const env = await envFor("claude-code");
     const httpWithKey: KrimtoMcpEntry = {

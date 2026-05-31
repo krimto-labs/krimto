@@ -137,6 +137,26 @@ Addressed in **v0.2.44** (the cold-start half — the post-setup half shipped ea
 **Sequencing:** first-run friction gate → broader availability → v0.3 → v1.0. We close first-run
 friction before widening distribution, because a first impression only happens once.
 
+## v0.2.45 — security & correctness hardening — ✅ Shipped (2026-05-31)
+
+An audit-driven pass before widening distribution. Closes the highest-severity gaps found across the
+v0.2 codebase — all behind new RED→GREEN tests and adversarial review, with **no change to the public
+MCP tool surface**:
+
+- **Security** — loopback bind by default (solo mode is no longer network-reachable without auth; LAN
+  exposure is now an explicit opt-in), `/ui` CSRF + same-origin protection with a `SameSite=Strict`
+  session cookie, and an atomic + serialized API-key store (no lost updates / no truncation lockout).
+- **Retrieval** — scope-aware vector KNN (in-scope facts no longer crowded out in multi-scope corpora);
+  `reindex` / `sync` / `rm` preserve vector search; a clean rebuild when the embedding provider or
+  dimensions change. **Index schema → v3** (`facts_vec` gains a `scope` column; auto-migrates on open).
+- **Sync** — inbound `git pull` no longer aborts on a pending local write (`--rebase --autostash`).
+- **MCP** — `krimto_supersede` preserves the old fact's `tags` / `source` / `expires`.
+- **CLI / ecosystem** — non-TTY guards on the last commands that could hang an AI agent; `edit` /
+  `supersede --body` for non-interactive use; the setup wizard survives a missing `claude` CLI; and the
+  Claude Code plugin now declares its MCP server so `/plugin install` wires the tools.
+
+This is the first set of changes since v0.2 to touch the storage, index, access, and retrieval layers.
+
 ## v0.3 — Humans on top of git
 
 Comes **after** the friction gate + the go-to-market push above. Note: the user-facing **on-ramp**

@@ -100,3 +100,50 @@ describe("FactIndex.rebuild (atomic)", () => {
     db.close();
   });
 });
+
+// H4 — the vector KNN must be scope-aware. With a global top-k=50 truncation, an in-scope fact can be
+// pushed out by 50+ nearer out-of-scope vectors and silently dropped. We isolate the vector path by
+// using a query term that matches NO fact (so BM25 can't rescue the in-scope fact).
+function angleProvider(dim = 4): EmbeddingProvider {
+  // Encodes a unit vector [cos a, sin a, 0…] from "a=<n>" in the text. Smaller a ⇒ closer to the
+  // query at a=0 ([1,0,…]). Lets a test place many out-of-scope facts nearer than one in-scope fact.
+  return {
+    name: "angle",
+    dimensions: dim,
+    embed: async (texts: string[]) =>
+      texts.map((t) => {
+        const m = /a=([0-9.]+)/.exec(t);
+        const a = m ? Number(m[1]) : 0;
+        const v = new Array<number>(dim).fill(0);
+        v[0] = Math.cos(a);
+        v[1] = Math.sin(a);
+        return v;
+      }),
+  };
+}
+
+describe("FactIndex vector KNN scope filtering (H4)", () => {
+  it("returns an in-scope fact even when 50+ nearer vectors live in unreadable scopes", async () => {
+    const provider = angleProvider(4);
+    const db = openIndexDb(":memory:", { provider: "angle", dimensions: 4 });
+    const idx = new FactIndex(db, provider);
+
+    // 60 out-of-scope facts crowd the global top-50 (angles 0.001…0.060, all very near a=0).
+    for (let i = 1; i <= 60; i++) {
+      await idx.upsertFact(
+        createFact({ scope: "org/secret", title: `secret ${i}`, body: `a=${(i / 1000).toFixed(3)}`, author: "z@x.com" }),
+      );
+    }
+    // One readable fact, farther from the query (a=0.2) so it ranks ~61st globally.
+    const mine = createFact({ scope: "user/me@x.com", title: "mine", body: "a=0.200", author: "me@x.com" });
+    await idx.upsertFact(mine);
+
+    // Query term matches no fact ⇒ BM25 contributes nothing; only the (scope-aware) KNN can surface it.
+    const cands = await idx.searchCandidates("zzznomatchzzz", {
+      readableScopes: ["user/me@x.com"],
+      queryVector: Float32Array.from([1, 0, 0, 0]),
+    });
+    expect(cands.map((c) => c.id)).toContain(mine.frontmatter.id);
+    db.close();
+  });
+});

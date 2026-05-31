@@ -297,13 +297,22 @@ describe("runSetIdentity", () => {
 
     promptQueue.push({ name: "confirm:Apply this change?", value: false });
     const io = captureIO();
-    const result = await runSetIdentity({
-      identity: "bob@example.com",
-      cwd,
-      homeDir: home,
-      io,
-      // yes omitted → prompts
-    });
+    // A real confirm only happens interactively; simulate a TTY so the non-TTY guard (batch 5) is a
+    // no-op and the confirm path runs.
+    const savedTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+    let result;
+    try {
+      result = await runSetIdentity({
+        identity: "bob@example.com",
+        cwd,
+        homeDir: home,
+        io,
+        // yes omitted → prompts
+      });
+    } finally {
+      process.stdin.isTTY = savedTTY;
+    }
     expect(result.status).toBe("no-change");
     expect(result.message).toContain("Aborted");
 

@@ -12,10 +12,8 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 import { FactStore } from "../storage/store";
-import { openIndexDb, type IndexConfig } from "../index/db";
-import { FactIndex } from "../index/factIndex";
 import { isProcessAlive, type LockInfo } from "../server/lock";
-import { embeddingConfigFromEnv } from "../index/providers";
+import { openCliIndex } from "./cliIndex";
 
 export interface ReindexResult {
   status: "ok" | "lock_held" | "error";
@@ -56,11 +54,8 @@ export async function runReindex(dataDir: string): Promise<ReindexResult> {
   }
 
   try {
-    const embedCfg = embeddingConfigFromEnv();
-    const indexConfig: IndexConfig = { provider: embedCfg.provider ?? "none", dimensions: 0 };
-    const db = openIndexDb(path.join(dataDir, "index.db"), indexConfig);
+    const { index } = openCliIndex(dataDir);
     const store = new FactStore(dataDir);
-    const index = new FactIndex(db);
 
     const before = index.factCount();
     const facts = await store.allFacts();

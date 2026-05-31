@@ -132,7 +132,7 @@ async function editInTempFile(
       const child = spawn(cmd, [...args, tmpFile], { stdio: "inherit" });
       child.on("error", (err: NodeJS.ErrnoException) => {
         if (err.code === "ENOENT") {
-          reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR or pass --editor=...`));
+          reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR, or pass --body "<text>" for non-interactive use.`));
           return;
         }
         reject(err);

@@ -16,6 +16,7 @@ import {
   type ToolContext,
 } from "../../src/server/tools";
 import { KrimtoError } from "../../src/server/errors";
+import { createFact } from "../../src/storage/fact";
 
 let root: string;
 let ctx: ToolContext;
@@ -265,6 +266,32 @@ describe("krimto_supersede", () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.id).toBe(sup.new_id);
     expect(results[0]!.body).toContain("Postgres 16");
+  });
+
+  it("carries over the old fact's tags, source, and expires to the replacement (no data loss)", async () => {
+    const old = createFact({
+      scope: "team/payments",
+      title: "Old",
+      body: "old body",
+      author: "a@x.com",
+      tags: ["db", "infra"],
+      source: "cursor",
+    });
+    old.frontmatter.expires = "2099-01-01T00:00:00.000Z";
+    await ctx.index.upsertFact(old);
+    await ctx.store.writeFactExact(old);
+
+    const sup = await krimtoSupersede(ctx, {
+      id: old.frontmatter.id,
+      new_title: "New",
+      new_body: "new body",
+      reason: "update",
+    });
+
+    const replacement = ctx.index.getFact(sup.new_id);
+    expect(replacement?.frontmatter.tags).toEqual(["db", "infra"]);
+    expect(replacement?.frontmatter.source).toBe("cursor");
+    expect(replacement?.frontmatter.expires).toBe("2099-01-01T00:00:00.000Z");
   });
 });
 

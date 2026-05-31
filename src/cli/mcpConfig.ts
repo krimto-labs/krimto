@@ -133,8 +133,13 @@ export async function writeMcpConfig(
     await exec(env.mcpWire.command, cliArgs);
     return { action: "cli-executed" };
   } catch (e) {
-    // Claude CLI may fail if `claude` isn't on PATH or for other reasons. Surface the error so
-    // the wizard can show the user what to do next (often: "run this command yourself").
+    // batch 5 — when the `claude` CLI isn't installed / not on PATH (ENOENT), DON'T crash the
+    // wizard (its top-level catch would re-throw → exit 1). Fall back to the copy-paste snippet —
+    // the same path Gemini/Codex use — so the user can wire it by hand or once `claude` is present.
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { action: "manual", snippet: buildSnippet(entry) };
+    }
+    // Any other failure (claude present but the command errored) is a real problem — surface it.
     throw new Error(
       `Failed to register Krimto with ${env.editor} via \`${env.mcpWire.command}\`: ` +
         `${e instanceof Error ? e.message : String(e)}`,

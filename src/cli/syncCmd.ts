@@ -15,10 +15,8 @@ import * as path from "node:path";
 
 import { FactStore } from "../storage/store";
 import { GitRepo } from "../storage/git";
-import { openIndexDb, type IndexConfig } from "../index/db";
-import { FactIndex } from "../index/factIndex";
-import { embeddingConfigFromEnv } from "../index/providers";
 import { isProcessAlive, type LockInfo } from "../server/lock";
+import { openCliIndex } from "./cliIndex";
 
 export interface SyncResult {
   status: "ok" | "up_to_date" | "conflict" | "no_remote" | "lock_held" | "error";
@@ -46,10 +44,7 @@ async function checkLock(dataDir: string): Promise<LockInfo | null> {
 
 /** Rebuild index.db from the markdown source of truth (mirrors `runReindex`'s core). */
 async function reindexFromMarkdown(dataDir: string): Promise<void> {
-  const embedCfg = embeddingConfigFromEnv();
-  const indexConfig: IndexConfig = { provider: embedCfg.provider ?? "none", dimensions: 0 };
-  const db = openIndexDb(path.join(dataDir, "index.db"), indexConfig);
-  const index = new FactIndex(db);
+  const { index } = openCliIndex(dataDir);
   await index.rebuild(await new FactStore(dataDir).allFacts());
 }
 

@@ -8,6 +8,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import http from "node:http";
 
 import { FactStore } from "../../src/storage/store";
 import { openIndexDb } from "../../src/index/db";
@@ -88,5 +89,60 @@ describe("krimto reindex (bin dispatch)", () => {
       code: 1,
       stdout: expect.stringContaining("Cannot reindex while a Krimto server is running"),
     });
+  }, 30000);
+});
+
+describe("krimto reindex with embeddings (H5 — vectors survive a reindex)", () => {
+  it("rebuilds facts_vec from markdown when a provider is configured", async () => {
+    // Fake OpenAI-shaped embeddings endpoint: one fixed 4-dim vector per input.
+    const server = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const parsed = JSON.parse(body || "{}") as { input?: string[] };
+        const data = (parsed.input ?? [""]).map(() => ({ embedding: [0.1, 0.2, 0.3, 0.4] }));
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ data }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, () => r()));
+    const port = (server.address() as { port: number }).port;
+    try {
+      // Seed two facts on disk (lexical write — no embeddings yet).
+      const db = openIndexDb(path.join(dataDir, "index.db"), { provider: "none", dimensions: 0 });
+      const index = new FactIndex(db);
+      const ctx: ToolContext = {
+        store: new FactStore(dataDir),
+        index,
+        writeQueue: new Serializer(),
+        requester: { identity: "user@localhost", teams: [] },
+        membership: { org: { slug: "default", admins: [] }, teams: [], users: [] },
+      };
+      await krimtoWrite(ctx, { scope: "user/me", title: "A", body: "idempotency keys" });
+      await krimtoWrite(ctx, { scope: "user/me", title: "B", body: "deploy tuesdays" });
+      db.close();
+
+      const { stdout } = await exec(process.execPath, [BIN, "reindex"], {
+        env: {
+          ...process.env,
+          KRIMTO_DATA: dataDir,
+          KRIMTO_EMBED_PROVIDER: "custom",
+          KRIMTO_EMBED_API_KEY: "k",
+          KRIMTO_EMBED_MODEL: "m",
+          KRIMTO_EMBED_BASE_URL: `http://127.0.0.1:${port}`,
+          KRIMTO_EMBED_DIMENSIONS: "4",
+        },
+      });
+      expect(stdout).toContain("Reindexed from markdown");
+
+      // Reopen and confirm vectors were populated (the bug left facts_vec empty after reindex).
+      const db2 = openIndexDb(path.join(dataDir, "index.db"), { provider: "custom", dimensions: 4 });
+      const index2 = new FactIndex(db2);
+      expect(index2.factCount()).toBe(2);
+      expect(index2.vectorCount()).toBe(2);
+      db2.close();
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   }, 30000);
 });

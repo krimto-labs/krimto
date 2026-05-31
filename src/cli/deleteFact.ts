@@ -6,8 +6,6 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 import { FactStore } from "../storage/store";
-import { openIndexDb, type IndexConfig } from "../index/db";
-import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { GitRepo } from "../storage/git";
 import { CommitBatcher, batcherConfigFromEnv } from "../storage/batcher";
@@ -17,7 +15,7 @@ import { loadMembership, requesterFor } from "../access/membership";
 import { deleteFact } from "../server/deleteFact";
 import { type ToolContext } from "../server/tools";
 import { KrimtoError } from "../server/errors";
-import { embeddingConfigFromEnv } from "../index/providers";
+import { openCliIndex } from "./cliIndex";
 
 export interface DeleteCliResult {
   status: "ok" | "orphan_index" | "lock_held" | "not_found" | "forbidden" | "error";
@@ -59,11 +57,8 @@ export async function runDeleteFact(dataDir: string, identity: string, id: strin
     };
   }
 
-  const embedCfg = embeddingConfigFromEnv();
-  const indexConfig: IndexConfig = { provider: embedCfg.provider ?? "none", dimensions: 0 };
-  const db = openIndexDb(path.join(dataDir, "index.db"), indexConfig);
+  const { index } = openCliIndex(dataDir);
   const store = new FactStore(dataDir);
-  const index = new FactIndex(db);
   const membership = await loadMembership(dataDir);
   const repo = await GitRepo.open(dataDir);
   const batcher = new CommitBatcher(repo, batcherConfigFromEnv());

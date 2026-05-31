@@ -116,6 +116,7 @@ export async function runFolderCmd(opts: FolderCmdOptions): Promise<FolderCmdRes
     io.out(`       export KRIMTO_DATA="${toDir}"\n\n`);
 
     if (!opts.yes) {
+      assertInteractiveOrUsage(FOLDER_USAGE); // batch 5 — a non-TTY agent gets usage+exit 2, not an abort
       const ok = await confirm({ message: "Proceed?", default: false });
       if (!ok) {
         return {

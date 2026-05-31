@@ -71,6 +71,20 @@ export function keyMatches(presented: string, storedHashHex: string): boolean {
 export class ApiKeyStore {
   constructor(private readonly filePath: string) {}
 
+  // Serializes read-modify-write mutations (issue/revoke) within this process so concurrent
+  // calls can't lose updates. Cross-process safety is provided by the data-dir lock. Reads are
+  // intentionally NOT serialized: write() renames atomically, so a reader always sees a
+  // complete file (either the pre- or post-mutation state, never a partial one).
+  private tail: Promise<unknown> = Promise.resolve();
+  private serialize<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.tail.then(() => fn(), () => fn());
+    this.tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async read(): Promise<ApiKeyRecord[]> {
     try {
       return JSON.parse(await fs.readFile(this.filePath, "utf8")) as ApiKeyRecord[];
@@ -81,15 +95,21 @@ export class ApiKeyStore {
 
   private async write(records: ApiKeyRecord[]): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(records, null, 2), "utf8");
+    // Atomic replace: write a temp file in the same dir, then rename over the target. A crash
+    // mid-write can never truncate keys.json (which would lock out the whole team).
+    const tmp = `${this.filePath}.tmp-${randomBytes(6).toString("hex")}`;
+    await fs.writeFile(tmp, JSON.stringify(records, null, 2), "utf8");
+    await fs.rename(tmp, this.filePath);
   }
 
   /** Issue a new key for an identity. Returns the plaintext once. */
   async issue(identity: string, env: KeyEnvironment = "live", label?: string): Promise<GeneratedKey> {
     const generated = generateApiKey(identity, env, new Date(), label);
-    const records = await this.read();
-    records.push(generated.record);
-    await this.write(records);
+    await this.serialize(async () => {
+      const records = await this.read();
+      records.push(generated.record);
+      await this.write(records);
+    });
     return generated;
   }
 
@@ -114,10 +134,12 @@ export class ApiKeyStore {
 
   /** Remove the key with this hash. Returns true if one was removed. */
   async revoke(hash: string): Promise<boolean> {
-    const records = await this.read();
-    const next = records.filter((r) => r.hash !== hash);
-    if (next.length === records.length) return false;
-    await this.write(next);
-    return true;
+    return this.serialize(async () => {
+      const records = await this.read();
+      const next = records.filter((r) => r.hash !== hash);
+      if (next.length === records.length) return false;
+      await this.write(next);
+      return true;
+    });
   }
 }

@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import Database from "better-sqlite3";
 import { openIndexDb, embeddingSpaceChanged } from "../../src/index/db";
+import { SCHEMA_VERSION } from "../../src/index/schema";
 
 describe("openIndexDb", () => {
   it("opens in WAL mode with fts5 + sqlite-vec available and records schema_meta", () => {
@@ -18,7 +19,7 @@ describe("openIndexDb", () => {
     const ver = db
       .prepare("select value from schema_meta where key='schema_version'")
       .get() as { value: string };
-    expect(Number(ver.value)).toBe(2);
+    expect(Number(ver.value)).toBe(SCHEMA_VERSION);
     db.close();
   });
 
@@ -81,8 +82,56 @@ describe("openIndexDb — schema v1 → v2 migration (Porter stemmer)", () => {
       .all() as { id: string }[];
     expect(afterRows.map((r) => r.id)).toContain("fct_x"); // singular query now finds the plural fact
     const ver = db.prepare("select value from schema_meta where key='schema_version'").get() as { value: string };
-    expect(Number(ver.value)).toBe(2);
+    expect(Number(ver.value)).toBe(SCHEMA_VERSION);
     db.close();
+  });
+});
+
+describe("openIndexDb — embedding space change (H6)", () => {
+  let dir: string;
+  afterEach(async () => {
+    if (dir) await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("re-dimensions facts_vec and clears embedding_cache when the embedding space changes", async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-space-"));
+    const dbPath = path.join(dir, "index.db");
+    const vec = (a: number[]): Buffer => Buffer.from(Float32Array.from(a).buffer);
+
+    const db1 = openIndexDb(dbPath, { provider: "openai", dimensions: 4 });
+    db1.prepare("INSERT INTO embedding_cache(body_hash, embedding, created) VALUES (?,?,?)").run("h", vec([1, 0, 0, 0]), "t");
+    db1.prepare("INSERT INTO facts_vec(fact_id, scope, embedding) VALUES (?,?,?)").run("f1", "user/a", vec([1, 0, 0, 0]));
+    db1.close();
+
+    // Reopen with a different dimension → the old cached vectors are in the wrong space and the
+    // 4-dim facts_vec can't hold 8-dim rows.
+    const db2 = openIndexDb(dbPath, { provider: "openai", dimensions: 8 });
+    const cacheCount = (db2.prepare("select count(*) c from embedding_cache").get() as { c: number }).c;
+    expect(cacheCount).toBe(0); // stale cache cleared
+    expect(() =>
+      db2.prepare("INSERT INTO facts_vec(fact_id, scope, embedding) VALUES (?,?,?)").run("f2", "user/a", vec([1, 0, 0, 0, 0, 0, 0, 0])),
+    ).not.toThrow(); // facts_vec recreated at the new dimension
+    db2.close();
+  });
+
+  it("does NOT drop facts_vec or clear the cache when reopened lexical-only (a CLI run without embed env)", async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-noprov-"));
+    const dbPath = path.join(dir, "index.db");
+    const vec = (a: number[]): Buffer => Buffer.from(Float32Array.from(a).buffer);
+
+    const db1 = openIndexDb(dbPath, { provider: "openai", dimensions: 4 });
+    db1.prepare("INSERT INTO embedding_cache(body_hash, embedding, created) VALUES (?,?,?)").run("h", vec([1, 0, 0, 0]), "t");
+    db1.prepare("INSERT INTO facts_vec(fact_id, scope, embedding) VALUES (?,?,?)").run("f1", "user/a", vec([1, 0, 0, 0]));
+    db1.close();
+
+    // `krimto rm/reindex/sync` in a shell without KRIMTO_EMBED_* resolves provider:none. That must NOT
+    // destroy the vector space the server built — the server repopulates from the surviving cache.
+    const db2 = openIndexDb(dbPath, { provider: "none", dimensions: 0 });
+    const hasVec = (db2.prepare("select count(*) c from sqlite_master where name='facts_vec'").get() as { c: number }).c > 0;
+    expect(hasVec).toBe(true);
+    expect((db2.prepare("select count(*) c from facts_vec").get() as { c: number }).c).toBe(1);
+    expect((db2.prepare("select count(*) c from embedding_cache").get() as { c: number }).c).toBe(1);
+    db2.close();
   });
 });
 

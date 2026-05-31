@@ -115,6 +115,23 @@ describe("krimto edit", () => {
     expect(after.fact.frontmatter.id).toBe(before.fact.frontmatter.id); // id preserved
   });
 
+  it("applies --body directly without an editor (agent / non-TTY path)", async () => {
+    const id = await seedFact("alice@acme.com", "pnpm not npm", "old body");
+    const res = await runEdit({ dataDir, identity: "alice@acme.com", id, body: "brand new body via flag" });
+    expect(res.status).toBe("ok");
+    const after = (await openFactFile(dataDir, id))!;
+    expect(after.fact.body).toBe("brand new body via flag");
+    expect(after.fact.frontmatter.id).toBe(id); // immutable preserved
+  });
+
+  it("ignores an empty/whitespace --body (won't blank a note)", async () => {
+    const id = await seedFact("alice@acme.com", "keep", "important body");
+    const res = await runEdit({ dataDir, identity: "alice@acme.com", id, body: "   " });
+    expect(res.status).toBe("no-change");
+    const after = (await openFactFile(dataDir, id))!;
+    expect(after.fact.body).toBe("important body"); // preserved, not blanked
+  });
+
   it("reports 'no-change' when the user saves the file unchanged", async () => {
     const id = await seedFact("alice@acme.com", "x", "body");
     const res = await runEdit({

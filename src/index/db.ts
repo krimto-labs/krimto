@@ -31,12 +31,25 @@ export function openIndexDb(path: string, config: IndexConfig): Db {
       db.exec(
         "DROP TRIGGER IF EXISTS facts_ai; DROP TRIGGER IF EXISTS facts_ad; DROP TRIGGER IF EXISTS facts_au; DROP TABLE IF EXISTS facts_fts;",
       );
+      // v3 added a `scope` column to facts_vec — drop the old schema so it's recreated below; the
+      // server/reindex rebuild repopulates it (facts rows are untouched).
+      db.exec("DROP TABLE IF EXISTS facts_vec;");
     }
     db.exec(SCHEMA_SQL);
     if (ftsMigration) {
       db.exec("INSERT INTO facts_fts(facts_fts) VALUES('rebuild');");
     }
-    if (config.provider !== "none" && config.dimensions > 0) {
+    // H6 — when the embedding provider/dimensions CHANGE TO a new vector space, the old facts_vec is
+    // the wrong size and the cached vectors live in the old space. Detect BEFORE the embed_* meta is
+    // overwritten below, then drop + clear so facts_vec is recreated at the new dimension and the
+    // server/reindex rebuild re-embeds from scratch. Guarded on the NEW config using vectors: a CLI
+    // command run without KRIMTO_EMBED_* resolves provider:none and must NOT destroy the vector space
+    // the server built — the server repopulates from the surviving cache on its next start.
+    const usesVectors = config.provider !== "none" && config.dimensions > 0;
+    if (usesVectors && embeddingSpaceChanged(db, config)) {
+      db.exec("DROP TABLE IF EXISTS facts_vec; DELETE FROM embedding_cache;");
+    }
+    if (usesVectors) {
       db.exec(vecTableSql(config.dimensions));
     }
     const set = db.prepare(

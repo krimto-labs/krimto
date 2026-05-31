@@ -6,6 +6,7 @@ import { FactStore } from "../../src/storage/store";
 import { openIndexDb } from "../../src/index/db";
 import { FactIndex } from "../../src/index/factIndex";
 import { buildIndexIfNeeded, resolveIdentity } from "../../src/server/index";
+import type { EmbeddingProvider } from "../../src/index/embeddings";
 
 let root: string;
 afterEach(async () => {
@@ -22,7 +23,7 @@ describe("buildIndexIfNeeded", () => {
     const db = openIndexDb(":memory:", cfg);
     const index = new FactIndex(db);
     expect(index.factCount()).toBe(0);
-    await buildIndexIfNeeded(index, store, db, cfg);
+    await buildIndexIfNeeded(index, store, cfg);
     expect(index.factCount()).toBe(2);
     const cands = await index.searchCandidates("stripe", { readableScopes: ["org/acme"] });
     expect(cands.map((c) => c.title)).toContain("Stripe");
@@ -37,8 +38,27 @@ describe("buildIndexIfNeeded", () => {
     const index = new FactIndex(db);
     await index.upsertFact((await import("../../src/storage/fact")).createFact({ scope: "org/acme", title: "x", body: "y", author: "a@x.com" }));
     expect(index.factCount()).toBe(1);
-    await buildIndexIfNeeded(index, store, db, cfg); // store is empty; must NOT wipe the index
+    await buildIndexIfNeeded(index, store, cfg); // store is empty; must NOT wipe the index
     expect(index.factCount()).toBe(1);
+    db.close();
+  });
+
+  it("rebuilds vectors when facts exist but facts_vec is empty (post embedding-space change)", async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-startup3-"));
+    const store = new FactStore(root);
+    await store.writeFact({ scope: "user/a@x.com", title: "t", body: "idempotency keys", author: "a@x.com" });
+    const provider: EmbeddingProvider = { name: "stub", dimensions: 4, embed: async (ts) => ts.map(() => [1, 0, 0, 0]) };
+    const cfg = { provider: "stub", dimensions: 4 };
+    const db = openIndexDb(":memory:", cfg);
+    const index = new FactIndex(db, provider);
+
+    await buildIndexIfNeeded(index, store, cfg);
+    expect(index.vectorCount()).toBe(1);
+
+    db.exec("DELETE FROM facts_vec"); // simulate the dropped-vec state after a space change
+    expect(index.vectorCount()).toBe(0);
+    await buildIndexIfNeeded(index, store, cfg); // vectorCount(0) !== factCount(1) → rebuild
+    expect(index.vectorCount()).toBe(1);
     db.close();
   });
 });
