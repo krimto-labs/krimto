@@ -537,7 +537,8 @@ try {
     // `service stop` is the same code path, named for users coming via `service` discovery.
     const { runStop } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runStop({ dataDir: resolveDataDir() });
+    // batch 5 — forward --yes so the team-host guard's documented escape hatch works (was dropped).
+    const result = await runStop({ dataDir: resolveDataDir(), yes: process.argv.includes("--yes") });
     process.stdout.write(result.message);
   } else if (cmd === "start" || cmd === "service start") {
     // `krimto start` — v0.2.32 counterpart to stop. If a service plist exists on disk,
@@ -555,7 +556,8 @@ try {
     // port-unbound window.
     const { runRestart } = await tsImport("../src/cli/stopCmd.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runRestart({ dataDir: resolveDataDir() });
+    // batch 5 — forward --yes through restart → stop so the team-host guard's hatch works.
+    const result = await runRestart({ dataDir: resolveDataDir(), yes: process.argv.includes("--yes") });
     process.stdout.write(result.message);
   } else if (cmd === "reset") {
     // `krimto reset` — disconnect from all editors + uninstall service + wipe local key store.
@@ -579,15 +581,32 @@ try {
     });
     process.stdout.write(result.message);
   } else if (cmd === "edit") {
-    // `krimto edit <id>` — open the fact's .md in $EDITOR, reindex on save.
+    // `krimto edit <id>` — open the fact's .md in $EDITOR, reindex on save. `--body "<text>"`
+    // skips the editor entirely for non-interactive (AI agent / CI) use (batch 5).
     const id = process.argv[3];
     if (!id) {
-      process.stderr.write("Usage: krimto edit <fact-id>\n");
+      process.stderr.write('Usage: krimto edit <fact-id> [--body "<new content>"]\n');
+      process.exit(2);
+    }
+    const editArgs = process.argv.slice(4);
+    const bodyIdx = editArgs.indexOf("--body");
+    const editBody = bodyIdx >= 0 ? editArgs[bodyIdx + 1] : undefined;
+    if (editBody === undefined && process.stdin.isTTY !== true) {
+      process.stderr.write(
+        "\nℹ️  No interactive terminal detected — `krimto edit` opens $EDITOR, which needs a TTY.\n\n" +
+          "  For non-interactive use (AI agents / CI):\n" +
+          '    krimto edit <fact-id> --body "<new content>"\n',
+      );
       process.exit(2);
     }
     const { runEdit } = await tsImport("../src/cli/edit.ts", import.meta.url);
     const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
-    const result = await runEdit({ dataDir: resolveDataDir(), identity: await resolveIdentity(), id });
+    const result = await runEdit({
+      dataDir: resolveDataDir(),
+      identity: await resolveIdentity(),
+      id,
+      ...(editBody !== undefined ? { body: editBody } : {}),
+    });
     process.stdout.write(result.message);
     if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
   } else if (cmd === "mv") {
@@ -612,9 +631,26 @@ try {
     if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;
   } else if (cmd === "supersede") {
     // `krimto supersede <id>` — open $EDITOR for a new body, then call krimtoSupersede.
+    // `--body "<text>"` (+ optional `--title` / `--reason`) skips the editor for agent / CI use (batch 5).
     const id = process.argv[3];
     if (!id) {
-      process.stderr.write("Usage: krimto supersede <fact-id>\n");
+      process.stderr.write('Usage: krimto supersede <fact-id> [--body "<new content>"] [--title "<title>"]\n');
+      process.exit(2);
+    }
+    const supArgs = process.argv.slice(4);
+    const supFlag = (name) => {
+      const i = supArgs.indexOf(name);
+      return i >= 0 ? supArgs[i + 1] : undefined;
+    };
+    const supBody = supFlag("--body");
+    const supTitle = supFlag("--title");
+    const supReason = supFlag("--reason");
+    if (supBody === undefined && process.stdin.isTTY !== true) {
+      process.stderr.write(
+        "\nℹ️  No interactive terminal detected — `krimto supersede` opens $EDITOR, which needs a TTY.\n\n" +
+          "  For non-interactive use (AI agents / CI):\n" +
+          '    krimto supersede <fact-id> --body "<new content>" [--title "<title>"]\n',
+      );
       process.exit(2);
     }
     const { runSupersede } = await tsImport("../src/cli/supersedeCmd.ts", import.meta.url);
@@ -623,6 +659,9 @@ try {
       dataDir: resolveDataDir(),
       identity: await resolveIdentity(),
       id,
+      ...(supBody !== undefined ? { newBody: supBody } : {}),
+      ...(supTitle !== undefined ? { newTitle: supTitle } : {}),
+      ...(supReason !== undefined ? { reason: supReason } : {}),
     });
     process.stdout.write(result.message);
     if (result.status !== "ok" && result.status !== "no-change") process.exitCode = 1;

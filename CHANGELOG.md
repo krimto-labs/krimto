@@ -4,6 +4,53 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.45] — 2026-05-31 — security & correctness hardening
+
+Audit-driven fixes across security, retrieval, sync, the MCP tools, and the CLI. **The index schema
+is bumped to v3** (`facts_vec` gains a `scope` column): existing indexes auto-migrate on first open
+and the server / `krimto reindex` rebuilds vectors — no action needed.
+
+### Security
+- **The HTTP server binds to loopback (`127.0.0.1`) by default.** Solo mode was reachable from the
+  local network with no auth (any host on the same Wi-Fi/LAN could read or write all memory). Binding
+  a non-loopback host while auth is off now refuses to start unless `KRIMTO_ALLOW_INSECURE_HOST=1`;
+  team mode (auth on) may bind any host. New `KRIMTO_HTTP_HOST` override. The published Docker image
+  sets `KRIMTO_HTTP_HOST=0.0.0.0` (the container boundary + your `-p` mapping is the access control),
+  so `docker run -p 8080:8080 …` works unchanged.
+- **CSRF protection on `/ui`.** Every state-changing request is rejected unless it is same-origin
+  (`Origin`/`Referer` check); the session cookie is now `SameSite=Strict`. Solo-mode Settings ▸
+  Behavior actions (remote / sync / reindex) are additionally gated on a loopback peer.
+- **API-key store writes are serialized + atomic** (temp-file + `rename`), so concurrent issue/revoke
+  can no longer lose updates and a crash mid-write can no longer truncate `keys.json` and lock out a team.
+
+### Fixed
+- **Vector recall is now scope-aware** — the KNN filters by readable scope in-query instead of taking a
+  global top-50 then filtering, so in-scope facts are no longer crowded out in multi-scope (team/org) corpora.
+- **`reindex` / `sync` / `rm` keep vector search on** — they rebuild with the configured embedding provider
+  instead of silently dropping to lexical-only until the next server restart.
+- **Switching embedding provider/dimensions rebuilds cleanly** — `facts_vec` is re-dimensioned and the stale
+  embedding cache cleared; the (previously dead) space-change rebuild trigger now fires reliably.
+- **Inbound `git pull` no longer aborts when a local write is pending** (`--rebase --autostash`), so a
+  teammate's update arrives even mid-write; an overlapping edit is reported as a conflict (the local edit
+  kept in `git stash`) rather than leaving conflict markers in a fact file.
+- **`krimto_supersede` preserves the old fact's `tags`, `source`, and `expires`** (previously dropped on every
+  supersede).
+- **The CLI no longer hangs or aborts for non-interactive (AI-agent / CI) callers:** `set identity`,
+  `remote --remove`, and `folder --to` print copy-pasteable flag usage and exit 2 instead of stalling at a
+  prompt; `krimto stop --yes` / `restart` now honor `--yes`; `edit` / `supersede` accept `--body "<text>"`
+  so no `$EDITOR` is required.
+- **The setup wizard no longer crashes** when Claude Code is selected but the `claude` CLI isn't on `PATH` —
+  it falls back to the manual connect snippet.
+- **The Claude Code plugin declares its MCP server**, so `/plugin install` actually wires the `krimto_*` tools.
+
+### Changed
+- **Index schema → v3.** `facts_vec` carries a `scope` metadata column; older indexes migrate automatically.
+- `vitest` default test timeout raised to 20s to keep the subprocess-heavy integration suite reliable under
+  parallel execution.
+
+These are the first changes since v0.2 to touch the storage, index, access, and retrieval layers; all are
+covered by new RED→GREEN tests and adversarial code review.
+
 ## [0.2.44] — 2026-05-29 — first-run friction gate
 
 The pre–go-to-market gate: a bare MCP install (no `krimto init`) now routes "remember X" to

@@ -172,8 +172,11 @@ export class GitRepo {
     if (!(await this.hasRemote())) return { status: "skipped" };
     const before = await this.head();
     try {
-      // Pull our pinned branch by name — never the remote's HEAD symref.
-      await exec("git", ["-C", this.dir, "pull", "--rebase", "origin", DEFAULT_BRANCH]);
+      // Pull our pinned branch by name — never the remote's HEAD symref. `--autostash` stashes any
+      // pending local change (a staged-but-not-yet-committed batched write, or an external .md edit)
+      // before the rebase and re-applies it after, so inbound updates are no longer silently dropped
+      // whenever a write is in flight. Committed-vs-committed conflicts still abort below (local kept).
+      await exec("git", ["-C", this.dir, "pull", "--rebase", "--autostash", "origin", DEFAULT_BRANCH]);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       try {
@@ -182,6 +185,18 @@ export class GitRepo {
       } catch {
         return { status: "error", detail };
       }
+    }
+    // `--autostash` re-applies the stashed local change AFTER the rebase/fast-forward succeeds. If
+    // that re-apply conflicts, `git pull` still exits 0 but leaves conflict markers in an unmerged
+    // tree — we must NOT report ok (the markers would get re-indexed and committed). Detect it, reset
+    // the tree back to the pulled HEAD (the local edit stays recoverable in `git stash`), report conflict.
+    const { stdout: unmerged } = await exec("git", ["-C", this.dir, "diff", "--name-only", "--diff-filter=U"]);
+    if (unmerged.trim().length > 0) {
+      await exec("git", ["-C", this.dir, "reset", "--hard", "HEAD"]).catch(() => undefined);
+      return {
+        status: "conflict",
+        detail: "an inbound change overlapped a pending local edit; the local edit is kept in `git stash`",
+      };
     }
     const after = await this.head();
     if (before === after) return { status: "up-to-date" };

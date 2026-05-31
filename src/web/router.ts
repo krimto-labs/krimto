@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import express, { type Request, type Response, type Router } from "express";
 import { layout, escapeHtml } from "./html";
 import { COOKIE_NAME, signSession, verifySession, parseCookies } from "./session";
+import { isSameOrigin } from "./csrf";
 import { loginBody, searchBox, factResults, scopeList, factsList, factDetail, keysBody, newKeyBody, adminBody, hijackWarningPanel, connectPanel, gettingStartedPanel, activityPanel, behaviorPanel, machinePanel, reconnectingPanel, dashboardHeader, type FactView, type StatusPanelOpts } from "./views";
 import { readDataDirGitInfo } from "../storage/git";
 import { type ApiKeyStore } from "../access/auth";
@@ -76,6 +77,13 @@ export interface WebRouterDeps {
 
 type WithIdentity = Request & { identity: string };
 
+// H1 — who may run Settings▸Behavior actions (set/remove remote, sync, reindex). In team mode only
+// an org admin may; in solo mode (no login) the trust boundary is a loopback peer, so a remote /
+// exposed-host visitor is denied. Mirrors the existing /settings/machine loopback gate.
+export function mayManageBehavior(opts: { teamMode: boolean; isOrgAdmin: boolean; isLoopback: boolean }): boolean {
+  return opts.teamMode ? opts.isOrgAdmin : opts.isLoopback;
+}
+
 export function buildWebRouter(deps: WebRouterDeps): Router {
   const router = express.Router();
   const secret = deps.sessionSecret;
@@ -93,6 +101,22 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
   const bodyOf = (req: Request): Record<string, unknown> =>
     (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
 
+  // H2 — CSRF guard. Block any state-changing (non-GET) request that carries a cross-origin
+  // Origin/Referer. GET/HEAD/OPTIONS are safe. A request with no origin signal is allowed (a
+  // non-browser client; a cross-origin browser POST always sends Origin). Applies to every /ui
+  // mutation — login, behavior, fact curation, keys, admin, and machine ops.
+  router.use((req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+      next();
+      return;
+    }
+    if (isSameOrigin(req)) {
+      next();
+      return;
+    }
+    errorPage(res, 403, "Cross-origin request blocked — reload the page and try again.");
+  });
+
   router.get("/login", (_req, res) => page(res, 200, "Sign in", loginBody()));
   router.post("/login", (req, res) => {
     void (async () => {
@@ -103,7 +127,7 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
         page(res, 401, "Sign in", loginBody("Invalid key"));
         return;
       }
-      res.cookie(COOKIE_NAME, signSession(identity, secret), { httpOnly: true, sameSite: "lax", path: "/" });
+      res.cookie(COOKIE_NAME, signSession(identity, secret), { httpOnly: true, sameSite: "strict", path: "/" });
       res.redirect("/ui/facts");
     })();
   });
@@ -136,9 +160,14 @@ export function buildWebRouter(deps: WebRouterDeps): Router {
     page(res, 200, "Connect", connectPanel({ host, requireAuth: deps.teamModeActive() }), idOf(req));
   });
 
-  // Behavior actions act on the running server's data dir / index. Owner-in-solo / org-admin-in-team.
+  // Behavior actions act on the running server's data dir / index. Org-admin in team mode; in solo
+  // mode (no login) gated on a loopback peer (H1) — a remote / exposed-host visitor is denied.
   const canManageBehavior = (req: Request): boolean =>
-    !deps.teamModeActive() || isOrgAdmin(deps.membership(), idOf(req));
+    mayManageBehavior({
+      teamMode: deps.teamModeActive(),
+      isOrgAdmin: isOrgAdmin(deps.membership(), idOf(req)),
+      isLoopback: isLoopbackAddress(req.socket.remoteAddress),
+    });
 
   router.get("/settings", (req, res) => {
     void (async () => {

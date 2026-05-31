@@ -34,6 +34,16 @@ describe("identityWarning (G2)", () => {
 });
 
 describe("localModeBanner", () => {
+  it("default loopback bind: notes the server is reachable from this machine only", () => {
+    expect(localModeBanner(8080, "/tmp/k-data")).toMatch(/this machine only/i);
+  });
+  it("non-loopback bind: loudly warns the server is exposed with no auth", () => {
+    const b = localModeBanner(8080, "/tmp/k-data", DEFAULT_IDENTITY, "0.0.0.0");
+    expect(b).toMatch(/exposed/i);
+    expect(b).toMatch(/no key|no auth/i);
+    expect(b).toContain("0.0.0.0");
+    expect(b).not.toMatch(/this machine only/i);
+  });
   it("leads with the dashboard URL, names /ui/connect, shows the data dir + the team upgrade", () => {
     const b = localModeBanner(8080, "/tmp/k-data");
     expect(b).toContain("http://localhost:8080");

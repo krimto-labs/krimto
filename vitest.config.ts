@@ -6,5 +6,11 @@ import { defineConfig, configDefaults } from "vitest/config";
 export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, "**/.claude/**"],
+    // The integration suite spawns many `tsx`-compiling subprocesses (the real `bin/krimto.mjs`,
+    // git pull/stash, a fake embeddings server, …). Under vitest's parallel workers these saturate
+    // CPU, and the 5s default was starving fast tests into spurious timeouts. 20s gives headroom;
+    // a genuinely-stuck test still fails well before CI's job timeout.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });

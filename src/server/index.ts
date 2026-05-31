@@ -21,6 +21,7 @@ import { RateLimiter, rateLimitConfigFromEnv } from "./ratelimit";
 import { TelemetrySender, telemetryConfigFromEnv, resolveInstallId } from "./telemetry";
 import { type AdminContext } from "./admin";
 import { localModeBanner, stdioStartupBanner, teamModeBanner } from "./banner";
+import { resolveBindHost } from "./bindHost";
 import { acquireLock, LockHeldError, type LockHandle } from "./lock";
 import { ActivityLog } from "./activity";
 import { runLocalOp, defaultBinPath } from "./localOps";
@@ -30,7 +31,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import type { Database as Db } from "better-sqlite3";
 import { z } from "zod";
 
 import { FactStore } from "../storage/store";
@@ -38,7 +38,7 @@ import { GitRepo } from "../storage/git";
 import { CommitBatcher, batcherConfigFromEnv } from "../storage/batcher";
 import { hasOrgAdmin, loadMembership, parseMembership, requesterFor, shouldAdoptReload } from "../access/membership";
 import { createEmbeddingProvider, embeddingConfigFromEnv } from "../index/providers";
-import { openIndexDb, embeddingSpaceChanged, type IndexConfig } from "../index/db";
+import { openIndexDb, type IndexConfig } from "../index/db";
 import { FactIndex } from "../index/factIndex";
 import { Serializer } from "../index/serialize";
 import { RemoteSync, syncConfigFromEnv } from "../storage/sync";
@@ -58,7 +58,7 @@ import { mcpServerInstructions } from "../agentRule";
 
 export type RequesterResolver = (extra: { authInfo?: AuthInfo }) => Requester;
 
-export const KRIMTO_VERSION = "0.2.44";
+export const KRIMTO_VERSION = "0.2.45";
 
 export function resolveDataDir(): string {
   return process.env.KRIMTO_DATA ?? path.join(homedir(), ".krimto");
@@ -259,14 +259,17 @@ export function buildServer(ctx: ToolContext, resolveRequester?: RequesterResolv
   return server;
 }
 
-/** Build the index from the markdown source of truth when it's empty or the embedding space changed. */
+/** Build the index from the markdown source of truth when it's empty or its vectors are missing. */
 export async function buildIndexIfNeeded(
   index: FactIndex,
   store: FactStore,
-  db: Db,
   config: IndexConfig,
 ): Promise<void> {
-  if (index.factCount() === 0 || embeddingSpaceChanged(db, config)) {
+  const usesVectors = config.provider !== "none" && config.dimensions > 0;
+  // Rebuild when empty, or when vectors are expected but missing — e.g. facts_vec was dropped after
+  // an embedding-space change (H6). vectorCount() is a robust signal that survives the schema_meta
+  // write-ordering, unlike embeddingSpaceChanged (which is always false right after openIndexDb).
+  if (index.factCount() === 0 || (usesVectors && index.vectorCount() !== index.factCount())) {
     await index.rebuild(await store.allFacts());
   }
 }
@@ -336,7 +339,7 @@ export async function main(): Promise<void> {
   const db = openIndexDb(`${dataDir}/index.db`, indexConfig);
   const store = new FactStore(dataDir);
   const index = new FactIndex(db, embeddingProvider ?? undefined);
-  await buildIndexIfNeeded(index, store, db, indexConfig);
+  await buildIndexIfNeeded(index, store, indexConfig);
   const repo = await GitRepo.open(dataDir);
   if (process.env.KRIMTO_GIT_REMOTE) {
     await repo.setRemote(process.env.KRIMTO_GIT_REMOTE);
@@ -530,10 +533,13 @@ export async function main(): Promise<void> {
         );
       },
     });
-    app.listen(httpPort, () => {
-      process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on :${httpPort} (data: ${dataDir})\n`);
+    // C1 — bind loopback by default; refuse a non-loopback bind in solo mode (no auth) unless the
+    // operator explicitly opts into exposure. Throws before listen so an unsafe config can't start.
+    const bindHost = resolveBindHost(process.env, { authOn: teamModeActive() });
+    app.listen(httpPort, bindHost, () => {
+      process.stderr.write(`Krimto ${KRIMTO_VERSION} HTTP server on ${bindHost}:${httpPort} (data: ${dataDir})\n`);
       if (!teamModeActive()) {
-        process.stderr.write(localModeBanner(httpPort, dataDir, identity));
+        process.stderr.write(localModeBanner(httpPort, dataDir, identity, bindHost));
       } else {
         process.stderr.write(teamModeBanner({ host: `localhost:${httpPort}`, key: bootstrapKey, dataDir }));
       }

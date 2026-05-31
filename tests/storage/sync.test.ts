@@ -121,4 +121,43 @@ describe("RemoteSync", () => {
     expect(onChanged).not.toHaveBeenCalled();
     expect(sync.lastPullStatus()).toBe("conflict");
   });
+
+  it("pulls inbound changes even when a local write is staged but uncommitted (autostash)", async () => {
+    const repo = await GitRepo.open(dir);
+    const store = new FactStore(dir);
+
+    // Local pending write: stage a NEW fact but don't commit — the batcher's between-cycle state.
+    const { path: rel } = await store.writeFact({ scope: "user/me", title: "Local pending", body: "draft idea", author: "me@x.com" });
+    await repo.stage(rel);
+
+    // Teammate pushes a different fact to the remote.
+    await fs.mkdir(path.join(mate, "org/acme"), { recursive: true });
+    await fs.writeFile(path.join(mate, "org/acme/mate3.md"), "---\nid: m3\n---\nteammate note\n", "utf8");
+    await execFileP("git", ["-C", mate, "add", "-A"]);
+    await execFileP("git", ["-C", mate, "commit", "-qm", "mate: add3"]);
+    await execFileP("git", ["-C", mate, "push", "-q"]);
+
+    // RED today: the dirty index makes `git pull --rebase` abort → error, silently dropping the update.
+    const res = await repo.pull();
+    expect(res.status).toBe("ok");
+    expect(res.changedFiles).toContain("org/acme/mate3.md");
+    // The local pending write survives the rebase (re-applied from the autostash).
+    expect(await fs.readFile(path.join(dir, rel), "utf8")).toContain("draft idea");
+  });
+
+  it("never reports ok or writes conflict markers when an inbound change overlaps a pending edit", async () => {
+    const repo = await GitRepo.open(dir);
+    // Local UNCOMMITTED edit to the seed file (same lines the teammate will change). With --autostash
+    // this fast-forwards then the stash RE-APPLY conflicts — and `git pull` still exits 0.
+    await fs.writeFile(path.join(dir, "org/acme/seed.md"), "---\nid: s\n---\nLOCAL pending edit\n", "utf8");
+    await fs.writeFile(path.join(mate, "org/acme/seed.md"), "---\nid: s\n---\nREMOTE teammate edit\n", "utf8");
+    await execFileP("git", ["-C", mate, "commit", "-aqm", "mate: edit seed"]);
+    await execFileP("git", ["-C", mate, "push", "-q"]);
+
+    const res = await repo.pull();
+    expect(res.status).toBe("conflict"); // must NOT silently report ok
+    const seed = await fs.readFile(path.join(dir, "org/acme/seed.md"), "utf8");
+    expect(seed).not.toContain("<<<<<<<"); // no conflict markers left on disk to be indexed/committed
+    expect(seed).not.toContain(">>>>>>>");
+  });
 });

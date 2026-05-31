@@ -10,7 +10,7 @@
       "name": "krimto",
       "source": "./",
       "description": "Open-source team memory layer for AI coding agents — markdown files in git, user→team→org hierarchy, cross-vendor MCP server. Apache-2.0.",
-      "version": "0.2.44",
+      "version": "0.2.45",
       "category": "memory",
       "author": {
         "name": "Krimto",

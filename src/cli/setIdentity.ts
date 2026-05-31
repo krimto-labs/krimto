@@ -33,7 +33,7 @@ import {
   isServiceInstalled,
   uninstallService,
 } from "./service";
-import { defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
+import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
 import { runWhoami } from "./whoami";
 
 const EDITOR_LABEL: Record<EditorKind, string> = {
@@ -45,6 +45,11 @@ const EDITOR_LABEL: Record<EditorKind, string> = {
 
 // Same permissive shape used by defaultIdentity() — accepts anything that looks like name@host.
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+$/;
+
+/** batch 5 — non-interactive usage shown by the TTY guard (mirrors the Phase B commands). */
+const SET_IDENTITY_USAGE =
+  "For non-interactive use (AI agents / CI):\n" +
+  "  krimto set identity <email> --yes            Apply the identity change without a prompt";
 
 export interface SetIdentityOptions {
   identity: string;
@@ -102,6 +107,7 @@ export async function runSetIdentity(opts: SetIdentityOptions): Promise<SetIdent
   }
 
   if (!opts.yes) {
+    assertInteractiveOrUsage(SET_IDENTITY_USAGE); // batch 5 — non-TTY agent gets usage+exit 2, not an abort
     io.out("\nKrimto — Set identity\n\n");
     io.out(`  Current identity: ${current.activeIdentity}\n`);
     io.out(`  New identity:     ${opts.identity}\n\n`);

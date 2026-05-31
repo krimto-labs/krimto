@@ -82,4 +82,34 @@ describe("ApiKeyStore", () => {
     expect(await store2.list()).toHaveLength(0);
     expect(await store2.revoke("does-not-exist")).toBe(false);
   });
+
+  it("does not lose updates when many keys are issued concurrently", async () => {
+    const n = 20;
+    await Promise.all(
+      Array.from({ length: n }, (_, i) => store.issue(`u${i}@acme.com`, "live", `k${i}`)),
+    );
+    expect(await store.list()).toHaveLength(n);
+  });
+
+  it("stays consistent across interleaved concurrent issue and revoke", async () => {
+    const seed = await store.issue("seed@acme.com");
+    const seedHash = (await store.list())[0]!.hash;
+    await Promise.all([
+      store.issue("a@acme.com"),
+      store.issue("b@acme.com"),
+      store.revoke(seedHash),
+      store.issue("c@acme.com"),
+    ]);
+    const listed = await store.list();
+    expect(listed).toHaveLength(3); // 4 issued (incl. seed) − 1 revoked
+    expect(listed.some((k) => k.hash === seedHash)).toBe(false);
+    expect(await store.resolveIdentity(seed.key)).toBeNull();
+  });
+
+  it("never leaves a partial temp file beside keys.json (atomic write)", async () => {
+    const file = path.join(dir, "atomic", "keys.json");
+    const s = new ApiKeyStore(file);
+    await Promise.all(Array.from({ length: 5 }, (_, i) => s.issue(`u${i}@acme.com`)));
+    expect(await fs.readdir(path.dirname(file))).toEqual(["keys.json"]);
+  });
 });

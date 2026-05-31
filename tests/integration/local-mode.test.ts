@@ -97,4 +97,24 @@ describe("local mode (no auth)", () => {
     expect(html).toContain("Save your first memory");
     expect(html).toContain("deploys are Tuesdays");
   });
+
+  it("blocks a cross-origin POST to a /ui mutation (CSRF guard)", async () => {
+    const r = await fetch(`${base()}/ui/keys`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "http://evil.test" },
+      body: "label=x",
+      redirect: "manual",
+    });
+    expect(r.status).toBe(403);
+  });
+
+  it("allows a same-origin POST to a /ui mutation", async () => {
+    const r = await fetch(`${base()}/ui/keys`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: base() },
+      body: "label=mine",
+      redirect: "manual",
+    });
+    expect(r.status).not.toBe(403);
+  });
 });

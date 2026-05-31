@@ -32,6 +32,11 @@ export interface EditOptions {
    * Tests use this to "edit" the file without spawning a real editor; production omits it.
    */
   editorImpl?: (filePath: string) => Promise<void>;
+  /**
+   * Non-interactive replacement body. When set, $EDITOR is skipped entirely and this becomes the
+   * fact's new body (frontmatter is preserved). This is the agent / CI path: `krimto edit <id> --body …`.
+   */
+  body?: string;
 }
 
 export interface EditResult {
@@ -72,26 +77,36 @@ export async function runEdit(opts: EditOptions): Promise<EditResult> {
     }
 
     const absPath = path.join(ctx.store.dataDir(), before.path);
-    if (opts.editorImpl) {
-      await opts.editorImpl(absPath);
-    } else {
-      const editor = opts.editor ?? process.env.EDITOR ?? "vi";
-      await spawnEditor(editor, absPath);
-    }
-
-    const afterText = await fs.readFile(absPath, "utf8");
     let after: Fact;
-    try {
-      after = parseFact(afterText);
-    } catch (e) {
-      return {
-        status: "invalid_frontmatter",
-        message:
-          `\n🔴 The file's frontmatter is no longer valid YAML.\n` +
-          `\n   ${e instanceof Error ? e.message : String(e)}\n` +
-          `\n   The original is still on disk — re-open it and fix the markers:\n` +
-          `     $ ${opts.editor ?? process.env.EDITOR ?? "vi"} ${absPath}\n`,
-      };
+    if (opts.body !== undefined) {
+      // Never blank a note via an empty/whitespace --body (mirrors krimtoWrite/supersede, which
+      // reject empty bodies). A real edit needs content.
+      if (opts.body.trim() === "") {
+        return { status: "no-change", message: `\n(Empty --body — nothing saved. Pass non-empty content to change the note.)\n` };
+      }
+      // Non-interactive: replace just the body, keep the existing frontmatter (immutables are
+      // re-asserted below anyway). No $EDITOR spawn — the agent / CI path.
+      after = { frontmatter: { ...before.fact.frontmatter }, body: opts.body };
+    } else {
+      if (opts.editorImpl) {
+        await opts.editorImpl(absPath);
+      } else {
+        const editor = opts.editor ?? process.env.EDITOR ?? "vi";
+        await spawnEditor(editor, absPath);
+      }
+      const afterText = await fs.readFile(absPath, "utf8");
+      try {
+        after = parseFact(afterText);
+      } catch (e) {
+        return {
+          status: "invalid_frontmatter",
+          message:
+            `\n🔴 The file's frontmatter is no longer valid YAML.\n` +
+            `\n   ${e instanceof Error ? e.message : String(e)}\n` +
+            `\n   The original is still on disk — re-open it and fix the markers:\n` +
+            `     $ ${opts.editor ?? process.env.EDITOR ?? "vi"} ${absPath}\n`,
+        };
+      }
     }
 
     // Restore immutable fields. They're server-controlled — if the user edited them in their
@@ -159,7 +174,7 @@ async function spawnEditor(editor: string, file: string): Promise<void> {
     const child = spawn(cmd, [...args, file], { stdio: "inherit" });
     child.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT") {
-        reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR or pass --editor=...`));
+        reject(new Error(`Editor "${cmd}" not found on PATH. Set $EDITOR, or pass --body "<text>" for non-interactive use.`));
         return;
       }
       reject(err);

@@ -114,6 +114,8 @@ export interface NewFactInput {
   tags?: string[];
   source?: string;
   supersedes?: string[];
+  /** Expiry timestamp (ISO); carried over on supersede. Absent/null ⇒ never expires. */
+  expires?: string | null;
   /** Override the clock (tests); defaults to now. */
   now?: Date;
 }
@@ -132,6 +134,7 @@ export function createFact(input: NewFactInput): Fact {
   if (input.tags?.length) frontmatter.tags = input.tags;
   if (input.source) frontmatter.source = input.source;
   if (input.supersedes?.length) frontmatter.supersedes = input.supersedes;
+  if (input.expires) frontmatter.expires = input.expires;
   return { frontmatter, body: input.body };
 }
 

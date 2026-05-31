@@ -382,6 +382,11 @@ export async function krimtoSupersede(
       body: input.new_body,
       author: ctx.requester.identity,
       supersedes: [input.id],
+      // Carry over the old fact's metadata so a content update doesn't silently drop it. Source
+      // prefers the live caller (like krimtoWrite) but falls back to the old fact's provenance.
+      tags: old.frontmatter.tags,
+      source: ctx.requester.source ?? old.frontmatter.source,
+      expires: old.frontmatter.expires,
       now: clock(ctx),
     });
     await ctx.index.upsertFact(replacement);

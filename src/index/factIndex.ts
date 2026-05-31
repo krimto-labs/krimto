@@ -104,12 +104,12 @@ export class FactIndex {
       });
   }
 
-  /** Replace the facts_vec row for a fact. Synchronous. */
-  private insertVecRow(id: string, vec: Float32Array): void {
+  /** Replace the facts_vec row for a fact. Synchronous. `scope` is stored so the KNN can filter by it. */
+  private insertVecRow(id: string, scope: string, vec: Float32Array): void {
     this.db.prepare("DELETE FROM facts_vec WHERE fact_id=?").run(id);
     this.db
-      .prepare("INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)")
-      .run(id, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength));
+      .prepare("INSERT INTO facts_vec(fact_id, scope, embedding) VALUES (?, ?, ?)")
+      .run(id, scope, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength));
   }
 
   /**
@@ -120,7 +120,7 @@ export class FactIndex {
     const vec = await this.embedBody(fact.body, hash);
     const tx = this.db.transaction(() => {
       this.insertFactRow(fact, hash);
-      if (vec) this.insertVecRow(fact.frontmatter.id, vec);
+      if (vec) this.insertVecRow(fact.frontmatter.id, fact.frontmatter.scope, vec);
     });
     tx();
   }
@@ -210,7 +210,7 @@ export class FactIndex {
       if (this.provider) this.db.exec("DELETE FROM facts_vec;");
       for (const { fact, hash, vec } of prepared) {
         this.insertFactRow(fact, hash);
-        if (vec) this.insertVecRow(fact.frontmatter.id, vec);
+        if (vec) this.insertVecRow(fact.frontmatter.id, fact.frontmatter.scope, vec);
       }
     });
     swap();
@@ -218,6 +218,19 @@ export class FactIndex {
 
   factCount(): number {
     return (this.db.prepare("select count(*) c from facts").get() as { c: number }).c;
+  }
+
+  /**
+   * Rows in facts_vec. 0 when the vector table is absent (lexical-only, or dropped pending a rebuild
+   * after an embedding-space change). The rebuild trigger compares this to factCount() — a robust
+   * signal that survives the schema_meta write-ordering, unlike embeddingSpaceChanged post-open.
+   */
+  vectorCount(): number {
+    try {
+      return (this.db.prepare("select count(*) c from facts_vec").get() as { c: number }).c;
+    } catch {
+      return 0; // facts_vec doesn't exist
+    }
   }
 
   /**
@@ -262,9 +275,13 @@ export class FactIndex {
         opts.queryVector.byteOffset,
         opts.queryVector.byteLength,
       );
+      // H4 — filter by readable scope INSIDE the KNN so the 50 nearest are drawn from the readable
+      // scopes, not globally (a global top-k would let unreadable scopes crowd out in-scope facts).
       const knn = this.db
-        .prepare(`SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ? AND k = 50 ORDER BY distance`)
-        .all(queryBuf) as { fact_id: string; distance: number }[];
+        .prepare(
+          `SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ? AND k = 50 AND scope IN (${placeholders}) ORDER BY distance`,
+        )
+        .all(queryBuf, ...scopeList) as { fact_id: string; distance: number }[];
       const sims = knn.map((r) => ({ id: r.fact_id, sim: Math.max(0, 1 - r.distance) }));
       const maxSim = Math.max(0, ...sims.map((s) => s.sim));
       for (const s of sims) vector.set(s.id, maxSim > 0 ? s.sim / maxSim : 0);
@@ -278,7 +295,7 @@ export class FactIndex {
       if (superseded.has(id)) continue;
       const row = getFactStmt.get(id) as FactRow | undefined;
       if (!row) continue;
-      if (!scopeList.includes(row.scope)) continue; // vector ids are filtered here
+      if (!scopeList.includes(row.scope)) continue; // defense-in-depth: both halves are scope-filtered in-query (H4)
       if (row.expires && row.expires <= now) continue;
       const bm = bm25.get(id) ?? 0;
       out.push({

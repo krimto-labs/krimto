@@ -25,7 +25,13 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     KRIMTO_DATA=/data \
-    KRIMTO_HTTP_PORT=8080
+    KRIMTO_HTTP_PORT=8080 \
+    # v0.2.45 binds loopback by default (protects the local `npx` case). In a container that would
+    # make `-p 8080:8080` unreachable, so we bind all interfaces here on purpose: the container
+    # boundary + the operator's port mapping is the access control. Add KRIMTO_BOOTSTRAP_ADMIN at
+    # `docker run` for bearer auth; tighten exposure with `-p 127.0.0.1:8080:8080`.
+    KRIMTO_HTTP_HOST=0.0.0.0 \
+    KRIMTO_ALLOW_INSECURE_HOST=1
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./

@@ -2,6 +2,7 @@
 // The banner is a sign that points at one door (/ui or /ui/connect), not the door itself.
 
 import { connectSnippets } from "./connect";
+import { DEFAULT_BIND_HOST, isLoopbackHost } from "./bindHost";
 
 /** The placeholder identity that resolves when KRIMTO_IDENTITY is unset AND git config user.email is
  * unset/invalid. Keep in sync with resolveIdentity()'s final fallback. */
@@ -54,8 +55,19 @@ export function stdioStartupBanner(version: string, dataDir: string, identity = 
 }
 
 /** Local mode (no auth): clean visual hierarchy — headline, recipe, then context. */
-export function localModeBanner(port: number, dataDir: string, identity = DEFAULT_IDENTITY): string {
+export function localModeBanner(
+  port: number,
+  dataDir: string,
+  identity = DEFAULT_IDENTITY,
+  bindHost: string = DEFAULT_BIND_HOST,
+): string {
   const warn = identityWarning(identity);
+  const modeLine = isLoopbackHost(bindHost)
+    ? `  Mode:  Local (no auth) — bound to ${bindHost}, reachable from this machine only.\n` +
+      `         Bring teammates in with \`npx @krimto-labs/krimto team init\`.\n`
+    : `  Mode:  Local — ⚠ EXPOSED on ${bindHost} with NO auth: anyone who can reach this host can\n` +
+      `         read or write your memory with no key. Add auth with \`npx @krimto-labs/krimto team init\`,\n` +
+      `         or bind a loopback host (unset KRIMTO_HTTP_HOST / KRIMTO_ALLOW_INSECURE_HOST).\n`;
   return (
     `\n✅ Krimto running → http://localhost:${port}\n` +
     `\n` +
@@ -75,7 +87,7 @@ export function localModeBanner(port: number, dataDir: string, identity = DEFAUL
     `\n` +
     `  Data:  ${dataDir}\n` +
     `  Files: plain markdown — the same folder no matter which project you're in.\n` +
-    `  Mode:  Local (no auth). Bring teammates in with \`npx @krimto-labs/krimto team init\`.\n` +
+    modeLine +
     `\n` +
     `  Already connected via stdio (the npx path)? Keep that config —\n` +
     `  this HTTP server is just for the browser dashboard.\n` +

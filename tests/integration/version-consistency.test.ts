@@ -39,3 +39,18 @@ describe("version consistency", () => {
     ).toBe(pkg);
   });
 });
+
+describe("Claude Code plugin MCP wiring (batch 6)", () => {
+  it("the plugin manifest declares the krimto MCP server (so /plugin install wires the tools)", async () => {
+    const text = await fs.readFile(path.join(root, ".claude-plugin/plugin.json"), "utf8");
+    const manifest = JSON.parse(text) as { mcpServers?: Record<string, { command?: string; args?: string[] }> };
+    expect(
+      manifest.mcpServers,
+      "plugin.json declares no mcpServers — the krimto_* tools never appear after /plugin install",
+    ).toBeTruthy();
+    const krimto = manifest.mcpServers?.krimto;
+    expect(krimto, "no 'krimto' MCP server in the plugin manifest").toBeTruthy();
+    expect(krimto?.command).toBe("npx");
+    expect(krimto?.args?.join(" ")).toContain("@krimto-labs/krimto");
+  });
+});

@@ -112,6 +112,7 @@ export async function runRemoteCmd(opts: RemoteCmdOptions): Promise<RemoteCmdRes
       };
     }
     if (!opts.yes) {
+      assertInteractiveOrUsage(REMOTE_USAGE); // batch 5 — non-TTY agent gets usage+exit 2, not an abort
       const ok = await confirm({
         message: `Remove remote "${current}"?`,
         default: false,

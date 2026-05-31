@@ -5,7 +5,10 @@
 // Bumped to 2 in v0.2.38: facts_fts gains the Porter stemmer so a singular query ("favorite
 // color") matches a plural-titled fact ("Favorite colors"). openIndexDb migrates older indexes
 // by dropping + recreating facts_fts and rebuilding it from the content table.
-export const SCHEMA_VERSION = 2;
+// Bumped to 3 in v0.2.45: facts_vec gains a `scope` metadata column so the vector KNN can filter by
+// readable scope in-query (H4) instead of truncating to a global top-k and filtering after. openIndexDb
+// migrates older indexes by dropping facts_vec; the server/reindex rebuild repopulates it.
+export const SCHEMA_VERSION = 3;
 
 /** Static DDL (everything except the dimension-parameterized vec table). */
 export const SCHEMA_SQL = `
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 export function vecTableSql(dimensions: number): string {
   return `CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
   fact_id TEXT PRIMARY KEY,
+  scope TEXT,
   embedding FLOAT[${dimensions}] distance_metric=cosine
 );`;
 }
