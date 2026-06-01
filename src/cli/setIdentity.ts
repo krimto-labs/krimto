@@ -85,6 +85,14 @@ export async function runSetIdentity(opts: SetIdentityOptions): Promise<SetIdent
     };
   }
 
+  // batch 5 — the non-interactive guard fires BEFORE the state-dependent preconditions below, so a
+  // non-TTY agent / CI gets a deterministic "add --yes" usage exit (2) whether or not Krimto is
+  // configured on this machine. Previously this sat after the `configured` check, so a clean machine
+  // (e.g. CI) errored with exit 1 before the guard could fire, while a developer's already-set-up
+  // machine reached the guard and exited 2 — the same command produced different exit codes by
+  // environment. With --yes we skip the guard and fall through to the real preconditions.
+  if (!opts.yes) assertInteractiveOrUsage(SET_IDENTITY_USAGE);
+
   const current = await runWhoami({ cwd, homeDir: opts.homeDir });
   const snapshot = await detectExistingSetup(cwd, opts.homeDir);
 
@@ -107,7 +115,6 @@ export async function runSetIdentity(opts: SetIdentityOptions): Promise<SetIdent
   }
 
   if (!opts.yes) {
-    assertInteractiveOrUsage(SET_IDENTITY_USAGE); // batch 5 — non-TTY agent gets usage+exit 2, not an abort
     io.out("\nKrimto — Set identity\n\n");
     io.out(`  Current identity: ${current.activeIdentity}\n`);
     io.out(`  New identity:     ${opts.identity}\n\n`);
