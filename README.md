@@ -1,27 +1,31 @@
 # Krimto
 
-> Open-source team memory layer for AI coding agents — markdown files in git, user→team→org hierarchy, cross-vendor MCP server. Apache-2.0.
+> Open-source memory for AI coding agents you own in git — governed by a real user→team→org hierarchy, not a vendor database. Solo to team. Apache-2.0.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/npm/v/@krimto-labs/krimto)](https://www.npmjs.com/package/@krimto-labs/krimto)
 [![CI](https://github.com/krimto-labs/krimto/actions/workflows/test.yml/badge.svg)](https://github.com/krimto-labs/krimto/actions/workflows/test.yml)
 
-Krimto gives every AI coding agent on your team one shared memory. Tell your agent "remember X" in
-any editor and it saves a durable, attributable fact; ask later — in a new chat, a different editor,
-or from a teammate's machine — and it recalls the right answer. Your personal notes override the
-team's; the team's override the org's.
+Your agent's memory, as markdown in your own git — synced across every editor and machine. Tell your
+agent "remember X" in any editor and it saves a durable, attributable fact; ask later — in a new chat,
+a different editor, or on another machine — and it recalls the right answer. One command, no account,
+no vendor database: your memory follows you.
 
-Facts are plain markdown files in a git repo you own — readable, reviewable, and yours. No lock-in,
-no proprietary store.
+You own it: every fact is a plain markdown file in a git repo you control — readable, reviewable in a
+PR, and yours. When a teammate joins, that same memory becomes a shared team brain governed by a real
+`user → team → org` hierarchy (the most specific scope wins at recall) — the one primitive no other
+memory tool ships. Solo is free; the governance is what you grow into.
 
 ## Why Krimto
 
-- **Markdown-in-git storage.** Every fact is a markdown file with frontmatter. Audit it with
-  `git log`, edit it in any editor, review it in a pull request.
-- **`user → team → org` hierarchy.** Knowledge is scoped to a person, a team, or the whole company,
-  and the most specific scope wins at recall time.
-- **Cross-vendor + Apache-2.0.** One MCP server works with Claude Code, Cursor, Codex, Gemini CLI,
-  and more — fully open source, with no managed-service restriction.
+- **You own it, in your git.** Every fact is a markdown file in a git repo you control — `git log` the
+  audit trail, edit it in any editor, review it in a pull request. No vendor database, no lock-in.
+- **Governed `user → team → org` hierarchy.** Knowledge is scoped to a person, a team, or the whole
+  company, and the most specific scope wins at recall — a server-enforced primitive no other memory
+  tool ships for free.
+- **Follows you everywhere — cross-vendor, Apache-2.0.** One MCP server syncs the same memory across
+  Claude Code, Cursor, Codex, Gemini CLI and more — every editor and machine. Fully open source, with
+  no managed-service restriction.
 
 ## Try it in 2 minutes (solo, no account)
 

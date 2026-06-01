@@ -17,7 +17,7 @@ describe("description consistency", () => {
   it("every manifest description matches package.json's, byte-for-byte", async () => {
     const canonical = (await json("package.json")).description as string;
     expect(canonical, "package.json description missing").toMatch(
-      /team memory layer for AI coding agents/,
+      /memory for AI coding agents you own in git/,
     );
 
     const plugin = (await json(".claude-plugin/plugin.json")).description;
