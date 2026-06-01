@@ -171,25 +171,37 @@ export class GitRepo {
   async pull(): Promise<PullResult> {
     if (!(await this.hasRemote())) return { status: "skipped" };
     const before = await this.head();
+    // Pull our pinned branch by name — never the remote's HEAD symref. `--autostash` stashes any
+    // pending local change (a staged-but-not-yet-committed batched write, or an external .md edit)
+    // before the rebase and re-applies it after, so inbound updates are no longer silently dropped
+    // whenever a write is in flight.
+    //
+    // We deliberately do NOT branch on the pull's EXIT CODE to classify the outcome — git changed it.
+    // When the `--autostash` re-apply conflicts, older git (<= 2.42) exits 0 and only warns, while
+    // newer git (>= 2.43) exits non-zero. An exit-code check therefore passes on one machine and
+    // fails on another (a CI-only failure). Instead we capture any error, then inspect the real
+    // repository state, which is identical across git versions.
+    let pullError: string | null = null;
     try {
-      // Pull our pinned branch by name — never the remote's HEAD symref. `--autostash` stashes any
-      // pending local change (a staged-but-not-yet-committed batched write, or an external .md edit)
-      // before the rebase and re-applies it after, so inbound updates are no longer silently dropped
-      // whenever a write is in flight. Committed-vs-committed conflicts still abort below (local kept).
       await exec("git", ["-C", this.dir, "pull", "--rebase", "--autostash", "origin", DEFAULT_BRANCH]);
     } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      try {
-        await exec("git", ["-C", this.dir, "rebase", "--abort"]);
-        return { status: "conflict", detail };
-      } catch {
-        return { status: "error", detail };
-      }
+      pullError = e instanceof Error ? e.message : String(e);
     }
-    // `--autostash` re-applies the stashed local change AFTER the rebase/fast-forward succeeds. If
-    // that re-apply conflicts, `git pull` still exits 0 but leaves conflict markers in an unmerged
-    // tree — we must NOT report ok (the markers would get re-indexed and committed). Detect it, reset
-    // the tree back to the pulled HEAD (the local edit stays recoverable in `git stash`), report conflict.
+
+    // (1) A committed-vs-committed conflict leaves a rebase in progress. `rebase --abort` succeeds
+    //     only when one actually is, so it doubles as the detector. Abort it (the local commit is
+    //     kept) and report a conflict.
+    const rebaseAborted = await exec("git", ["-C", this.dir, "rebase", "--abort"])
+      .then(() => true)
+      .catch(() => false);
+    if (rebaseAborted) {
+      return { status: "conflict", detail: pullError ?? "rebase conflict; local commit kept" };
+    }
+
+    // (2) The `--autostash` re-apply conflicted: the rebase/fast-forward already completed, but the
+    //     tree now has unmerged paths with conflict markers. Reset back to the pulled HEAD (the local
+    //     edit stays recoverable in `git stash`) and report a conflict — never let markers reach the
+    //     index/commit. This branch fires on both git versions; only the exit code above differed.
     const { stdout: unmerged } = await exec("git", ["-C", this.dir, "diff", "--name-only", "--diff-filter=U"]);
     if (unmerged.trim().length > 0) {
       await exec("git", ["-C", this.dir, "reset", "--hard", "HEAD"]).catch(() => undefined);
@@ -198,6 +210,11 @@ export class GitRepo {
         detail: "an inbound change overlapped a pending local edit; the local edit is kept in `git stash`",
       };
     }
+
+    // (3) No rebase in progress and no unmerged paths: a thrown pull is now a genuine error
+    //     (network, auth, etc.), not a conflict.
+    if (pullError !== null) return { status: "error", detail: pullError };
+
     const after = await this.head();
     if (before === after) return { status: "up-to-date" };
     return { status: "ok", changedFiles: await this.changedFiles(before, after) };
