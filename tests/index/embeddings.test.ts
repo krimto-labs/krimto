@@ -178,4 +178,46 @@ describe("hybrid recall with an embedding provider", () => {
     expect(results[0]!.title).toBe("Staging reset");
     expect(results[0]!.score).toBeGreaterThan(0); // BM25 score, not a vector score
   });
+
+  it("persists the fact even when the write-time embedding provider fails (no data loss)", async () => {
+    const store = new FactStore(root);
+    // A keyed provider that fails on every call: a bad/expired key, an offline machine, or a
+    // misconfigured base URL. Embedding is an optimization — it must never block the write.
+    let embedAttempts = 0;
+    const provider: EmbeddingProvider = {
+      name: "broken",
+      dimensions: 3,
+      embed: async () => {
+        embedAttempts++;
+        throw new Error("401 Unauthorized (invalid API key)");
+      },
+    };
+    const db = openIndexDb(":memory:", { provider: "fake", dimensions: 3 });
+    const index = new FactIndex(db, provider);
+    const membership: Membership = { org: { slug: "acme", admins: ["alice@acme.com"] }, teams: [], users: [] };
+    const ctx: ToolContext = {
+      store,
+      index,
+      writeQueue: new Serializer(),
+      membership,
+      requester: { identity: "alice@acme.com", teams: [] },
+      embedQuery: async () => null,
+    };
+
+    // The write must NOT throw just because the embedding provider is broken.
+    await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Staging reset",
+      body: "Staging is reset every Sunday.",
+    });
+
+    // The fact reached the markdown store (the source of truth) — not silently dropped …
+    const onDisk = await store.allFacts();
+    expect(onDisk.map((f) => f.frontmatter.title)).toContain("Staging reset");
+    expect(embedAttempts).toBeGreaterThanOrEqual(1); // we did try to embed, then failed soft
+
+    // … and it stays retrievable via lexical search despite having no vector.
+    const { results } = await krimtoRecall(ctx, { query: "staging reset" });
+    expect(results.map((r) => r.title)).toContain("Staging reset");
+  });
 });

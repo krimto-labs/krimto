@@ -66,7 +66,21 @@ export class FactIndex {
         cached.embedding.length / 4,
       );
     }
-    const [vec] = await this.provider.embed([body]);
+    let vec: number[] | undefined;
+    try {
+      [vec] = await this.provider.embed([body]);
+    } catch (e) {
+      // Embedding is an optimization, never a gate on persistence. A provider failure (bad/expired
+      // key, offline machine, misconfigured base URL) must NOT drop the write — store the fact with
+      // no vector so it stays lexically searchable; the next `reindex` backfills the vector once the
+      // provider is fixed. (Mirrors the query-side fail-soft in krimtoRecall.)
+      process.stderr.write(
+        `krimto: embedding failed (fact stored without a vector — keyword search still works): ${
+          e instanceof Error ? e.message : String(e)
+        }\n`,
+      );
+      return null;
+    }
     const f32 = Float32Array.from(vec ?? []);
     this.db
       .prepare(
