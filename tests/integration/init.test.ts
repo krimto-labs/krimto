@@ -460,4 +460,24 @@ describe("krimto init (bin dispatch)", () => {
     expect(stderr).toContain("Already in AUTO MODE");
     expect(stderr).toContain("npx @krimto-labs/krimto uninit");
   }, 30000);
+
+  // v014 work item 4 — DATA-LOCATION HINT. The data-location surprise (facts always land in
+  // ~/.krimto regardless of CWD) must be surfaced on first-run init, not just in the wizard /
+  // --yes paths. A user who runs `krimto init` (or has it run for them in a non-TTY editor)
+  // should be told where their notes live.
+  it("init output surfaces the data location (where notes live)", async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "krimto-init-home-"));
+    try {
+      const { stderr } = await exec(process.execPath, [BIN, "init"], {
+        cwd: dir,
+        env: { ...process.env, KRIMTO_DATA: path.join(home, ".krimto") },
+      });
+      // The resolved data dir is named explicitly...
+      expect(stderr).toContain(path.join(home, ".krimto"));
+      // ...with a "where your notes/data live" callout so the user can find it later.
+      expect(stderr).toMatch(/notes? (live|stored)|data (live|dir|stored)|where.*live/i);
+    } finally {
+      await fs.rm(home, { recursive: true, force: true });
+    }
+  }, 30000);
 });

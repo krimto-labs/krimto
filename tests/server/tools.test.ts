@@ -73,8 +73,11 @@ describe("krimto_write", () => {
     expect(first.hint).toContain("git auto-commits every 30s");
     expect(first.hint).toContain("krimto --help");
     expect(first.hint).toContain("krimto storage");
-    // States the data dir AND that it's the same regardless of working directory (data-location surprise).
-    expect(first.hint).toContain(ctx.store.dataDir());
+    // v014 work item 4 — DATA-LOCATION HINT. The data-location surprise (facts land in ~/.krimto
+    // regardless of CWD) must be surfaced on the first write: name the location explicitly AND
+    // call out that it's CWD-independent.
+    expect(first.hint).toMatch(/data lives at/i); // the location is named, not just present
+    expect(first.hint).toContain(ctx.store.dataDir()); // the resolved ~/.krimto (or KRIMTO_DATA)
     expect(first.hint).toMatch(/no matter which (project|folder)|regardless of/i);
     // Subsequent writes: normal one-line hint, no orientation
     const second = await krimtoWrite(ctx, {

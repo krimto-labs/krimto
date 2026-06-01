@@ -150,11 +150,14 @@ describe("runInitNonInteractive (--yes path)", () => {
 });
 
 describe("runInitWizard — fresh setup (no existing config)", () => {
-  it("walks the 5 questions and writes the chosen editors", async () => {
+  // v0.14 — solo-first: the wizard no longer asks "Who's this for?". The fresh flow is four
+  // questions (editors → run mode → search → confirm) and always lands in solo ("just-me")
+  // mode. Team mode is reachable only via the explicit `krimto team init` command.
+  it("walks the 4 questions (no 'Who's this for?') and writes the chosen editors", async () => {
     await fs.mkdir(path.join(dir, ".cursor"));
     const io = captureIO();
 
-    // Script: keep cursor, As needed, Just me, Keyword, confirm Y
+    // Script: keep cursor, As needed, Keyword, confirm Y — NO "Who's this for?" prompt.
     promptQueue.push({
       name: "checkbox:Which editors should your AI memory work with?",
       value: ["cursor"] as EditorKind[],
@@ -162,10 +165,6 @@ describe("runInitWizard — fresh setup (no existing config)", () => {
     promptQueue.push({
       name: "select:How should Krimto run?",
       value: "as-needed" as RunMode,
-    });
-    promptQueue.push({
-      name: "select:Who's this for?",
-      value: "just-me" as const,
     });
     promptQueue.push({
       name: "select:Smarter search? (optional)",
@@ -183,6 +182,9 @@ describe("runInitWizard — fresh setup (no existing config)", () => {
     expect(out).toContain("Scanning your machine");
     expect(out).toContain("Ready to set up Krimto");
     expect(out).toContain("✅ All set");
+    // Solo-first: the summary always reports "Just me (no auth)" — never a team prompt.
+    expect(out).toContain("Mode:                 Just me (no auth)");
+    expect(out).not.toContain("Who's this for?");
     // The post-apply summary should tell the user where their notes will live (smoke-test polish).
     expect(out).toContain("Notes will live at");
     expect(out).toContain(result!.dataDir);
@@ -193,7 +195,6 @@ describe("runInitWizard — fresh setup (no existing config)", () => {
     const io = captureIO();
     promptQueue.push({ name: "checkbox:Which editors should your AI memory work with?", value: ["cursor"] });
     promptQueue.push({ name: "select:How should Krimto run?", value: "as-needed" });
-    promptQueue.push({ name: "select:Who's this for?", value: "just-me" });
     promptQueue.push({ name: "select:Smarter search? (optional)", value: "keyword" });
     promptQueue.push({ name: "confirm:Apply this setup?", value: false });
 
@@ -204,15 +205,30 @@ describe("runInitWizard — fresh setup (no existing config)", () => {
     await expect(fs.access(path.join(home, ".cursor", "mcp.json"))).rejects.toThrow();
   });
 
-  it("'My team' selection short-circuits to the team-init suggestion", async () => {
+  // v0.14 — solo-first: there is NO "Who's this for?" door in the fresh wizard. A user who
+  // accepts the defaults reaches a working solo run with no team prompt at all. Team mode is
+  // only reachable via the explicit `krimto team init` command.
+  it("never asks 'Who's this for?' and always lands in solo mode", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
     const io = captureIO();
-    promptQueue.push({ name: "checkbox:Which editors should your AI memory work with?", value: [] });
+    // Four prompts only — if the wizard still asked "Who's this for?" the harness would throw
+    // "No queued answer for prompt" because that prompt is not in the queue.
+    promptQueue.push({ name: "checkbox:Which editors should your AI memory work with?", value: ["cursor"] });
     promptQueue.push({ name: "select:How should Krimto run?", value: "as-needed" });
-    promptQueue.push({ name: "select:Who's this for?", value: "team" });
+    promptQueue.push({ name: "select:Smarter search? (optional)", value: "keyword" });
+    promptQueue.push({ name: "confirm:Apply this setup?", value: true });
 
     const result = await runInitWizard(dir, { homeDir: home, io });
-    expect(result).toBeNull();
-    expect(io.stdout.join("")).toContain("krimto team init");
+    expect(result).not.toBeNull();
+    const out = io.stdout.join("");
+    expect(out).not.toContain("Who's this for?");
+    // The fresh flow must not short-circuit into the old team-init suggestion message.
+    expect(out).not.toContain("team mode is set up via");
+    // Solo applied: summary shows "Just me (no auth)" and the setup actually completes.
+    expect(out).toContain("Mode:                 Just me (no auth)");
+    expect(out).toContain("✅ All set");
+    // The "want teammates in" footer still points at `krimto team init` as the only door.
+    expect(out).toContain("krimto team init");
   });
 
   it("Ctrl-C (ExitPromptError) exits with code 130, no partial writes", async () => {

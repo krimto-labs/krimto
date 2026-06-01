@@ -18,6 +18,21 @@ describe("stdioStartupBanner (v2)", () => {
     expect(b).not.toMatch(/verify-connection/);
     expect(b).not.toMatch(/\bstorage\b/);
   });
+
+  // v014 work item 1 — SILENT SOLO. The bare-npx stdio boot is a solo on-ramp: it must NOT
+  // surface any of the team/auth/ops machinery (Docker, members.yaml, admin-key, team mode,
+  // KRIMTO_REQUIRE_AUTH). A stranger running `npx @krimto-labs/krimto` should see a clean
+  // solo banner with no enterprise jargon to wade through.
+  it("boots SILENT SOLO — no Docker/team-mode/members.yaml/admin-key/REQUIRE_AUTH jargon", () => {
+    const b = stdioStartupBanner("0.2.44", "/tmp/k-data", "alice@solo");
+    expect(b).toContain("stdio MCP server ready"); // still a useful banner
+    expect(b).not.toMatch(/Docker/i);
+    expect(b).not.toMatch(/members\.yaml/i);
+    expect(b).not.toMatch(/admin[- ]?key/i);
+    expect(b).not.toMatch(/team mode/i);
+    expect(b).not.toMatch(/KRIMTO_REQUIRE_AUTH/i);
+    expect(b).not.toMatch(/Bearer/i); // no auth-token plumbing in the solo banner
+  });
 });
 
 describe("identityWarning (G2)", () => {

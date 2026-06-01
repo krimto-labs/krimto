@@ -101,6 +101,10 @@ try {
 
     if (legacyMode) {
       const { runInit } = await tsImport("../src/cli/init.ts", import.meta.url);
+      // v014 work item 4 — surface the data-location on first-run init. Facts always land in
+      // ~/.krimto (or $KRIMTO_DATA) regardless of CWD; tell the user where to find them.
+      const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+      const dataDir = resolveDataDir();
       const res = await runInit(process.cwd(), { all, minimal });
       if (res.written.length === 0) {
         const detected = res.detected ? res.considered.join(", ") : "(no editor signals)";
@@ -157,6 +161,11 @@ try {
             skippedBlock +
             "\n" +
             detectedLine +
+            "━━ Where your notes live ━━\n" +
+            "\n" +
+            `  ${dataDir}\n` +
+            "  Plain markdown files — the same folder no matter which project you're in.\n" +
+            "\n" +
             "━━ Next steps ━━\n" +
             "\n" +
             "  1. Restart your editor (so it loads the new rule + MCP tools)\n" +
@@ -716,6 +725,24 @@ try {
     const { runReindex } = await tsImport("../src/cli/reindex.ts", import.meta.url);
     const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
     const result = await runReindex(resolveDataDir());
+    process.stdout.write(result.message);
+    if (result.status !== "ok") process.exitCode = 1;
+  } else if (cmd === "import") {
+    // `krimto import <path>` — batch-import facts from a markdown file (e.g. CLAUDE.md / AGENTS.md)
+    // into the caller's personal scope, through the canonical krimtoWrite pipeline. Idempotent:
+    // a second run imports zero new facts. Krimto's own injected rule block is excluded.
+    const filePath = process.argv[3];
+    if (!filePath) {
+      process.stderr.write("Usage: krimto import <path>\n  e.g. krimto import ./CLAUDE.md\n");
+      process.exit(2);
+    }
+    const { runImport } = await tsImport("../src/cli/import.ts", import.meta.url);
+    const { resolveDataDir, resolveIdentity } = await tsImport("../src/server/index.ts", import.meta.url);
+    const result = await runImport({
+      dataDir: resolveDataDir(),
+      identity: await resolveIdentity(),
+      filePath,
+    });
     process.stdout.write(result.message);
     if (result.status !== "ok") process.exitCode = 1;
   } else if (cmd === "setup-embeddings") {

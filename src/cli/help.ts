@@ -66,6 +66,7 @@ export function formatHelp(version: string): string {
     "  supersede <id>          Replace a fact with a new version (old kept in git)",
     "  tag <id> +new -old      Add / remove tags",
     "  rm <id>                 Delete a fact (file + index + git commit)",
+    "  import <path>           Batch-import facts from a markdown file (idempotent)",
     "",
     "━━ Stop & reset ━━",
     "",

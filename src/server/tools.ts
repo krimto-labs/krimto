@@ -305,7 +305,21 @@ export async function krimtoWrite(ctx: ToolContext, input: WriteInput): Promise<
 export async function krimtoRecall(ctx: ToolContext, input: RecallInput): Promise<RecallResult> {
   const readable = readableScopesFor(ctx);
   const scopes = input.scopes?.length ? readable.filter((s) => input.scopes!.includes(s)) : readable;
-  const queryVector = ctx.embedQuery ? await ctx.embedQuery(input.query) : null;
+  // Cold-start / keyed-provider resilience: if a configured embedding provider errors
+  // (bad/expired key, network or DNS timeout, misconfigured base URL), fail soft to
+  // lexical-only retrieval rather than crashing or hanging the recall. A null queryVector
+  // takes the existing BM25-only path in searchCandidates; the ranking pipeline is unchanged.
+  let queryVector: Float32Array | null = null;
+  if (ctx.embedQuery) {
+    try {
+      queryVector = await ctx.embedQuery(input.query);
+    } catch (e) {
+      process.stderr.write(
+        `krimto: query embedding failed (falling back to keyword search): ${e instanceof Error ? e.message : String(e)}\n`,
+      );
+      queryVector = null;
+    }
+  }
   const candidates = await ctx.index.searchCandidates(input.query, {
     readableScopes: scopes,
     now: clock(ctx),

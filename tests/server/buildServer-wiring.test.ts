@@ -68,4 +68,19 @@ describe("buildServer resolveRequester wiring", () => {
     expect(instructions).toMatch(/krimto_write/);
     expect(instructions).toMatch(/Do NOT/i);
   });
+
+  // v014 work item 3 — DISCOVERY DIRECTIVE (Path A). An agent that only reads tool descriptions
+  // (no rule file, doesn't honor `initialize` instructions) must STILL learn from the krimto_write
+  // description itself that this is the canonical memory tool and that "remember" routes here —
+  // explicitly above the editor's built-in per-session memory.
+  it("krimto_write description names the 'remember' trigger + claims memory primacy (Path A)", async () => {
+    const c = await connect();
+    const { tools } = await c.listTools();
+    const write = tools.find((t) => t.name === "krimto_write");
+    expect(write).toBeDefined();
+    const desc = write!.description ?? "";
+    expect(desc).toMatch(/remember/i); // the discovery trigger phrase
+    expect(desc).toMatch(/CANONICAL MEMORY/i); // primacy over other memory
+    expect(desc).toMatch(/per-session|built-in/i); // explicitly above hidden memory
+  });
 });

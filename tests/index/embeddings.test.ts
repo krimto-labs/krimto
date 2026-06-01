@@ -139,4 +139,43 @@ describe("hybrid recall with an embedding provider", () => {
     expect(results.map((r) => r.title)).toContain("Staging reset");
     expect(results.map((r) => r.title)).not.toContain("Stripe webhooks");
   });
+
+  it("degrades to lexical-only when embedQuery fails (cold-start provider error)", async () => {
+    const store = new FactStore(root);
+    const provider = new FakeProvider({
+      "Staging is reset every Sunday.": [1, 0, 0],
+      "Verify the signature.": [0, 1, 0],
+    });
+    const db = openIndexDb(":memory:", { provider: "fake", dimensions: 3 });
+    const index = new FactIndex(db, provider);
+    const membership: Membership = { org: { slug: "acme", admins: ["alice@acme.com"] }, teams: [], users: [] };
+
+    // embedQuery simulates a keyed provider failing on a cold index:
+    // bad/expired key, network/DNS timeout, or misconfigured base URL.
+    let embedCalls = 0;
+    const ctx: ToolContext = {
+      store,
+      index,
+      writeQueue: new Serializer(),
+      membership,
+      requester: { identity: "alice@acme.com", teams: [] },
+      embedQuery: async () => {
+        embedCalls++;
+        throw new Error("401 Unauthorized (invalid API key)");
+      },
+    };
+
+    await krimtoWrite(ctx, {
+      scope: "user/alice@acme.com",
+      title: "Staging reset",
+      body: "Staging is reset every Sunday.",
+    });
+
+    // The recall must NOT throw/hang. It falls back to lexical (BM25) on the keyword.
+    const { results } = await krimtoRecall(ctx, { query: "staging reset" });
+    expect(embedCalls).toBe(1); // we did attempt the embedding, then failed soft
+    expect(results).toHaveLength(1);
+    expect(results[0]!.title).toBe("Staging reset");
+    expect(results[0]!.score).toBeGreaterThan(0); // BM25 score, not a vector score
+  });
 });

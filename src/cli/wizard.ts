@@ -290,14 +290,12 @@ async function runFreshWizard(
     runMode = await askRunMode(smartDefault, selectedEditors.length);
   }
 
-  // "Who for" — there's no snapshot field for this (team mode goes through `krimto team init`).
-  // On reconfigure, we treat it as "Keep current = Just me" since the wizard only handles solo
-  // mode at this point. No two-stage prompt needed — same as before.
-  const whoFor = await askWhoFor();
-  if (whoFor === "team") {
-    io.out("\nGreat — team mode is set up via `krimto team init` (Phase C). Run that next.\n");
-    return null;
-  }
+  // Solo-first (v0.14): the fresh wizard never asks "me or a team?". The default flow is
+  // always solo — accepting the defaults reaches a working solo run with no mode-choice at the
+  // door. Team mode is reachable ONLY via the explicit `krimto team init` command (surfaced in
+  // the post-apply footer). Reconfigure inherits the same intent: the wizard only ever handles
+  // solo mode here.
+  const whoFor: WizardAnswers["whoFor"] = "just-me";
   let search: WizardAnswers["search"];
   if (snapshot) {
     const snap = snapshot;
@@ -425,27 +423,6 @@ async function askRunMode(
         value: "manual",
         name: "Manual (I'll run `krimto serve` myself)",
         description: "Power-user mode. Nothing auto-starts. You're in charge.",
-      },
-    ],
-  });
-}
-
-async function askWhoFor(): Promise<"just-me" | "team"> {
-  return select<"just-me" | "team">({
-    message: "Who's this for?",
-    default: "just-me",
-    choices: [
-      {
-        value: "just-me",
-        name: "Just me, for now (recommended for a 2-minute test)",
-        description:
-          "No accounts, no API keys, no login on the dashboard.\nYour AI remembers things across your own chats and editors.\nYou can flip into team mode any time — facts you save now will stay.",
-      },
-      {
-        value: "team",
-        name: "My team (set up team mode now)",
-        description:
-          "Adds API keys, an admin dashboard, and a git remote for sync.\nBest when 2+ people share the same memory.\nWe'll walk you through it via `krimto team init`.",
       },
     ],
   });

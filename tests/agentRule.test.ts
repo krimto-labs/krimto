@@ -148,4 +148,31 @@ describe("mcpServerInstructions", () => {
       expect(s).toContain(token);
     }
   });
+
+  // v014 work item 3 — DISCOVERY DIRECTIVE. The whole point of Krimto's discovery fix is that
+  // when the user says "remember", the agent routes to krimto_write instead of its own built-in
+  // memory. That directive must be carried by the MCP `initialize` instructions (Path B: a bare
+  // MCP install with no `krimto init` still gets it), and must claim primacy over per-session memory.
+  it("names 'remember' as the trigger that routes to krimto_write (Path B discovery)", () => {
+    const s = mcpServerInstructions();
+    // The trigger phrase + the canonical write tool both appear in one directive.
+    expect(s).toMatch(/remember/i);
+    expect(s).toMatch(/krimto_write/);
+    // Primacy over built-in / per-session memory is asserted, not implied.
+    expect(s).toMatch(/built-in|per-session/i);
+    expect(s).toMatch(/Do NOT/i);
+  });
+
+  // The trigger directive must be in LOCKSTEP across all three surfaces an agent can learn it from:
+  // the rule file (krimto init), the MCP initialize instructions (Path B), and the krimto_write
+  // tool description (Path A, asserted in buildServer-wiring.test.ts). If any one drifts, an agent
+  // wired through that surface won't route "remember" to Krimto.
+  it("the 'remember → krimto_write' directive is in lockstep across rule file and MCP instructions", () => {
+    const s = mcpServerInstructions();
+    for (const surface of [AGENT_RULE, s]) {
+      expect(surface).toMatch(/remember/i); // the trigger word
+      expect(surface).toContain("krimto_write"); // the destination tool
+      expect(surface).toMatch(/per-session|built-in/i); // primacy claim over hidden memory
+    }
+  });
 });
