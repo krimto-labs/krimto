@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 
 import { applyRule } from "../agentRule";
 import { httpMcpEntry, type KrimtoMcpEntry } from "../server/connect";
+import { hasOrgAdmin, loadMembership } from "../access/membership";
 import { writeMcpConfig, type WriteAction } from "./mcpConfig";
 import { installService, isServiceInstalled, type InstallResult } from "./service";
 
@@ -341,17 +342,22 @@ export async function applyWizardAnswers(
   }
 
   // The MCP entry: stdio for "as needed", HTTP for "always running" (talks to the local service).
-  let entry: KrimtoMcpEntry;
-  if (answers.runMode === "always-running") {
-    entry = { transport: "http", ...httpMcpEntry({ host: "localhost:8080" }) };
-  } else {
-    entry = {
-      transport: "stdio",
-      command: "npx",
-      args: ["-y", "@krimto-labs/krimto"],
-      env: sharedEnv,
-    };
-  }
+  // EXCEPTION: if the always-running server is in TEAM mode it requires a bearer key on every
+  // request, and this flow has no key to wire — a keyless HTTP entry there silently 401s (the editor
+  // drops the krimto_* tools with no error: the krimto-smoke-6 failure). Detect team mode and fall
+  // back to keyless stdio, which reads the local data dir directly (no key, respects identity +
+  // members.yaml).
+  const serverRequiresAuth = hasOrgAdmin(await loadMembership(dataDir));
+  const stdioEntry: KrimtoMcpEntry = {
+    transport: "stdio",
+    command: "npx",
+    args: ["-y", "@krimto-labs/krimto"],
+    env: sharedEnv,
+  };
+  const entry: KrimtoMcpEntry =
+    answers.runMode === "always-running" && !serverRequiresAuth
+      ? { transport: "http", ...httpMcpEntry({ host: "localhost:8080" }) }
+      : stdioEntry;
 
   // v0.2.28 — service-first ordering. Editors that auto-reconnect on mcp.json change
   // (Cursor's file watcher being the worst offender) used to fire the instant the wizard

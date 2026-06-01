@@ -330,6 +330,28 @@ describe("applyWizardAnswers — pure apply step (v0.2.17 wizard)", () => {
     expect(res.serviceInstall?.platform).toBeDefined();
   });
 
+  it("falls back to keyless stdio (NOT a tokenless HTTP entry) when the always-running server is in team mode", async () => {
+    await fs.mkdir(path.join(dir, ".cursor"));
+    // Team mode = an org admin in members.yaml — the bearer-auth switch. A keyless HTTP entry to such
+    // a server silently 401s (the editor drops the tools with no error: the krimto-smoke-6 failure).
+    const dataDir = path.join(home, ".krimto");
+    await fs.mkdir(path.join(dataDir, ".krimto"), { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, ".krimto", "members.yaml"),
+      "org:\n  slug: acme\n  admins:\n    - alice@acme.com\nteams: []\nusers: []\n",
+    );
+    await applyWizardAnswers(
+      dir,
+      baseAnswers({ runMode: "always-running" }),
+      { homeDir: home, dryRun: true, binPath: "/usr/bin/node", serviceArgs: ["/krimto/bin/krimto.mjs", "serve"] },
+    );
+    const cursorMcp = JSON.parse(
+      await fs.readFile(path.join(home, ".cursor", "mcp.json"), "utf8"),
+    ) as { mcpServers: { krimto: { command?: string; url?: string } } };
+    expect(cursorMcp.mcpServers.krimto.url).toBeUndefined(); // no tokenless HTTP entry that 401s
+    expect(cursorMcp.mcpServers.krimto.command).toBe("npx"); // keyless stdio that actually works
+  });
+
   it("reports 'manual' for Gemini CLI (mcpWire null) and still writes the rule file", async () => {
     await fs.writeFile(path.join(dir, "gemini-extension.json"), "{}");
     const res = await applyWizardAnswers(
