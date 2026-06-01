@@ -10,7 +10,7 @@
       "name": "krimto",
       "source": "./",
       "description": "Open-source memory for AI coding agents you own in git — governed by a real user→team→org hierarchy, not a vendor database. Solo to team. Apache-2.0.",
-      "version": "0.2.45",
+      "version": "0.2.46",
       "category": "memory",
       "author": {
         "name": "Krimto",

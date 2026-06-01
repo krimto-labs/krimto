@@ -4,6 +4,19 @@ All notable changes to Krimto are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Krimto adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.46] — 2026-06-01 — per-install service identity
+
+### Fixed
+- **Two Krimto installs on one machine no longer collide.** Every install used a fixed launchd/systemd
+  label (`com.krimto.server`) on a fixed port (`8080`), so a second install pointed at a different
+  `KRIMTO_DATA` would hijack the first's running service and both would fight over `:8080`. The service
+  label + port are now derived from the data-dir path: the canonical `~/.krimto` keeps the legacy
+  `com.krimto.server` / `8080` identity (single-install users and existing setups are unaffected), and
+  any other data dir gets a stable slug-suffixed label (`com.krimto.server.<8hex>`) and a deterministic
+  port in `8081–8980`. Threaded through `init`, the service installer, `serve`, `ui`, `stop`/`start`,
+  the run-mode switch, `status`, `set-identity`, `folder`, and `reset`, so each command targets the
+  right install instead of assuming `:8080`.
+
 ## [0.2.45] — 2026-05-31 — security & correctness hardening
 
 Audit-driven fixes across security, retrieval, sync, the MCP tools, and the CLI. **The index schema
