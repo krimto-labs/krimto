@@ -762,16 +762,27 @@ try {
   } else if (cmd === "serve") {
     // `krimto serve` — boot the HTTP server (with /ui and /ui/connect) from the npx on-ramp,
     // so a stranger doesn't have to clone the repo or install Docker just to see the dashboard.
-    // Defaults to port 8080; honors an existing KRIMTO_HTTP_PORT if the caller set one.
-    if (!process.env.KRIMTO_HTTP_PORT) process.env.KRIMTO_HTTP_PORT = "8080";
+    // Defaults to this install's per-data-dir port (canonical ~/.krimto → 8080); honors an
+    // existing KRIMTO_HTTP_PORT if the caller set one.
+    if (!process.env.KRIMTO_HTTP_PORT) {
+      const { servicePort } = await tsImport("../src/cli/service.ts", import.meta.url);
+      const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+      process.env.KRIMTO_HTTP_PORT = String(servicePort(resolveDataDir()));
+    }
     const mod = await tsImport("../src/server/index.ts", import.meta.url);
     await mod.main();
   } else if (cmd === "ui") {
     // `krimto ui` — open the browser dashboard. The Maria-journey doc names this as one of the
     // four user-facing verbs; the implementation is a one-liner over the platform "open this URL"
     // command. If no krimto server is running, the browser will hit ECONNREFUSED — surface a
-    // pointer rather than a cryptic error.
-    const port = process.env.KRIMTO_HTTP_PORT ?? "8080";
+    // pointer rather than a cryptic error. The default port is this install's per-data-dir port
+    // (canonical ~/.krimto → 8080), matching what `serve` / the service bind.
+    let port = process.env.KRIMTO_HTTP_PORT;
+    if (!port) {
+      const { servicePort } = await tsImport("../src/cli/service.ts", import.meta.url);
+      const { resolveDataDir } = await tsImport("../src/server/index.ts", import.meta.url);
+      port = String(servicePort(resolveDataDir()));
+    }
     const url = `http://localhost:${port}/ui`;
     const { spawn } = await import("node:child_process");
     const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";

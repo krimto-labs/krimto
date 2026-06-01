@@ -13,6 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { runStop, runStart } from "../../src/cli/stopCmd";
+import { unitPathFor } from "../../src/cli/service";
 
 let dataDir: string;
 let homeDir: string;
@@ -64,8 +65,10 @@ describe("runStart", () => {
     // Pre-seed the LaunchAgents dir so isServiceInstalled finds an existing plist on macOS.
     // On Linux the equivalent path is .config/systemd/user/krimto.service. We pre-create
     // BOTH so the test runs platform-agnostic in CI.
-    const macPlist = path.join(homeDir, "Library", "LaunchAgents", "com.krimto.server.plist");
-    const linuxUnit = path.join(homeDir, ".config", "systemd", "user", "krimto.service");
+    // Seed at the per-install slug path (dataDir is a non-default temp dir), which is exactly
+    // what runStart's isServiceInstalled(platform, homeDir, dataDir) now probes.
+    const macPlist = unitPathFor("darwin", homeDir, dataDir)!;
+    const linuxUnit = unitPathFor("linux", homeDir, dataDir)!;
     await fs.mkdir(path.dirname(macPlist), { recursive: true });
     await fs.mkdir(path.dirname(linuxUnit), { recursive: true });
     await fs.writeFile(macPlist, "<plist/>", "utf8");

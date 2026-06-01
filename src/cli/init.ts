@@ -17,7 +17,7 @@ import { applyRule } from "../agentRule";
 import { httpMcpEntry, type KrimtoMcpEntry } from "../server/connect";
 import { hasOrgAdmin, loadMembership } from "../access/membership";
 import { writeMcpConfig, type WriteAction } from "./mcpConfig";
-import { installService, isServiceInstalled, type InstallResult } from "./service";
+import { installService, isServiceInstalled, servicePort, type InstallResult } from "./service";
 
 const exec = promisify(execFile);
 
@@ -354,9 +354,12 @@ export async function applyWizardAnswers(
     args: ["-y", "@krimto-labs/krimto"],
     env: sharedEnv,
   };
+  // Per-install port, derived from the data dir (canonical ~/.krimto → 8080). Editor wiring +
+  // the service env below MUST agree, so both read servicePort(dataDir).
+  const httpPort = servicePort(dataDir);
   const entry: KrimtoMcpEntry =
     answers.runMode === "always-running" && !serverRequiresAuth
-      ? { transport: "http", ...httpMcpEntry({ host: "localhost:8080" }) }
+      ? { transport: "http", ...httpMcpEntry({ host: `localhost:${httpPort}` }) }
       : stdioEntry;
 
   // v0.2.28 — service-first ordering. Editors that auto-reconnect on mcp.json change
@@ -375,7 +378,7 @@ export async function applyWizardAnswers(
       {
         binPath,
         args: serviceArgs,
-        env: { ...sharedEnv, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
+        env: { ...sharedEnv, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: String(httpPort) },
         homeDir,
       },
       { dryRun: opts.dryRun },

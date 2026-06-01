@@ -23,6 +23,7 @@ import {
   detectPlatform,
   installService,
   isServiceInstalled,
+  servicePort,
   uninstallService,
   type InstallResult,
 } from "./service";
@@ -133,11 +134,12 @@ export async function runFolderCmd(opts: FolderCmdOptions): Promise<FolderCmdRes
     // After the move we reinstall with the new one. We do this BEFORE the rename so launchd
     // / systemd isn't holding any handles into the (about-to-vanish) source dir.
     const platform = detectPlatform();
-    const svc = await isServiceInstalled(platform, opts.homeDir);
+    // The old service is keyed to the OLD data dir's identity (fromDir) — probe + remove THAT one.
+    const svc = await isServiceInstalled(platform, opts.homeDir, fromDir);
     let serviceWasInstalled = false;
     if (svc.installed) {
       serviceWasInstalled = true;
-      await uninstallService({ platform, homeDir: opts.homeDir, dryRun: opts.dryRun });
+      await uninstallService({ platform, homeDir: opts.homeDir, dryRun: opts.dryRun, dataDir: fromDir });
     }
 
     // The move itself. fs.rename is atomic when src + dst share a filesystem. When they
@@ -171,7 +173,7 @@ export async function runFolderCmd(opts: FolderCmdOptions): Promise<FolderCmdRes
         {
           binPath: process.execPath,
           args: [process.argv[1] ?? "krimto", "serve"],
-          env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: toDir, KRIMTO_HTTP_PORT: "8080" },
+          env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: toDir, KRIMTO_HTTP_PORT: String(servicePort(toDir)) },
           homeDir: opts.homeDir,
         },
         { dryRun: opts.dryRun, platform },

@@ -83,7 +83,7 @@ export async function inspectRuntime(dataDir: string, opts: InspectOptions = {})
   const lock = await readLock(dataDir);
   const snapshot = await detectExistingSetup(cwd, homeDir);
   const editors = await detectEditorEnvironments(cwd, homeDir);
-  const service = await probeServiceState(undefined, homeDir);
+  const service = await probeServiceState(undefined, homeDir, dataDir);
 
   // The reconciliation step. Two signals:
   //   1. The lock file's self-reported launchedBy (pre-v0.2.25 runs default to "ad-hoc").

@@ -95,7 +95,7 @@ export async function applyReset(opts: ResetOptions = {}): Promise<ResetResult> 
   const platform = detectPlatform();
   let serviceRemoved = false;
   try {
-    const res = await uninstallService({ dryRun: opts.dryRun, platform, homeDir });
+    const res = await uninstallService({ dryRun: opts.dryRun, platform, homeDir, dataDir });
     serviceRemoved = res.removed;
   } catch {
     /* uninstall path can throw on unsupported platforms or missing CLIs — we're sweeping, not validating */

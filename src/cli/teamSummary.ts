@@ -11,6 +11,7 @@ import {
   type Role,
 } from "../access/membership";
 import { readLock } from "./inspectRuntime";
+import { servicePort } from "./service";
 
 export interface TeamSummary {
   /** "team" when members.yaml has at least one admin (auth enforced); else "solo". */
@@ -57,7 +58,7 @@ export async function buildTeamSummary(
   for (const u of membership.users) memberEmails.add(u.email);
 
   const hostedHere = lock !== null && lock.alive && lock.mode === "http";
-  const port = opts.port ?? Number(process.env.KRIMTO_HTTP_PORT ?? "8080");
+  const port = opts.port ?? Number(process.env.KRIMTO_HTTP_PORT ?? String(servicePort(dataDir)));
 
   const adminGapTeams = isOrgAdmin(membership, identity)
     ? membership.teams.filter((t) => !t.members.includes(identity)).map((t) => t.slug)

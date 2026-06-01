@@ -13,6 +13,7 @@ import {
   detectPlatform,
   installService,
   isServiceInstalled,
+  servicePort,
   uninstallService,
   type InstallResult,
   type UninstallResult,
@@ -47,17 +48,17 @@ export async function applyService(
 ): Promise<ServiceCmdResult> {
   const homeDir = opts.homeDir;
   const platform = detectPlatform();
-  const current = await isServiceInstalled(platform, homeDir);
+  const dataDir = opts.dataDir ?? path.join(homeDir ?? "", ".krimto");
+  const current = await isServiceInstalled(platform, homeDir, dataDir);
 
   if (mode === "always-running") {
     if (current.installed) return { newMode: mode };
     const identity = await defaultIdentity();
-    const dataDir = opts.dataDir ?? path.join(homeDir ?? "", ".krimto");
     const install = await installService(
       {
         binPath: opts.binPath ?? process.execPath,
         args: opts.serviceArgs ?? [process.argv[1] ?? "krimto", "serve"],
-        env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
+        env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: String(servicePort(dataDir)) },
         homeDir,
       },
       { dryRun: opts.dryRun, platform },
@@ -67,7 +68,7 @@ export async function applyService(
 
   // "as-needed" and "manual" both want the service NOT to be installed. Uninstall if present.
   if (current.installed) {
-    const uninstall = await uninstallService({ dryRun: opts.dryRun, platform, homeDir });
+    const uninstall = await uninstallService({ dryRun: opts.dryRun, platform, homeDir, dataDir });
     return { newMode: mode, uninstall };
   }
   return { newMode: mode };
@@ -83,7 +84,7 @@ export async function runServiceCmd(opts: ServiceCmdOptions = {}): Promise<Servi
   }
   try {
     const platform = detectPlatform();
-    const current = await isServiceInstalled(platform, opts.homeDir);
+    const current = await isServiceInstalled(platform, opts.homeDir, opts.dataDir ?? path.join(opts.homeDir ?? "", ".krimto"));
     const currentLabel: RunMode = current.installed ? "always-running" : "as-needed";
     io.out("\nKrimto — Run mode\n\n");
     io.out(`  Current: ${runModeLabel(currentLabel)}\n\n`);

@@ -33,6 +33,8 @@ import {
   detectPlatform,
   installService,
   isServiceInstalled,
+  serviceLabel,
+  servicePort,
   stopService,
   type InstallResult,
   type ServiceOptions,
@@ -88,14 +90,14 @@ export async function runStop(opts: StopOptions): Promise<StopResult> {
     }
   }
 
-  const svc = await isServiceInstalled(platform, opts.homeDir);
+  const svc = await isServiceInstalled(platform, opts.homeDir, opts.dataDir);
 
   // v0.2.32 — use stopService (not uninstallService) so the unit file stays on disk and
   // `krimto start` can reload it. uninstallService is the heavier hammer used by `reset`
   // and by `service` when switching modes.
   let serviceUninstalled = false;
   if (svc.installed) {
-    const stop = await stopService({ platform, homeDir: opts.homeDir, dryRun: opts.dryRun });
+    const stop = await stopService({ platform, homeDir: opts.homeDir, dataDir: opts.dataDir, dryRun: opts.dryRun });
     serviceUninstalled = stop.removed;
   }
 
@@ -154,7 +156,7 @@ export interface StartResult {
 
 export async function runStart(opts: StartOptions): Promise<StartResult> {
   const platform = detectPlatform();
-  const svc = await isServiceInstalled(platform, opts.homeDir);
+  const svc = await isServiceInstalled(platform, opts.homeDir, opts.dataDir);
 
   if (svc.installed) {
     // Service was previously installed. Reinstall via the existing v0.2.26 path which
@@ -162,11 +164,12 @@ export async function runStart(opts: StartOptions): Promise<StartResult> {
     // works correctly whether the service is fully stopped or just hung mid-boot.
     const identity = await defaultIdentity();
     const dataDir = opts.dataDir;
+    const port = servicePort(dataDir);
     const install = await installService(
       {
         binPath: process.execPath,
         args: [process.argv[1] ?? "krimto", "serve"],
-        env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
+        env: { KRIMTO_IDENTITY: identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: String(port) },
         homeDir: opts.homeDir,
       },
       { dryRun: opts.dryRun, platform, ...(opts.probePort ? { probePort: opts.probePort } : {}) },
@@ -178,9 +181,9 @@ export async function runStart(opts: StartOptions): Promise<StartResult> {
       message:
         `\n✅ Krimto service started (${install.platform}).\n` +
         (install.portReady === false
-          ? `   ⚠ The HTTP port didn't come up within 10s. Check /tmp/com.krimto.server.err.log.\n`
+          ? `   ⚠ The HTTP port didn't come up within 10s. Check /tmp/${serviceLabel(dataDir)}.err.log.\n`
           : install.portReady === true
-            ? `   Port :8080 accepting connections.\n`
+            ? `   Port :${port} accepting connections.\n`
             : "") +
         "\n",
     };

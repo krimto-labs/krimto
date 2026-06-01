@@ -78,8 +78,8 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
 
     const launchctlCalls = calls.filter((c) => c.command === "launchctl");
     expect(launchctlCalls.map((c) => c.args[0])).toEqual(["print", "bootstrap"]);
-    // `print gui/<uid>/<label>`
-    expect(launchctlCalls[0]?.args[1]).toMatch(/^gui\/\d+\/com\.krimto\.server$/);
+    // `print gui/<uid>/<label>` — label is per-install (slug-suffixed for this non-default dir)
+    expect(launchctlCalls[0]?.args[1]).toMatch(/^gui\/\d+\/com\.krimto\.server\.[0-9a-f]{8}$/);
     // `bootstrap gui/<uid> <plist-path>`
     expect(launchctlCalls[1]?.args[1]).toMatch(/^gui\/\d+$/);
   });
@@ -95,7 +95,7 @@ describe("installService — macOS reconfigure-safe (v0.2.26: print + kickstart)
     const launchctlCalls = calls.filter((c) => c.command === "launchctl");
     expect(launchctlCalls.map((c) => c.args[0])).toEqual(["print", "kickstart"]);
     expect(launchctlCalls[1]?.args.slice(0, 2)).toEqual(["kickstart", "-k"]);
-    expect(launchctlCalls[1]?.args[2]).toMatch(/^gui\/\d+\/com\.krimto\.server$/);
+    expect(launchctlCalls[1]?.args[2]).toMatch(/^gui\/\d+\/com\.krimto\.server\.[0-9a-f]{8}$/);
     expect(launchctlCalls.find((c) => c.args[0] === "bootout")).toBeUndefined();
     expect(launchctlCalls.find((c) => c.args[0] === "bootstrap")).toBeUndefined();
   });

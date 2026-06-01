@@ -31,6 +31,7 @@ import {
   detectPlatform,
   installService,
   isServiceInstalled,
+  servicePort,
   uninstallService,
 } from "./service";
 import { assertInteractiveOrUsage, defaultIO, isExitPrompt, type WizardIO } from "./promptHelpers";
@@ -161,15 +162,15 @@ export async function runSetIdentity(opts: SetIdentityOptions): Promise<SetIdent
 
   let serviceUpdated = false;
   const platform = detectPlatform();
-  const service = await isServiceInstalled(platform, opts.homeDir);
+  const dataDir = opts.dataDir ?? path.join(opts.homeDir ?? "", ".krimto");
+  const service = await isServiceInstalled(platform, opts.homeDir, dataDir);
   if (service.installed) {
-    const dataDir = opts.dataDir ?? path.join(opts.homeDir ?? "", ".krimto");
-    await uninstallService({ platform, homeDir: opts.homeDir, dryRun: opts.dryRun });
+    await uninstallService({ platform, homeDir: opts.homeDir, dryRun: opts.dryRun, dataDir });
     await installService(
       {
         binPath: process.execPath,
         args: [process.argv[1] ?? "krimto", "serve"],
-        env: { KRIMTO_IDENTITY: opts.identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: "8080" },
+        env: { KRIMTO_IDENTITY: opts.identity, KRIMTO_DATA: dataDir, KRIMTO_HTTP_PORT: String(servicePort(dataDir)) },
         homeDir: opts.homeDir,
       },
       { dryRun: opts.dryRun, platform },

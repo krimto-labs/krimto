@@ -19,6 +19,7 @@ import {
   INIT_TARGETS,
   type WizardAnswers,
 } from "../../src/cli/init";
+import { servicePort } from "../../src/cli/service";
 
 const exec = promisify(execFile);
 const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../bin/krimto.mjs");
@@ -324,7 +325,12 @@ describe("applyWizardAnswers — pure apply step (v0.2.17 wizard)", () => {
     const cursorMcp = JSON.parse(
       await fs.readFile(path.join(home, ".cursor", "mcp.json"), "utf8"),
     ) as { mcpServers: { krimto: { url: string } } };
-    expect(cursorMcp.mcpServers.krimto.url).toBe("http://localhost:8080/mcp");
+    // The editor HTTP entry + the service env must wire the SAME per-install port, derived from
+    // this (non-default, temp) data dir — so it's distinct from another install's :8080.
+    const expectedPort = servicePort(path.join(home, ".krimto"));
+    expect(expectedPort).not.toBe(8080);
+    expect(cursorMcp.mcpServers.krimto.url).toBe(`http://localhost:${expectedPort}/mcp`);
+    expect(res.serviceInstall?.unitContents).toContain(`<string>${expectedPort}</string>`);
     expect(res.serviceInstall).toBeDefined();
     expect(res.serviceInstall?.activated).toBe(false); // dryRun
     expect(res.serviceInstall?.platform).toBeDefined();

@@ -20,6 +20,7 @@
 // rather than crashing.
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
@@ -30,10 +31,74 @@ const exec = promisify(execFile);
 
 export type ServicePlatform = "darwin" | "linux" | "win32" | "unsupported";
 
-/** Stable identifier for Krimto's service across all three platforms. */
+/**
+ * Stable identifier for Krimto's service across all three platforms. This is the LEGACY/default
+ * label — the canonical `~/.krimto` install keeps it exactly, so single-install users and every
+ * doc that references `com.krimto.server` are unaffected. Non-default data dirs get a slug suffix
+ * (see {@link serviceLabel}) so two installs on one machine don't hijack each other.
+ */
 export const SERVICE_LABEL = "com.krimto.server";
 /** Short name used by systemctl/schtasks (where the dotted label isn't a valid id). */
 export const SERVICE_NAME = "krimto";
+/** The legacy/default HTTP port — preserved exactly for the canonical `~/.krimto` install. */
+export const DEFAULT_HTTP_PORT = 8080;
+
+/**
+ * The canonical data dir a DEFAULT install lives in: always `~/.krimto`.
+ *
+ * Deliberately NOT `resolveDataDir()` — it must ignore `KRIMTO_DATA`. At runtime a non-default
+ * install sets `KRIMTO_DATA=/projX/.krimto`; if we measured the slug against that, the install's
+ * own dir would read as "canonical" (slug "" → port 8080) and collide with the real `~/.krimto`
+ * install. The default is a fixed location, not whatever the current process points at.
+ */
+function canonicalDataDir(): string {
+  return path.join(os.homedir(), ".krimto");
+}
+
+/**
+ * Per-install "slot" discriminator, derived deterministically from the data-dir path.
+ *
+ * Returns `""` for the canonical data dir (so the legacy label/port are preserved verbatim), and
+ * an 8-hex-char hash for any other data dir. Deterministic + state-free: every command
+ * (`init`/`serve`/`ui`/`stop`/`status`) recomputes the same slug from the same data dir, so they
+ * all agree on one install's label + port without any persisted discovery file.
+ */
+export function serviceSlug(dataDir: string, defaultDir: string = canonicalDataDir()): string {
+  if (path.resolve(dataDir) === path.resolve(defaultDir)) return "";
+  return createHash("sha256").update(path.resolve(dataDir)).digest("hex").slice(0, 8);
+}
+
+/** launchd/systemd label for the install serving `dataDir` (legacy label for the canonical dir). */
+export function serviceLabel(dataDir: string, defaultDir: string = canonicalDataDir()): string {
+  const slug = serviceSlug(dataDir, defaultDir);
+  return slug ? `${SERVICE_LABEL}.${slug}` : SERVICE_LABEL;
+}
+
+/** systemctl/schtasks short id for the install serving `dataDir` (the dotted label isn't valid there). */
+export function serviceName(dataDir: string, defaultDir: string = canonicalDataDir()): string {
+  const slug = serviceSlug(dataDir, defaultDir);
+  return slug ? `${SERVICE_NAME}-${slug}` : SERVICE_NAME;
+}
+
+/** The platform-neutral identity (dotted label + short name) of the install serving `dataDir`. */
+export interface ServiceIdentity {
+  label: string;
+  name: string;
+}
+export function serviceIdentity(dataDir: string, defaultDir: string = canonicalDataDir()): ServiceIdentity {
+  return { label: serviceLabel(dataDir, defaultDir), name: serviceName(dataDir, defaultDir) };
+}
+
+/**
+ * HTTP port for the install serving `dataDir`. The canonical dir keeps {@link DEFAULT_HTTP_PORT}
+ * (8080); any other dir maps deterministically into 8081..8980 — distinct from 8080 so a
+ * non-default install never fights the canonical one for the port.
+ */
+export function servicePort(dataDir: string, defaultDir: string = canonicalDataDir()): number {
+  const slug = serviceSlug(dataDir, defaultDir);
+  if (!slug) return DEFAULT_HTTP_PORT;
+  return 8081 + (Number.parseInt(slug, 16) % 900);
+}
 
 export interface ServiceConfig {
   /** Absolute path to the executable that should run as the service (typically `node`). */
@@ -103,13 +168,21 @@ export function detectPlatform(p: NodeJS.Platform = process.platform): ServicePl
   return "unsupported";
 }
 
-/** Where Krimto's service definition would live on this platform. */
-export function unitPathFor(platform: ServicePlatform, homeDir: string = os.homedir()): string | null {
+/**
+ * Where Krimto's service definition would live on this platform. `dataDir` selects the install:
+ * the canonical `~/.krimto` yields the legacy `com.krimto.server.plist` / `krimto.service`, any
+ * other data dir yields a slug-suffixed file so two installs don't share one unit file.
+ */
+export function unitPathFor(
+  platform: ServicePlatform,
+  homeDir: string = os.homedir(),
+  dataDir: string = canonicalDataDir(),
+): string | null {
   if (platform === "darwin") {
-    return path.join(homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+    return path.join(homeDir, "Library", "LaunchAgents", `${serviceLabel(dataDir)}.plist`);
   }
   if (platform === "linux") {
-    return path.join(homeDir, ".config", "systemd", "user", `${SERVICE_NAME}.service`);
+    return path.join(homeDir, ".config", "systemd", "user", `${serviceName(dataDir)}.service`);
   }
   // Windows registers via schtasks; there is no on-disk unit file we manage directly.
   return null;
@@ -119,9 +192,10 @@ export function unitPathFor(platform: ServicePlatform, homeDir: string = os.home
 export async function isServiceInstalled(
   platform: ServicePlatform = detectPlatform(),
   homeDir: string = os.homedir(),
+  dataDir: string = canonicalDataDir(),
 ): Promise<{ platform: ServicePlatform; installed: boolean; unitPath?: string }> {
   if (platform === "unsupported") return { platform, installed: false };
-  const unitPath = unitPathFor(platform, homeDir);
+  const unitPath = unitPathFor(platform, homeDir, dataDir);
   if (unitPath) {
     try {
       await fs.access(unitPath);
@@ -132,7 +206,7 @@ export async function isServiceInstalled(
   }
   // Windows — query schtasks.
   try {
-    await exec("schtasks", ["/Query", "/TN", SERVICE_NAME]);
+    await exec("schtasks", ["/Query", "/TN", serviceName(dataDir)]);
     return { platform, installed: true };
   } catch {
     return { platform, installed: false };
@@ -154,19 +228,22 @@ export async function isServiceInstalled(
 export async function probeServiceState(
   platform: ServicePlatform = detectPlatform(),
   homeDir: string = os.homedir(),
+  dataDir: string = canonicalDataDir(),
 ): Promise<{
   platform: ServicePlatform;
   unitPresent: boolean;
   loaded: boolean;
   runningPid: number | null;
 }> {
-  const base = await isServiceInstalled(platform, homeDir);
+  const base = await isServiceInstalled(platform, homeDir, dataDir);
   const unitPresent = base.installed;
+  const label = serviceLabel(dataDir);
+  const name = serviceName(dataDir);
 
   if (platform === "darwin") {
     const uid = process.getuid?.() ?? 501;
     try {
-      const { stdout } = await exec("launchctl", ["print", `gui/${uid}/${SERVICE_LABEL}`]);
+      const { stdout } = await exec("launchctl", ["print", `gui/${uid}/${label}`]);
       const pidMatch = stdout.match(/\bpid\s*=\s*(\d+)/);
       const pid = pidMatch && pidMatch[1] ? Number.parseInt(pidMatch[1], 10) : null;
       return { platform, unitPresent, loaded: true, runningPid: pid };
@@ -177,12 +254,12 @@ export async function probeServiceState(
   if (platform === "linux") {
     try {
       // `systemctl --user is-active <name>` exits 0 with "active" when running.
-      const { stdout } = await exec("systemctl", ["--user", "is-active", SERVICE_NAME]);
+      const { stdout } = await exec("systemctl", ["--user", "is-active", name]);
       const active = stdout.trim() === "active";
       if (!active) return { platform, unitPresent, loaded: false, runningPid: null };
       // Best-effort PID lookup.
       try {
-        const { stdout: pidOut } = await exec("systemctl", ["--user", "show", "--property=MainPID", "--value", SERVICE_NAME]);
+        const { stdout: pidOut } = await exec("systemctl", ["--user", "show", "--property=MainPID", "--value", name]);
         const pid = Number.parseInt(pidOut.trim(), 10);
         return { platform, unitPresent, loaded: true, runningPid: Number.isFinite(pid) && pid > 0 ? pid : null };
       } catch {
@@ -194,7 +271,7 @@ export async function probeServiceState(
   }
   if (platform === "win32") {
     try {
-      await exec("schtasks", ["/Query", "/TN", SERVICE_NAME]);
+      await exec("schtasks", ["/Query", "/TN", name]);
       return { platform, unitPresent: true, loaded: true, runningPid: null };
     } catch {
       return { platform, unitPresent: false, loaded: false, runningPid: null };
@@ -223,13 +300,18 @@ export async function installService(
     env: { KRIMTO_LAUNCHED_BY: "service", ...(config.env ?? {}) },
   };
 
+  // Per-install identity, derived from the data dir the service will serve. The canonical
+  // `~/.krimto` keeps the legacy label/name; any other data dir gets a slug-suffixed identity so
+  // this install's plist/unit + launchctl/systemctl/schtasks ops never touch another install's.
+  const ident = serviceIdentity(config.env?.KRIMTO_DATA ?? canonicalDataDir());
+
   let result: InstallResult;
   if (platform === "darwin") {
-    result = await installLaunchd(configWithMarker, homeDir, opts);
+    result = await installLaunchd(configWithMarker, homeDir, opts, ident);
   } else if (platform === "linux") {
-    result = await installSystemd(configWithMarker, homeDir, opts);
+    result = await installSystemd(configWithMarker, homeDir, opts, ident);
   } else if (platform === "win32") {
-    result = await installSchtasks(configWithMarker, opts);
+    result = await installSchtasks(configWithMarker, opts, ident);
   } else {
     throw new Error(
       `Krimto's "Always running" mode isn't supported on platform "${process.platform}" yet. ` +
@@ -295,14 +377,15 @@ async function defaultPortProbe(port: number): Promise<boolean> {
 
 /** Uninstall the service. Removes the unit file + invokes the platform CLI to deactivate it. */
 export async function uninstallService(
-  opts: ServiceOptions & { homeDir?: string } = {},
+  opts: ServiceOptions & { homeDir?: string; dataDir?: string } = {},
 ): Promise<UninstallResult> {
   const platform = opts.platform ?? detectPlatform();
   const homeDir = opts.homeDir ?? os.homedir();
+  const ident = serviceIdentity(opts.dataDir ?? canonicalDataDir());
 
-  if (platform === "darwin") return uninstallLaunchd(homeDir, opts);
-  if (platform === "linux") return uninstallSystemd(homeDir, opts);
-  if (platform === "win32") return uninstallSchtasks(opts);
+  if (platform === "darwin") return uninstallLaunchd(homeDir, opts, ident);
+  if (platform === "linux") return uninstallSystemd(homeDir, opts, ident);
+  if (platform === "win32") return uninstallSchtasks(opts, ident);
 
   return { platform, removed: false };
 }
@@ -320,14 +403,15 @@ export async function uninstallService(
  * was deleted" (it wasn't).
  */
 export async function stopService(
-  opts: ServiceOptions & { homeDir?: string } = {},
+  opts: ServiceOptions & { homeDir?: string; dataDir?: string } = {},
 ): Promise<UninstallResult> {
   const platform = opts.platform ?? detectPlatform();
   // homeDir intentionally unused — the bootout/disable commands address the service by its
   // label, not by file path. We accept the param so the call signature matches uninstallService.
+  const { label, name } = serviceIdentity(opts.dataDir ?? canonicalDataDir());
   if (platform === "darwin") {
     const uid = process.getuid?.() ?? 501;
-    const deactivateCommand = { command: "launchctl", args: ["bootout", `gui/${uid}/${SERVICE_LABEL}`] };
+    const deactivateCommand = { command: "launchctl", args: ["bootout", `gui/${uid}/${label}`] };
     if (opts.dryRun) return { platform, removed: false, deactivateCommand };
     try {
       await exec(deactivateCommand.command, deactivateCommand.args);
@@ -337,7 +421,7 @@ export async function stopService(
     }
   }
   if (platform === "linux") {
-    const deactivateCommand = { command: "systemctl", args: ["--user", "stop", SERVICE_NAME] };
+    const deactivateCommand = { command: "systemctl", args: ["--user", "stop", name] };
     if (opts.dryRun) return { platform, removed: false, deactivateCommand };
     try {
       await exec(deactivateCommand.command, deactivateCommand.args);
@@ -349,7 +433,7 @@ export async function stopService(
   if (platform === "win32") {
     // Task Scheduler has no "stop without delete" — there's nothing per-run holding the
     // service open. Best we can do is `schtasks /End` to terminate the current run.
-    const deactivateCommand = { command: "schtasks", args: ["/End", "/TN", SERVICE_NAME] };
+    const deactivateCommand = { command: "schtasks", args: ["/End", "/TN", name] };
     if (opts.dryRun) return { platform, removed: false, deactivateCommand };
     try {
       await exec(deactivateCommand.command, deactivateCommand.args);
@@ -363,7 +447,7 @@ export async function stopService(
 
 // --- macOS (launchd) --------------------------------------------------------
 
-function renderPlist(config: ServiceConfig): string {
+function renderPlist(config: ServiceConfig, label: string): string {
   const argv = [config.binPath, ...config.args];
   const argvXml = argv
     .map((s) => `        <string>${escapeXml(s)}</string>`)
@@ -381,7 +465,7 @@ function renderPlist(config: ServiceConfig): string {
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>${SERVICE_LABEL}</string>
+    <string>${label}</string>
     <key>ProgramArguments</key>
     <array>
 ${argvXml}
@@ -391,9 +475,9 @@ ${argvXml}
     <key>KeepAlive</key>
     <true/>
 ${envXml}    <key>StandardOutPath</key>
-    <string>/tmp/${SERVICE_LABEL}.out.log</string>
+    <string>/tmp/${label}.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/${SERVICE_LABEL}.err.log</string>
+    <string>/tmp/${label}.err.log</string>
   </dict>
 </plist>
 `;
@@ -403,9 +487,11 @@ async function installLaunchd(
   config: ServiceConfig,
   homeDir: string,
   opts: ServiceOptions,
+  ident: ServiceIdentity,
 ): Promise<InstallResult> {
-  const unitPath = path.join(homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
-  const unitContents = renderPlist(config);
+  const { label } = ident;
+  const unitPath = path.join(homeDir, "Library", "LaunchAgents", `${label}.plist`);
+  const unitContents = renderPlist(config, label);
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.writeFile(unitPath, unitContents, "utf8");
 
@@ -426,19 +512,21 @@ async function installLaunchd(
   //     plist above, the new process starts with the latest env / argv.
   //   • If the service is NOT loaded → plain `bootstrap`. No race possible.
   // `launchctl print` returning exit-0 is the canonical "is it loaded" probe.
-  const printRes = await exec("launchctl", ["print", `gui/${uid}/${SERVICE_LABEL}`]).then(
+  const printRes = await exec("launchctl", ["print", `gui/${uid}/${label}`]).then(
     () => ({ loaded: true }),
     () => ({ loaded: false }),
   );
   if (printRes.loaded) {
     // Kickstart -k: send SIGTERM, wait for clean exit, then restart from the plist on disk.
     // launchctl returns from kickstart only AFTER the new process is up, so no follow-on race.
-    await exec("launchctl", ["kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`]);
+    // Because the label is per-data-dir, this only ever restarts THIS install's service — a
+    // second install on a different data dir has a different label and is left untouched.
+    await exec("launchctl", ["kickstart", "-k", `gui/${uid}/${label}`]);
     return {
       platform: "darwin",
       unitPath,
       unitContents,
-      activateCommand: { command: "launchctl", args: ["kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`] },
+      activateCommand: { command: "launchctl", args: ["kickstart", "-k", `gui/${uid}/${label}`] },
       activated: true,
     };
   }
@@ -446,12 +534,16 @@ async function installLaunchd(
   return { platform: "darwin", unitPath, unitContents, activateCommand, activated: true };
 }
 
-async function uninstallLaunchd(homeDir: string, opts: ServiceOptions): Promise<UninstallResult> {
-  const unitPath = path.join(homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+async function uninstallLaunchd(
+  homeDir: string,
+  opts: ServiceOptions,
+  ident: ServiceIdentity,
+): Promise<UninstallResult> {
+  const unitPath = path.join(homeDir, "Library", "LaunchAgents", `${ident.label}.plist`);
   const uid = process.getuid?.() ?? 501;
   const deactivateCommand = {
     command: "launchctl",
-    args: ["bootout", `gui/${uid}/${SERVICE_LABEL}`],
+    args: ["bootout", `gui/${uid}/${ident.label}`],
   };
   let removed = false;
   try {
@@ -500,15 +592,17 @@ async function installSystemd(
   config: ServiceConfig,
   homeDir: string,
   opts: ServiceOptions,
+  ident: ServiceIdentity,
 ): Promise<InstallResult> {
-  const unitPath = path.join(homeDir, ".config", "systemd", "user", `${SERVICE_NAME}.service`);
+  const { name } = ident;
+  const unitPath = path.join(homeDir, ".config", "systemd", "user", `${name}.service`);
   const unitContents = renderSystemdUnit(config);
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.writeFile(unitPath, unitContents, "utf8");
 
   const activateCommand = {
     command: "systemctl",
-    args: ["--user", "enable", "--now", SERVICE_NAME],
+    args: ["--user", "enable", "--now", name],
   };
   if (opts.dryRun) {
     return { platform: "linux", unitPath, unitContents, activateCommand, activated: false };
@@ -523,11 +617,16 @@ async function installSystemd(
   return { platform: "linux", unitPath, unitContents, activateCommand, activated: true };
 }
 
-async function uninstallSystemd(homeDir: string, opts: ServiceOptions): Promise<UninstallResult> {
-  const unitPath = path.join(homeDir, ".config", "systemd", "user", `${SERVICE_NAME}.service`);
+async function uninstallSystemd(
+  homeDir: string,
+  opts: ServiceOptions,
+  ident: ServiceIdentity,
+): Promise<UninstallResult> {
+  const { name } = ident;
+  const unitPath = path.join(homeDir, ".config", "systemd", "user", `${name}.service`);
   const deactivateCommand = {
     command: "systemctl",
-    args: ["--user", "disable", "--now", SERVICE_NAME],
+    args: ["--user", "disable", "--now", name],
   };
   let removed = false;
   try {
@@ -549,12 +648,16 @@ async function uninstallSystemd(homeDir: string, opts: ServiceOptions): Promise<
 
 // --- Windows (schtasks) -----------------------------------------------------
 
-async function installSchtasks(config: ServiceConfig, opts: ServiceOptions): Promise<InstallResult> {
+async function installSchtasks(
+  config: ServiceConfig,
+  opts: ServiceOptions,
+  ident: ServiceIdentity,
+): Promise<InstallResult> {
   // schtasks /TR takes a single command line, so we join argv with spaces (quoted appropriately).
   const trAction = [config.binPath, ...config.args].map(shellQuoteWindows).join(" ");
   const activateCommand = {
     command: "schtasks",
-    args: ["/Create", "/F", "/SC", "ONLOGON", "/TN", SERVICE_NAME, "/TR", trAction],
+    args: ["/Create", "/F", "/SC", "ONLOGON", "/TN", ident.name, "/TR", trAction],
   };
   if (opts.dryRun) {
     return { platform: "win32", activateCommand, activated: false };
@@ -563,10 +666,10 @@ async function installSchtasks(config: ServiceConfig, opts: ServiceOptions): Pro
   return { platform: "win32", activateCommand, activated: true };
 }
 
-async function uninstallSchtasks(opts: ServiceOptions): Promise<UninstallResult> {
+async function uninstallSchtasks(opts: ServiceOptions, ident: ServiceIdentity): Promise<UninstallResult> {
   const deactivateCommand = {
     command: "schtasks",
-    args: ["/Delete", "/F", "/TN", SERVICE_NAME],
+    args: ["/Delete", "/F", "/TN", ident.name],
   };
   if (opts.dryRun) return { platform: "win32", removed: false, deactivateCommand };
   try {

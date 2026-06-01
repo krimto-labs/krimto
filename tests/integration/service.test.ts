@@ -14,6 +14,8 @@ import {
   detectPlatform,
   installService,
   isServiceInstalled,
+  serviceLabel,
+  serviceName,
   SERVICE_LABEL,
   SERVICE_NAME,
   uninstallService,
@@ -29,10 +31,17 @@ afterEach(async () => {
   await fs.rm(home, { recursive: true, force: true });
 });
 
+// baseConfig serves a NON-default data dir, so every install/uninstall/probe in this file works
+// against the per-install slug identity (not the legacy label). DATA flows to both the install
+// (via env.KRIMTO_DATA) and the uninstall/probe calls (via the dataDir param) so they agree.
+const DATA = "/Users/maria/.krimto";
+const LABEL = serviceLabel(DATA); // com.krimto.server.<slug>
+const NAME = serviceName(DATA); // krimto-<slug>
+
 const baseConfig = (overrides: Partial<ServiceConfig> = {}): ServiceConfig => ({
   binPath: "/usr/bin/node",
   args: ["/usr/lib/krimto/bin/krimto.mjs", "serve"],
-  env: { KRIMTO_DATA: "/Users/maria/.krimto", KRIMTO_HTTP_PORT: "8080" },
+  env: { KRIMTO_DATA: DATA, KRIMTO_HTTP_PORT: "8080" },
   ...overrides,
 });
 
@@ -72,11 +81,12 @@ describe("installService — macOS (launchd, dryRun)", () => {
     });
     expect(res.platform).toBe("darwin");
     expect(res.activated).toBe(false);
+    expect(LABEL).toMatch(/^com\.krimto\.server\.[0-9a-f]{8}$/); // per-install slug for a non-default dir
     expect(res.unitPath).toBe(
-      path.join(home, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`),
+      path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`),
     );
     const plist = await fs.readFile(res.unitPath!, "utf8");
-    expect(plist).toContain(`<string>${SERVICE_LABEL}</string>`);
+    expect(plist).toContain(`<string>${LABEL}</string>`);
     expect(plist).toContain("<string>/usr/bin/node</string>");
     expect(plist).toContain("<string>/usr/lib/krimto/bin/krimto.mjs</string>");
     expect(plist).toContain("<key>KRIMTO_DATA</key>");
@@ -111,8 +121,9 @@ describe("installService — Linux (systemd, dryRun)", () => {
     });
     expect(res.platform).toBe("linux");
     expect(res.activated).toBe(false);
+    expect(NAME).toMatch(/^krimto-[0-9a-f]{8}$/); // per-install slug for a non-default dir
     expect(res.unitPath).toBe(
-      path.join(home, ".config", "systemd", "user", `${SERVICE_NAME}.service`),
+      path.join(home, ".config", "systemd", "user", `${NAME}.service`),
     );
     const unit = await fs.readFile(res.unitPath!, "utf8");
     expect(unit).toContain("[Unit]");
@@ -125,7 +136,7 @@ describe("installService — Linux (systemd, dryRun)", () => {
 
     expect(res.activateCommand).toEqual({
       command: "systemctl",
-      args: ["--user", "enable", "--now", SERVICE_NAME],
+      args: ["--user", "enable", "--now", NAME],
     });
   });
 
@@ -160,7 +171,7 @@ describe("installService — Windows (schtasks, dryRun)", () => {
     expect(args).toContain("/SC");
     expect(args).toContain("ONLOGON");
     expect(args).toContain("/TN");
-    expect(args).toContain(SERVICE_NAME);
+    expect(args).toContain(NAME);
     expect(args).toContain("/TR");
     const tr = args[args.indexOf("/TR") + 1];
     expect(tr).toContain("/usr/bin/node");
@@ -187,11 +198,12 @@ describe("uninstallService", () => {
     });
     await expect(fs.access(installed.unitPath!)).resolves.toBeUndefined();
 
-    const res = await uninstallService({ dryRun: true, homeDir: home, platform: "darwin" });
+    const res = await uninstallService({ dryRun: true, homeDir: home, platform: "darwin", dataDir: DATA });
     expect(res.removed).toBe(true);
     await expect(fs.access(installed.unitPath!)).rejects.toThrow();
     expect(res.deactivateCommand?.command).toBe("launchctl");
     expect(res.deactivateCommand?.args[0]).toBe("bootout");
+    expect(res.deactivateCommand?.args[1]).toContain(LABEL);
   });
 
   it("removes the Linux unit when one was installed", async () => {
@@ -201,10 +213,10 @@ describe("uninstallService", () => {
     });
     await expect(fs.access(installed.unitPath!)).resolves.toBeUndefined();
 
-    const res = await uninstallService({ dryRun: true, homeDir: home, platform: "linux" });
+    const res = await uninstallService({ dryRun: true, homeDir: home, platform: "linux", dataDir: DATA });
     expect(res.removed).toBe(true);
     await expect(fs.access(installed.unitPath!)).rejects.toThrow();
-    expect(res.deactivateCommand?.args).toEqual(["--user", "disable", "--now", SERVICE_NAME]);
+    expect(res.deactivateCommand?.args).toEqual(["--user", "disable", "--now", NAME]);
   });
 
   it("returns removed=false when nothing is installed", async () => {
@@ -223,17 +235,17 @@ describe("uninstallService", () => {
 describe("isServiceInstalled", () => {
   it("reports installed=true after an install on macOS", async () => {
     await installService(baseConfig({ homeDir: home }), { dryRun: true, platform: "darwin" });
-    const status = await isServiceInstalled("darwin", home);
+    const status = await isServiceInstalled("darwin", home, DATA);
     expect(status.installed).toBe(true);
     expect(status.platform).toBe("darwin");
-    expect(status.unitPath).toContain(`${SERVICE_LABEL}.plist`);
+    expect(status.unitPath).toContain(`${LABEL}.plist`);
   });
 
   it("reports installed=true after an install on Linux", async () => {
     await installService(baseConfig({ homeDir: home }), { dryRun: true, platform: "linux" });
-    const status = await isServiceInstalled("linux", home);
+    const status = await isServiceInstalled("linux", home, DATA);
     expect(status.installed).toBe(true);
-    expect(status.unitPath).toContain(`${SERVICE_NAME}.service`);
+    expect(status.unitPath).toContain(`${NAME}.service`);
   });
 
   it("reports installed=false when nothing is installed", async () => {
