@@ -1,0 +1,16 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+# Krimto is a local-first, stdio MCP server distributed on npm. It runs on the
+# user's machine via npx and stores memory in the user's own git — no hosted
+# endpoint, no API key.
+
+startCommand:
+  type: stdio
+  configSchema:
+    # Krimto needs no configuration or API key to start.
+    type: object
+    properties: {}
+  commandFunction:
+    # Produces the CLI command Smithery uses to start Krimto over stdio.
+    |-
+    (config) => ({ command: 'npx', args: ['-y', '@krimto-labs/krimto'] })
+  exampleConfig: {}
