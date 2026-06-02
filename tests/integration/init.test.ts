@@ -330,7 +330,12 @@ describe("applyWizardAnswers — pure apply step (v0.2.17 wizard)", () => {
     const expectedPort = servicePort(path.join(home, ".krimto"));
     expect(expectedPort).not.toBe(8080);
     expect(cursorMcp.mcpServers.krimto.url).toBe(`http://localhost:${expectedPort}/mcp`);
-    expect(res.serviceInstall?.unitContents).toContain(`<string>${expectedPort}</string>`);
+    // The port must be wired into the service unit's env. The unit format is host-platform
+    // specific — macOS plist renders `<string>8794</string>`, Linux systemd renders
+    // `Environment=KRIMTO_HTTP_PORT=8794` — and this test installs via the HOST platform (Linux on
+    // CI). Assert the env key + port value, which both formats contain, so it passes on every OS.
+    expect(res.serviceInstall?.unitContents).toContain("KRIMTO_HTTP_PORT");
+    expect(res.serviceInstall?.unitContents).toContain(String(expectedPort));
     expect(res.serviceInstall).toBeDefined();
     expect(res.serviceInstall?.activated).toBe(false); // dryRun
     expect(res.serviceInstall?.platform).toBeDefined();
