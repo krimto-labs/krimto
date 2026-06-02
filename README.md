@@ -16,6 +16,44 @@ PR, and yours. When a teammate joins, that same memory becomes a shared team bra
 `user → team → org` hierarchy (the most specific scope wins at recall) — the one primitive no other
 memory tool ships. Solo is free; the governance is what you grow into.
 
+## See it
+
+One `npx` command sets it up; then your agent saves a fact in Claude Code and recalls it in Cursor —
+no account, no database:
+
+<!-- media/krimto-demo.gif is the lead demo (docs/ is gitignored, so the README can't link there).
+     The full three-demo storyboard lives at docs/demos/krimto-demos.html (local). -->
+![Krimto — save a fact in Claude Code, recall it in Cursor](media/krimto-demo.gif)
+
+Three short demos — **solo** (remember in Claude Code, recall in Cursor), **cross-machine** (write,
+`git push`, recall on another laptop), and **team** (a teammate's fact reaches you; your personal notes
+stay yours).
+
+Because every memory is just a file in your git, you can read it yourself — no API, no dashboard needed:
+
+```console
+$ cat ~/.krimto/user/you@example.com/favorite-color.md
+---
+id: fct_01KT3BDSYY1KK80SG3S7KBEV58
+scope: user/you@example.com
+title: Favorite color
+author: you@example.com
+created: 2026-06-02T05:03:14Z
+updated: 2026-06-02T05:03:14Z
+tags:
+  - personal
+source: claude-code
+---
+
+User's favorite color is red.
+
+$ git -C ~/.krimto log --oneline -1
+8bc5b86 krimto: write batch — 1 fact
+```
+
+That's the whole bet: **your agent's memory is plain markdown in a git repo you own — not rows in
+someone else's database.**
+
 ## Why Krimto
 
 - **You own it, in your git.** Every fact is a markdown file in a git repo you control — `git log` the
